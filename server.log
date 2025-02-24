@@ -49,3 +49,18 @@ Server running on port 3000
 Server running on port 3000
 Inside /import route handler
 CSV parsing complete
+Server running on port 3000
+Server running on port 3000
+Request Headers: {"host":"localhost:3000","user-agent":"Mozilla/5.0 (X11; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0","accept":"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8","accept-language":"en-US,en;q=0.5","accept-encoding":"gzip, deflate, br, zstd","dnt":"1","connection":"keep-alive","cookie":"selectedProvider=Hyperbolic; selectedModel=deepseek-ai/DeepSeek-V2.5","upgrade-insecure-requests":"1","sec-fetch-dest":"document","sec-fetch-mode":"navigate","sec-fetch-site":"none","sec-fetch-user":"?1","if-none-match":"W/\"6af-+M4OSPFNZpwKBdFEydrj+1+V5xo\"","priority":"u=0, i"}
+Request Headers: {"host":"localhost:3000","user-agent":"Mozilla/5.0 (X11; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0","accept":"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8","accept-language":"en-US,en;q=0.5","accept-encoding":"gzip, deflate, br, zstd","dnt":"1","connection":"keep-alive","cookie":"selectedProvider=Hyperbolic; selectedModel=deepseek-ai/DeepSeek-V2.5","upgrade-insecure-requests":"1","sec-fetch-dest":"document","sec-fetch-mode":"navigate","sec-fetch-site":"none","sec-fetch-user":"?1","priority":"u=0, i"}
+Request Headers: {"host":"localhost:3000","user-agent":"Mozilla/5.0 (X11; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0","accept":"*/*","accept-language":"en-US,en;q=0.5","accept-encoding":"gzip, deflate, br, zstd","referer":"http://localhost:3002/","content-type":"multipart/form-data; boundary=----geckoformboundarya2b0456e9b02aff97655d21900322e6d","content-length":"172020","origin":"http://localhost:3002","dnt":"1","connection":"keep-alive","sec-fetch-dest":"empty","sec-fetch-mode":"cors","sec-fetch-site":"same-site","priority":"u=0"}
+Inside /import route handler
+CSV parsing complete
+Request Headers: {"host":"localhost:3000","user-agent":"Mozilla/5.0 (X11; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0","accept":"*/*","accept-language":"en-US,en;q=0.5","accept-encoding":"gzip, deflate, br, zstd","referer":"http://localhost:3002/","content-type":"multipart/form-data; boundary=----geckoformboundaryacebc135cd1940a4a27dc523d64c6f39","content-length":"172020","origin":"http://localhost:3002","dnt":"1","connection":"keep-alive","sec-fetch-dest":"empty","sec-fetch-mode":"cors","sec-fetch-site":"same-site","priority":"u=0"}
+Inside /import route handler
+CSV parsing complete
+Server running on port 3000
+Server running on port 3000
+Request Headers: {"host":"localhost:3000","user-agent":"Mozilla/5.0 (X11; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0","accept":"*/*","accept-language":"en-US,en;q=0.5","accept-encoding":"gzip, deflate, br, zstd","referer":"http://localhost:3002/","content-type":"multipart/form-data; boundary=----geckoformboundaryf65ce13085d67078878672c6d848772f","content-length":"172020","origin":"http://localhost:3002","dnt":"1","connection":"keep-alive","sec-fetch-dest":"empty","sec-fetch-mode":"cors","sec-fetch-site":"same-site","priority":"u=0"}
+Inside /import route handler
+CSV parsing complete

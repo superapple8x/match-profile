@@ -1,4 +1,5 @@
 const express = require('express');
+const cors = require('cors'); // Import the cors middleware
 const fs = require('fs');
 const db = require('../config/db');
 const fileOperationsRoutes = require('./routes/fileOperations');
@@ -7,8 +8,15 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 // Middleware
+app.use(cors()); // Enable CORS for all routes
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Log request headers
+app.use((req, res, next) => {
+  console.log('Request Headers:', req.headers);
+  next();
+});
 
 // Mount the file operations routes
 app.use('/api/files', fileOperationsRoutes);
