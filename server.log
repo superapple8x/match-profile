@@ -1,0 +1,51 @@
+Server running on port 3000
+Server running on port 3000
+Inside /import route handler
+req.file: [object Object]
+req.files: 
+Error during file import: TypeError: Cannot convert object to primitive value
+Inside /import route handler
+req.file: [object Object]
+req.files: 
+Error during file import: TypeError: Cannot convert object to primitive value
+Inside /import route handler
+req.file: [object Object]
+req.files: 
+Error during file import: TypeError: Cannot convert object to primitive value
+Inside /import route handler
+req.file: [object Object]
+req.files: 
+Error during file import: TypeError: Cannot convert object to primitive value
+Inside /import route handler
+req.files: 
+req.file: [object Object]
+Error during file import: TypeError: Cannot convert object to primitive value
+Inside /import route handler
+req.file: [object Object]
+req.files: 
+Error during file import: TypeError: Cannot convert object to primitive value
+Inside /import route handler
+req.file: [object Object]
+req.files: 
+Error during file import: TypeError: Cannot convert object to primitive value
+Inside /import route handler
+req.file: [object Object]
+req.files: 
+Error during file import: TypeError: Cannot convert object to primitive value
+Inside /import route handler
+req.file: [object Object]
+req.files: 
+Error during file import: TypeError: Cannot convert object to primitive value
+Inside /import route handler
+req.file: [object Object]
+req.files: 
+Error during file import: TypeError: Cannot convert object to primitive value
+Inside /import route handler
+req.file: [object Object]
+req.files: 
+Error during file import: TypeError: Cannot convert object to primitive value
+Server running on port 3000
+Server running on port 3000
+Server running on port 3000
+Inside /import route handler
+CSV parsing complete
