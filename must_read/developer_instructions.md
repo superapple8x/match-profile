@@ -9,6 +9,7 @@ This file provides guidelines for future developers working on the Profile Match
   - Before committing any changes
   - As separate files following naming convention: `[YYYY-MM-DDTHH-MM-SS]-[short-work-description].md`
     Example: `2025-02-24T11-23-45-implement-user-auth.md`
+  - Activity log must be stored in `logs` folder
   
 - Log creation rules:
   - Each developer must create their own activity log files
@@ -18,6 +19,8 @@ This file provides guidelines for future developers working on the Profile Match
     - List of confirmed completed work items
     - Associated files/changes
     - Technical validation steps performed
+    - What files were created and edited
+      - The reason behind the edit or creation
     - Peer review status (if applicable)
 
 ## 3. Best Practices (DOs)
