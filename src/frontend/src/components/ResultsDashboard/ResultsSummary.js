@@ -1,21 +1,22 @@
 import React from 'react';
+import './ResultsSummary.css';
 
 const ResultsSummary = ({ totalMatches, averageMatchPercentage, highestMatch }) => {
   return (
-    <div>
+    <div className="results-summary">
       <h3>Summary:</h3>
-      <div>
-        <div>
-          <div>{totalMatches}</div>
-          <div>Matches</div>
+      <div className="summary-container">
+        <div className="summary-item">
+          <div className="summary-value">{totalMatches}</div>
+          <div className="summary-label">Matches</div>
         </div>
-        <div>
-          <div>{averageMatchPercentage}</div>
-          <div>Avg</div>
+        <div className="summary-item">
+          <div className="summary-value">{averageMatchPercentage && averageMatchPercentage.toFixed(2)}%</div>
+          <div className="summary-label">Avg</div>
         </div>
-        <div>
-          <div>{highestMatch}</div>
-          <div>Best</div>
+        <div className="summary-item">
+          <div className="summary-value">{highestMatch && highestMatch.toFixed(2)}%</div>
+          <div className="summary-label">Best</div>
         </div>
       </div>
     </div>

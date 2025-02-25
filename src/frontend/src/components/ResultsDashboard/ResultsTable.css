@@ -1,0 +1,54 @@
+.results-table {
+  width: 100%;
+}
+
+.results-table h3 {
+  font-size: 1.2em;
+  margin-bottom: 10px;
+}
+
+.results-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.results-table th,
+.results-table td {
+  padding: 8px;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+}
+
+.results-table th {
+  background-color: #f2f2f2;
+}
+
+.match-percentage {
+  background-color: #e9ecef;
+  border-radius: 4px;
+  overflow: hidden;
+  height: 20px;
+  position: relative;
+}
+
+.match-bar {
+  background-color: #28a745;
+  color: white;
+  text-align: center;
+  height: 100%;
+  line-height: 20px;
+  width: 0;
+  transition: width 0.3s ease-in-out;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.results-table button {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}

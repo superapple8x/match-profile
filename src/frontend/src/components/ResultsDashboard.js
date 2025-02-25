@@ -21,7 +21,7 @@ function ResultsDashboard({ searchResults }) {
       setAverageMatchPercentage(0);
       setHighestMatch(0);
     }
-  }, [searchResults, totalMatches]);
+  }, [searchResults]);
 
   const handleMatchClick = (match) => {
     setSelectedMatch(match);
@@ -55,4 +55,5 @@ function ResultsDashboard({ searchResults }) {
     </div>
   );
 }
+
 export default ResultsDashboard;

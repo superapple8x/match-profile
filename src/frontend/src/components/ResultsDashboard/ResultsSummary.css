@@ -1,0 +1,31 @@
+.results-summary {
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+}
+
+.results-summary h3 {
+  font-size: 1.2em;
+  margin-bottom: 10px;
+}
+
+.summary-container {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+}
+
+.summary-item {
+  text-align: center;
+}
+
+.summary-value {
+  font-size: 1.5em;
+  font-weight: bold;
+  color: #007bff;
+}
+
+.summary-label {
+  font-size: 0.9em;
+  color: #6c757d;
+}

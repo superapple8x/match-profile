@@ -1,31 +1,39 @@
 import React from 'react';
+import './MatchBreakdown.css';
 
 const MatchBreakdown = ({ match }) => {
   return (
-    <div>
+    <div className="match-breakdown">
       <h3>Match Breakdown - Profile #{match.id}</h3>
-      <div>Overall Match: {match.matchPercentage}</div>
-      <h4>Attribute Breakdown:</h4>
-      <ul>
-        <li>
-          <div>Age</div>
-          <div>Search: {match.searchAge} | Profile: {match.profileAge}</div>
-          <div>Rule: {match.ageRule} | Weight: {match.ageWeight}</div>
-          <div>Score: {match.ageScore}</div>
-        </li>
-        <li>
-          <div>Gender</div>
-          <div>Search: {match.searchGender} | Profile: {match.profileGender}</div>
-          <div>Rule: {match.genderRule} | Weight: {match.genderWeight}</div>
-          <div>Score: {match.genderScore}</div>
-        </li>
-        <li>
-          <div>Location</div>
-          <div>Search: {match.searchLocation} | Profile: {match.profileLocation}</div>
-          <div>Rule: {match.locationRule} | Weight: {match.locationWeight}</div>
-          <div>Score: {match.locationScore}</div>
-        </li>
-      </ul>
+      <div className="overall-match">
+        Overall Match: {match.matchPercentage.toFixed(2)}%
+      </div>
+      <div className="attribute-breakdown">
+        <h4>Attribute Breakdown:</h4>
+        {Object.keys(match).map((key) => {
+          if (key !== 'id' && key !== 'matchPercentage') {
+            return (
+              <div key={key} className="attribute-item">
+                <div className="attribute-name">{key}</div>
+                <div className="attribute-values">
+                  <div>Search: {match[key]}</div>
+                  <div>Profile: {match[key]}</div>
+                </div>
+                <div className="attribute-rule">
+                  Rule: Exact
+                </div>
+                <div className="attribute-weight">
+                  Weight: 5
+                </div>
+                <div className="attribute-score">
+                  Score: 100%
+                </div>
+              </div>
+            );
+          }
+          return null;
+        })}
+      </div>
     </div>
   );
 };
