@@ -7,14 +7,17 @@ import SavedSearches from './components/SavedSearches';
 function App() {
   const [importedData, setImportedData] = useState(null);
   const [searchResults, setSearchResults] = useState(null);
+  const [searchCriteria, setSearchCriteria] = useState(null);
 
   const handleFileImport = (data) => {
     setImportedData(data);
   };
 
-  const handleSearch = (searchConfig) => {
-    console.log('Search config:', searchConfig);
+  const handleSearch = (criteria) => {
+    console.log('Search criteria:', criteria);
+    setSearchCriteria(criteria);
 
+    // Implement search logic here
     fetch('http://localhost:3001/api/match', {
       method: 'POST',
       headers: {
@@ -23,7 +26,7 @@ function App() {
       body: JSON.stringify({
         baseProfile: { id: 'baseProfileId', ...importedData[0] }, // Assuming first row is base profile
         compareProfiles: importedData.slice(1).map((profile, index) => ({ id: `profile-${index}`, ...profile })), // Assuming rest are compare profiles
-        weights: searchConfig.weights,
+        weights: criteria.weights,
       }),
     })
     .then(response => response.json())
@@ -47,7 +50,7 @@ function App() {
             onSearch={handleSearch}
             />
         )}
-        <ResultsDashboard searchResults={searchResults} />
+        <ResultsDashboard searchResults={searchResults} searchCriteria={searchCriteria} />
         <SavedSearches />
       </header>
     </div>

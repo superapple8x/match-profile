@@ -1,49 +1,41 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import './SearchConfig.css';
 import AttributeSelector from './AttributeSelector';
 import CriteriaBuilder from './CriteriaBuilder';
+import GuidedSearch from './SearchBuilder/GuidedSearch';
+import SearchBar from './SearchBar';
 
 function SearchBuilder({ importedData, onSearch }) {
-  const [weights, setWeights] = useState({});
-  const [matchingRules, setMatchingRules] = useState({});
+  const [isGuidedSearchOpen, setIsGuidedSearchOpen] = useState(false);
 
-  const handleWeightChange = (attribute, value) => {
-    setWeights(prevWeights => ({
-      ...prevWeights,
-      [attribute]: parseFloat(value)
-    }));
+  const handleOpenGuidedSearch = () => {
+    setIsGuidedSearchOpen(true);
   };
 
-  const handleRuleChange = (attribute, rule) => {
-    setMatchingRules(prevRules => ({
-      ...prevRules,
-      [attribute]: rule
-    }));
+  const handleCloseGuidedSearch = () => {
+    setIsGuidedSearchOpen(false);
   };
 
-  const handleSearch = () => {
-    const searchConfig = {
-      weights,
-      matchingRules
-    };
-    onSearch(searchConfig);
+  const handleSearch = (criteria) => {
+    // Implement search logic here based on the criteria
+    onSearch(criteria);
   };
 
   return (
     <div className="search-config-container">
       <h3>Search Configuration</h3>
-      <AttributeSelector importedData={importedData} />
-      {importedData && Object.keys(importedData[0]).map(attribute => (
-        <CriteriaBuilder
-          key={attribute}
-          attribute={attribute}
-          onWeightChange={handleWeightChange}
-          onRuleChange={handleRuleChange}
-        />
-      ))}
-      <button onClick={handleSearch} className="search-button">
-        Run Search
-      </button>
+      <SearchBar importedData={importedData} onSearch={handleSearch} />
+      <button onClick={handleOpenGuidedSearch}>Guided Search</button>
+      {isGuidedSearchOpen && (
+        <div className="modal" style={{ display: 'block' }}>
+          <div className="modal-content">
+            <span className="close" onClick={handleCloseGuidedSearch}>
+              &times;
+            </span>
+            <GuidedSearch importedData={importedData} onSearch={onSearch} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

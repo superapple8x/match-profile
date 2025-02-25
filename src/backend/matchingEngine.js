@@ -16,7 +16,9 @@ class MatchingEngine {
       'Video Category': { type: 'exact' },
       'Watch Reason': { type: 'partial' },
       DeviceType: { type: 'partial' },
-      OS: { type: 'partial' }
+      OS: { type: 'partial' },
+      name: { type: 'exact' },
+      email: { type: 'exact' }
     };
   }
 
@@ -55,7 +57,7 @@ class MatchingEngine {
       if (matchingRules.hasOwnProperty(attribute)) {
         const rule = matchingRules[attribute];
         const searchValue = searchCriteria[attribute];
-        const profileValue = profile[attribute];
+        const profileValue = profile[attribute] || '';
 
         console.log(`Evaluating attribute: ${attribute}`);
         console.log(`Search value: ${searchValue}`);

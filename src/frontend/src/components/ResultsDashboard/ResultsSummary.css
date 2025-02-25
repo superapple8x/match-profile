@@ -1,6 +1,7 @@
 .results-summary {
   margin-bottom: 20px;
   display: flex;
+  flex-direction: column;
   align-items: center;
 }
 
@@ -12,17 +13,19 @@
 .summary-container {
   display: flex;
   justify-content: space-around;
-  align-items: center;
+  align-items: flex-start;
 }
 
 .summary-item {
   text-align: center;
+  margin: 0 10px;
 }
 
 .summary-value {
   font-size: 1.5em;
   font-weight: bold;
   color: #007bff;
+  margin-bottom: 5px;
 }
 
 .summary-label {

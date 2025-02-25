@@ -11,11 +11,15 @@ const ResultsSummary = ({ totalMatches, averageMatchPercentage, highestMatch }) 
           <div className="summary-label">Matches</div>
         </div>
         <div className="summary-item">
-          <div className="summary-value">{averageMatchPercentage && averageMatchPercentage.toFixed(2)}%</div>
+          <div className="summary-value">
+            {averageMatchPercentage && averageMatchPercentage.toFixed(2)}%
+          </div>
           <div className="summary-label">Avg</div>
         </div>
         <div className="summary-item">
-          <div className="summary-value">{highestMatch && highestMatch.toFixed(2)}%</div>
+          <div className="summary-value">
+            {highestMatch && highestMatch.toFixed(2)}%
+          </div>
           <div className="summary-label">Best</div>
         </div>
       </div>

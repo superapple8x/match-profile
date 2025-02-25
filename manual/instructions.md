@@ -1,99 +1,14 @@
-# Profile Matching Application - Instructions
+# Instructions on how to test the Guided Search Wizard
 
-## Required Programs
-
-*   [Node.js](https://nodejs.org/) (version >= 16)
-*   [npm](https://www.npmjs.com/) (version >= 8)
-
-## Programming Languages
-
-*   JavaScript
-
-## Packages
-
-### Backend
-
-*   express
-*   cors
-*   csv-parser
-*   multer
-*   papaparse
-*   pg
-*   xlsx
-*   nodemon (dev dependency)
-*   jest (dev dependency)
-*   supertest (dev dependency)
-
-### Frontend
-
-*   @testing-library/dom
-*   @testing-library/jest-dom
-*   @testing-library/react
-*   @testing-library/user-event
-*   papaparse
-*   react
-*   react-dom
-*   react-router-dom
-*   react-scripts
-*   web-vitals
-
-## How to Run the App
-
-1.  **Clone the repository:**
-
-    ```bash
-    git clone <repository_url>
-    cd <repository_directory>
-    ```
-
-2.  **Install dependencies:**
-
-    *   **Backend:**
-
-        ```bash
-        cd src/backend
-        npm install
-        ```
-
-    *   **Frontend:**
-
-        ```bash
-        cd src/frontend
-        npm install
-        ```
-
-3.  **Run the application:**
-
-    *   **Backend:**
-
-        ```bash
-        cd src/backend
-        npm run dev
-        ```
-
-        This will start the backend server on port 3000.
-
-    *   **Frontend:**
-
-        ```bash
-        cd src/frontend
-        npm start
-        ```
-
-        This will start the frontend application in development mode. It will usually open in your browser at `http://localhost:3001`.
-
-## How to Use the App
-
-1.  **Import a CSV file:**
-
-    *   Use the `File Import` component to select and import a CSV file containing profile data.
-
-2.  **Configure the search:**
-
-    *   Use the `Search Configuration` component to select the attributes you want to use for matching.
-    *   Adjust the weights and matching rules for each attribute.
-
-3.  **View the results:**
-
-    *   The `Results Dashboard` component will display the matching profiles, sorted by match percentage.
-    *   You can view more details about each match by clicking on the profile.
+1.  Start the frontend application by running the command `cd src/frontend && npm start` in the terminal.
+2.  Open the application in your browser by navigating to `http://localhost:3000`.
+3.  Import a CSV file using the File Import component.
+4.  Click on the "Guided Search" button in the Search Configuration section.
+5.  The Guided Search Wizard modal should open.
+6.  In Step 1, select the attributes you want to use for the search.
+7.  Click on the "Next" button to proceed to Step 2.
+8.  In Step 2, define the matching rules and enter the search values for each selected attribute.
+9.  Click on the "Next" button to proceed to Step 3.
+10. In Step 3, you should see a preview of the results based on the selected attributes, matching rules, and search values.
+11. You can click on the "Previous" button to go back to the previous steps and make changes.
+12. Click on the "Run Search" button to perform the search and display the results in the Results Dashboard.
