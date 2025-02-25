@@ -52,3 +52,31 @@
   border-radius: 4px;
   cursor: pointer;
 }
+
+/* Add to ResultsTable.css */
+.sort-indicator {
+  margin-left: 5px;
+  display: inline-block;
+}
+
+.sort-asc:after {
+  content: "▲";
+  color: #007bff;
+}
+
+.sort-desc:after {
+  content: "▼";
+  color: #007bff;
+}
+
+/* Style for the table header to indicate it's clickable */
+.results-table th {
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+
+/* Add hover effect to table headers */
+.results-table th:hover {
+  background-color: #e9ecef;
+}

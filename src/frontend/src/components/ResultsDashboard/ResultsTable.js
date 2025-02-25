@@ -14,47 +14,28 @@ function ResultsTable({ results, filteredData, onMatchClick }) {
   // State for the actual data to display
   const [tableData, setTableData] = useState([]);
   
-  // Process the input data and determine what to display
-  useEffect(() => {
+   // Process the input data and determine what to display
+   useEffect(() => {
+    console.log('ResultsTable: data dependency array changed', { results, filteredData });
     let data;
     if (results && Array.isArray(results)) {
-      data = [...results];
+      data = results.map(item => ({ ...item })); // Create a new copy
     } else if (filteredData && Array.isArray(filteredData)) {
-      data = [...filteredData];
+      data = filteredData.map(item => ({ ...item })); // Create a new copy
     } else {
       data = [];
     }
     setTableData(data);
   }, [results, filteredData]);
 
-  // Sort the table data whenever the sort state changes
   useEffect(() => {
-    if (tableData.length > 0) {
-      const sortedData = [...tableData].sort((a, b) => {
-        const sortField = sortState.dataField;
-        const order = sortState.order;
-
-        let aValue, bValue;
-        if (firstItem.profile) {
-          aValue = a.profile[sortField];
-          bValue = b.profile[sortField];
-        } else {
-          aValue = a[sortField];
-          bValue = b[sortField];
-        }
-
-        if (order === 'asc') {
-          return aValue > bValue ? 1 : -1;
-        } else {
-          return aValue < bValue ? 1 : -1;
-        }
-      });
-      setTableData(sortedData);
-    }
+    console.log('Sort state changed:', sortState);
   }, [sortState]);
+
 
   // Handle all table changes including sorting
   const handleTableChange = (type, { sortField, sortOrder }) => {
+    console.log('Table change event:', { type, sortField, sortOrder });
     if (type === 'sort') {
       setSortState({
         dataField: sortField,
@@ -82,7 +63,8 @@ function ResultsTable({ results, filteredData, onMatchClick }) {
       formatter: (cell) => `${cell.toFixed(2)}%`,
       sortCaret: (order, column) => {
         return order === 'asc' ? ' ▲' : ' ▼';
-      });
+      }
+    });
   }
   
   const firstItem = tableData[0];
@@ -95,16 +77,6 @@ function ResultsTable({ results, filteredData, onMatchClick }) {
         sort: true,
         sortCaret: (order, column) => {
           return order === 'asc' ? ' ▲' : ' ▼';
-        },
-        // For nested properties, we need a custom sort function
-        sortFunc: (a, b, order, dataField) => {
-          const aValue = a.profile[key];
-          const bValue = b.profile[key];
-          
-          if (order === 'asc') {
-            return aValue > bValue ? 1 : -1;
-          }
-          return aValue < bValue ? 1 : -1;
         }
       });
     });
@@ -135,7 +107,7 @@ function ResultsTable({ results, filteredData, onMatchClick }) {
         columns={columns}
         defaultSorted={[sortState]}
         onTableChange={handleTableChange}
-        remote={{ sort: false }} // Set to true if sorting should be handled by the server
+        remote={{ sort: true }} // Set to true if sorting should be handled by the server
       />
     </div>
   );
