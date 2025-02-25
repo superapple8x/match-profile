@@ -29,21 +29,31 @@ router.post('/import', upload.single('file'), async (req, res) => {
 
     let parsedData = [];
 
-    await new Promise((resolve, reject) => {
-      require('stream').Readable.from(fileBuffer.toString('utf8'))
-        .pipe(csv())
-        .on('data', (row) => {
-          parsedData.push(row);
-        })
-        .on('end', () => {
-          console.log('CSV parsing complete');
-          resolve();
-        })
-        .on('error', (error) => {
-          console.error('CSV parsing error:', error);
-          reject(error);
-        });
-    });
+    // Handle different file types
+    if (fileName.endsWith('.csv')) {
+      await new Promise((resolve, reject) => {
+        require('stream').Readable.from(fileBuffer)
+          .pipe(csv())
+          .on('data', (row) => {
+            parsedData.push(row);
+          })
+          .on('end', () => {
+            console.log('CSV parsing complete');
+            resolve();
+          })
+          .on('error', (error) => {
+            console.error('CSV parsing error:', error);
+            reject(error);
+          });
+      });
+    } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+      const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      parsedData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+      console.log('Excel parsing complete');
+    } else {
+      throw new Error('Unsupported file type');
+    }
 
     res.status(200).json({ message: 'File uploaded and parsed successfully', data: parsedData, fileName: fileName });
   } catch (error) {
@@ -57,8 +67,7 @@ router.get('/export/csv', (req, res) => {
   try {
     // Sample data (replace with your actual data source)
     const data = [
-      { name: 'John Doe', email: 'john@example.com' },
-      { name: 'Jane Doe', email: 'jane@example.com' },
+      { name: 'John Doe', email: 'jane@example.com' },
     ];
 
     const csv = Papa.unparse(data);
@@ -84,16 +93,16 @@ router.post('/match', (req, res) => {
       profileId: profile.id,
       matchPercentage: engine.calculateMatchScore(baseProfile, profile, matchingRules)
     }));
-
-    res.status(200).json({
+    console.log('Matching results:', results);
+    const responseData = {
       baseProfileId: baseProfile.id,
       matches: results.sort((a, b) => b.matchPercentage - a.matchPercentage)
-    });
-    
+    };
+    console.log('Response data:', responseData);
+    res.status(200).json(responseData);
   } catch (error) {
     console.error("Matching error:", error);
     res.status(500).json({ error: 'Failed to process matching request', details: error.message });
   }
 });
-
 module.exports = router;

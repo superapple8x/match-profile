@@ -1,16 +1,23 @@
 import React from 'react';
 import './ResultsDashboard.css';
 
-function ResultsDashboard() {
+
+function ResultsDashboard({ searchResults }) {
   return (
     <div className="results-dashboard-container">
       <h2>Results Dashboard</h2>
-      {/* Placeholder content - will be expanded later */}
-      <div>
-        Results will be displayed here.
-      </div>
+      {searchResults ? (
+        <ul>
+          {searchResults.matches.map(match => (
+            <li key={match.profileId}>
+              Profile ID: {match.profileId}, Match Percentage: {match.matchPercentage}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div>No results to display.</div>
+      )}
     </div>
   );
 }
-
 export default ResultsDashboard;

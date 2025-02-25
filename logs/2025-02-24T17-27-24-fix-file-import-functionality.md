@@ -9,6 +9,7 @@
 - Fixed file import functionality in the backend.
 - Updated frontend to send requests to the correct backend URL.
 - Enabled CORS in the backend to allow requests from the frontend.
+- The next step is to implement the Search Configuration Panel.
 
 **Associated Files/Changes:**
 
@@ -30,3 +31,4 @@
 
 - The file import functionality is now working. The frontend is able to send the file to the backend, and the backend is able to parse the file correctly.
 - Enabled CORS in the backend to allow requests from the frontend.
+- The next step is to implement the Search Configuration Panel.

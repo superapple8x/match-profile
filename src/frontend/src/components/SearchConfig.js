@@ -1,82 +1,86 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './SearchConfig.css';
 
-function SearchConfig() {
-  // Placeholder attributes - will be fetched from backend later
-  const availableAttributes = [
-    'firstName',
-    'lastName',
-    'age',
-    'city',
-    'country',
-    'skill',
-    'experience',
-  ];
-
-  const [selectedAttributes, setSelectedAttributes] = useState([]);
+function SearchConfig({ importedData, onSearch }) {
+  const [attributes, setAttributes] = useState([]);
   const [weights, setWeights] = useState({});
+  const [matchingRules, setMatchingRules] = useState({});
 
-  const handleAttributeChange = (event) => {
-    const selectedOptions = Array.from(event.target.selectedOptions, (option) => option.value);
-    setSelectedAttributes(selectedOptions);
-
-    // Initialize weights for newly selected attributes
-    const newWeights = { ...weights };
-    selectedOptions.forEach((attr) => {
-      if (!(attr in newWeights)) {
-        newWeights[attr] = 1; // Default weight
-      }
-    });
-    setWeights(newWeights);
-  };
+  // Initialize attributes when data is imported
+  useEffect(() => {
+    if (importedData && importedData.length > 0) {
+      const keys = Object.keys(importedData[0]);
+      setAttributes(keys);
+      
+      // Initialize default weights
+      const initialWeights = {};
+      keys.forEach(key => {
+        initialWeights[key] = 1.0; // Default weight
+      });
+      setWeights(initialWeights);
+    }
+  }, [importedData]);
 
   const handleWeightChange = (attribute, value) => {
-    setWeights({ ...weights, [attribute]: parseFloat(value) });
+    setWeights(prevWeights => ({
+      ...prevWeights,
+      [attribute]: parseFloat(value)
+    }));
+  };
+
+  const handleRuleChange = (attribute, rule) => {
+    setMatchingRules(prevRules => ({
+      ...prevRules,
+      [attribute]: rule
+    }));
+  };
+
+  const handleSearch = () => {
+    const searchConfig = {
+      attributes,
+      weights,
+      matchingRules
+    };
+    onSearch(searchConfig);
   };
 
   return (
     <div className="search-config-container">
-      <h2>Search Configuration</h2>
-
-      <div>
-        <label htmlFor="attributes">Attributes:</label>
-        <select
-          id="attributes"
-          multiple
-          value={selectedAttributes}
-          onChange={handleAttributeChange}
-        >
-          {availableAttributes.map((attribute) => (
-            <option key={attribute} value={attribute}>
-              {attribute}
-            </option>
-          ))}
-        </select>
-      </div>
-
+      <h3>Search Configuration</h3>
       
-        <div>
-          {selectedAttributes.map((attribute) => (
-            <div key={attribute}>
-              <label htmlFor={`weight-${attribute}`}>{attribute}:</label>
-              <input
-                type="range"
-                id={`weight-${attribute}`}
-                min="0"
-                max="2"
-                step="0.1"
-                value={weights[attribute] || 1}
-                onChange={(e) => handleWeightChange(attribute, e.target.value)}
-              />
-              <span>{weights[attribute] || 1}</span>
-            </div>
-          ))}
+      {attributes.map(attribute => (
+        <div key={attribute} className="attribute-config">
+          <label>{attribute}</label>
+          
+          <div className="weight-control">
+            <span>Weight:</span>
+            <input
+              type="number"
+              min="0"
+              max="1"
+              step="0.1"
+              value={weights[attribute] || 0}
+              onChange={e => handleWeightChange(attribute, e.target.value)}
+            />
+          </div>
+
+          <div className="rule-control">
+            <span>Matching Rule:</span>
+            <select
+              value={matchingRules[attribute] || 'exact'}
+              onChange={e => handleRuleChange(attribute, e.target.value)}
+            >
+              <option value="exact">Exact Match</option>
+              <option value="partial">Partial Match</option>
+              <option value="fuzzy">Fuzzy Match</option>
+            </select>
+          </div>
         </div>
-      {/* Placeholder for other search parameters */}
-      <div>
-        <h3>Other Search Parameters</h3>
-        {/* To be implemented later */}
-      </div>
+      ))}
+
+      <button onClick={handleSearch} className="search-button">
+        Run Search
+      </button>
     </div>
   );
 }

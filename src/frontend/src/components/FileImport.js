@@ -1,54 +1,36 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import Papa from 'papaparse';
 import './FileImport.css';
 
-function FileImport() {
+
+
+function FileImport({ onFileImport }) {
   const [file, setFile] = useState(null);
   const [fileName, setFileName] = useState('No file chosen');
-  const [fileContent, setFileContent] = useState(null); // Add state for file content
-  const [parseError, setParseError] = useState(null); // Add state for parsing errors
+  const [parseError, setParseError] = useState(null);
 
-  const handleFileChange = (event) => {
+  const handleFileChange = useCallback((event) => {
     if (event.target.files && event.target.files[0]) {
       const selectedFile = event.target.files[0];
       setFile(selectedFile);
       setFileName(selectedFile.name);
-      setFileContent(null); // Reset content on new file selection
       setParseError(null);
-
-      // Use PapaParse to parse the file
-      Papa.parse(selectedFile, {
+    }
+  }, []);
+  const handleUpload = () => {
+    if (file) {
+      console.log('Uploading file:', fileName);
+      Papa.parse(file, {
         complete: (results) => {
           console.log('Parsed data:', results.data);
-          setFileContent(results.data);
+          onFileImport(results.data); // Pass data to parent component
         },
         error: (error) => {
           console.error('Parsing error:', error.message);
           setParseError(error.message);
         },
-        header: true, // Assumes the first row is the header
+        header: true,
       });
-    }
-  };
-
-  const handleUpload = () => {
-    // Placeholder for upload logic (will integrate with backend later)
-    if (file) {
-      console.log('Uploading file:', fileName);
-      const formData = new FormData();
-      formData.append('file', file);
-
-      fetch('http://localhost:3000/api/files/import', {
-        method: 'POST',
-        body: formData,
-      })
-        .then(response => response.json())
-        .then(data => {
-          console.log('Upload success:', data);
-        })
-        .catch(error => {
-          console.error('Upload error:', error);
-        });
     } else {
       console.log('No file selected.');
     }
@@ -68,12 +50,6 @@ function FileImport() {
         />
       </div>
       <div className="file-info">Selected File: {fileName}</div>
-      {fileContent && (
-        <div className="file-content">
-          File parsed successfully! (First 5 rows):
-          <pre>{JSON.stringify(fileContent.slice(0, 5), null, 2)}</pre>
-        </div>
-      )}
       {parseError && (
         <div className="parse-error">
           Error parsing file: {parseError}
