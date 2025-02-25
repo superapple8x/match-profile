@@ -17,16 +17,35 @@ function App() {
     console.log('Search criteria:', criteria);
     setSearchCriteria(criteria);
 
-    // Implement search logic here
+    // Transform criteria array into baseProfile object
+    const baseProfile = { id: 'searchCriteria' };
+    const weights = {};
+    const matchingRules = {};
+
+    criteria.forEach(criterion => {
+      baseProfile[criterion.attribute] = criterion.value;
+      weights[criterion.attribute] = criterion.weight || 5;
+      
+      // Set appropriate matching rule based on attribute type
+      if (criterion.attribute === 'Age') {
+        matchingRules[criterion.attribute] = { type: 'range', tolerance: 5 };
+      } else if (['Gender', 'Platform'].includes(criterion.attribute)) {
+        matchingRules[criterion.attribute] = { type: 'exact' };
+      } else {
+        matchingRules[criterion.attribute] = { type: 'partial' };
+      }
+    });
+
     fetch('http://localhost:3001/api/match', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        baseProfile: { id: 'baseProfileId', ...importedData[0] }, // Assuming first row is base profile
-        compareProfiles: importedData.slice(1).map((profile, index) => ({ id: `profile-${index}`, ...profile })), // Assuming rest are compare profiles
-        weights: criteria.weights,
+        baseProfile,
+        compareProfiles: importedData.map((profile, index) => ({ id: `profile-${index}`, ...profile })),
+        matchingRules,
+        weights,
       }),
     })
     .then(response => response.json())

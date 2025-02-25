@@ -27,6 +27,12 @@ class MatchingEngine {
   }
 
   exactMatch(value1, value2) {
+    // Normalize strings to handle encoding issues
+    if (typeof value1 === 'string' && typeof value2 === 'string') {
+      const normalizedValue1 = value1.normalize('NFC').trim();
+      const normalizedValue2 = value2.normalize('NFC').trim();
+      return normalizedValue1 === normalizedValue2 ? this.config.exactMatchWeight : 0;
+    }
     return value1 === value2 ? this.config.exactMatchWeight : 0;
   }
 
@@ -39,9 +45,14 @@ class MatchingEngine {
 
   partialTextMatch(text1, text2) {
     if (typeof text1 !== 'string' || typeof text2 !== 'string') return 0;
-    return text1.toLowerCase().includes(text2.toLowerCase()) || 
-           text2.toLowerCase().includes(text1.toLowerCase()) 
-           ? this.config.partialMatchWeight : 0;
+    
+    // Normalize strings to handle encoding issues
+    const normalizedText1 = text1.normalize('NFC').trim().toLowerCase();
+    const normalizedText2 = text2.normalize('NFC').trim().toLowerCase();
+    
+    return normalizedText1.includes(normalizedText2) || 
+           normalizedText2.includes(normalizedText1) 
+            ? this.config.partialMatchWeight : 0;
   }
 
   optionalMatch(value1, value2) {
@@ -51,7 +62,9 @@ class MatchingEngine {
   calculateMatchScore(searchCriteria, profile, matchingRules = this.defaultMatchingRules) {
     let totalScore = 0;
     let maxPossibleScore = 0;
-    console.log('Calculating match score using rules:', matchingRules);
+    console.log('Calculating match score for profile:', profile);
+    console.log('Using search criteria:', searchCriteria);
+    console.log('Using matching rules:', matchingRules);
 
     for (const attribute in searchCriteria) {
       if (matchingRules.hasOwnProperty(attribute)) {
@@ -60,8 +73,8 @@ class MatchingEngine {
         const profileValue = profile[attribute] || '';
 
         console.log(`Evaluating attribute: ${attribute}`);
-        console.log(`Search value: ${searchValue}`);
-        console.log(`Profile value: ${profileValue}`);
+        console.log(`Search value: "${searchValue}" (${typeof searchValue})`);
+        console.log(`Profile value: "${profileValue}" (${typeof profileValue})`);
 
         const weight = this.weights[attribute] || 1;
         let score = 0;
@@ -83,6 +96,7 @@ class MatchingEngine {
             score = 0; // Default score for unknown rule types
         }
 
+        console.log(`Score for ${attribute}: ${score} (weight: ${weight})`);
         totalScore += score * weight;
         maxPossibleScore += this.config.exactMatchWeight * weight;
       } else {
@@ -90,7 +104,9 @@ class MatchingEngine {
       }
     }
 
-    return maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 100 : 0;
+    const finalScore = maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 100 : 0;
+    console.log(`Final match score: ${finalScore}%`);
+    return finalScore;
   }
 }
 
