@@ -31,6 +31,13 @@
 *   Verified that the search configuration functionality still works as expected.
 *   Checked that the frontend and backend are communicating correctly.
 
+**Next Steps for UI Enhancement Plan:**
+
+*   Enhance the `ResultsDashboard` component with better visualization.
+    *   Implement summary view in `ResultsSummary.js`
+    *   Implement detailed results table in `ResultsTable.js`
+    *   Implement match breakdown modal in `MatchBreakdown.js`
+
 **Reason behind the edit or creation:**
 
 *   The `SearchConfig` component was becoming too large and complex. Refactoring it into smaller components improves maintainability and readability.

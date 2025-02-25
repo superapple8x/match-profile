@@ -66,3 +66,36 @@
 .search-button:hover {
   background-color: #0056b3;
 }
+
+.attributes-selection {
+  margin-bottom: 20px;
+  padding: 10px;
+  border: 1px solid #eee;
+  border-radius: 4px;
+}
+
+.attributes-selection h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #555;
+}
+
+.attribute-checkbox {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.attribute-checkbox input[type="checkbox"] {
+  margin-right: 8px;
+}
+
+.attribute-checkbox label {
+  color: #666;
+}
+
+.criteria-config h4 {
+  margin-top: 20px;
+  margin-bottom: 10px;
+  color: #555;
+}

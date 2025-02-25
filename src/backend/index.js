@@ -5,7 +5,7 @@ const db = require('../config/db');
 const fileOperationsRoutes = require('./routes/fileOperations');
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors()); // Enable CORS for all routes
@@ -20,7 +20,7 @@ app.use((req, res, next) => {
 });
 
 // Mount the file operations routes
-app.use('/api/files', fileOperationsRoutes);
+app.use('/api', fileOperationsRoutes);
 
 // Test route
 app.get('/', (req, res) => {
