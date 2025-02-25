@@ -52,4 +52,68 @@ describe('Matching Engine', () => {
     
     expect(engine.calculateMatchScore(profileA, profileB, rules)).toBe(40);
   });
+
+  test('partial attribute matching with search criteria', () => {
+    const profileA = {
+      Age: "28",
+      Gender: "Female",
+      Location: "China",
+      CurrentActivity: "Nothing",
+      Platform: "TikTok",
+      Income: "50000",
+      Profession: "Engineer"
+    };
+
+    const searchCriteria = {
+      Age: "28",
+      Location: "China",
+      CurrentActivity: "Nothing",
+      Platform: "TikTok",
+      Gender: "Female"
+    };
+
+    const rules = {
+      Age: { type: 'range', tolerance: 5 },
+      Gender: { type: 'exact' },
+      Location: { type: 'partial' },
+      CurrentActivity: { type: 'exact' },
+      Platform: { type: 'exact' }
+    };
+
+    const score = engine.calculateMatchScore(searchCriteria, profileA, rules);
+
+    // Verify that only the specified attributes are considered
+    expect(score).toBeGreaterThan(0);
+    expect(score).toBeLessThan(100); // Shouldn't be a perfect match
+  });
+
+  test('partial attribute matching with missing attributes in profile', () => {
+    const profileA = {
+      Age: "28",
+      Location: "China",
+      CurrentActivity: "Nothing",
+    };
+
+    const searchCriteria = {
+      Age: "28",
+      Location: "China",
+      CurrentActivity: "Nothing",
+      Platform: "TikTok",
+      Gender: "Female"
+    };
+
+    const rules = {
+      Age: { type: 'range', tolerance: 5 },
+      Gender: { type: 'exact' },
+      Location: { type: 'partial' },
+      CurrentActivity: { type: 'exact' },
+      Platform: { type: 'exact' }
+    };
+
+    const score = engine.calculateMatchScore(searchCriteria, profileA, rules);
+
+    // Verify that the missing attributes are handled correctly
+    expect(score).toBeGreaterThan(0);
+    expect(score).toBeLessThan(100); // Shouldn't be a perfect match
+  });
 });

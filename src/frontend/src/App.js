@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import FileImport from './components/FileImport';
-import SearchConfig from './components/SearchConfig';
+import SearchBuilder from './components/SearchBuilder';
 import ResultsDashboard from './components/ResultsDashboard';
 import SavedSearches from './components/SavedSearches';
-import './App.css';
 
 function App() {
   const [importedData, setImportedData] = useState(null);
@@ -24,7 +23,6 @@ function App() {
       body: JSON.stringify({
         baseProfile: { id: 'baseProfileId', ...importedData[0] }, // Assuming first row is base profile
         compareProfiles: importedData.slice(1).map((profile, index) => ({ id: `profile-${index}`, ...profile })), // Assuming rest are compare profiles
-        matchingRules: searchConfig.matchingRules,
         weights: searchConfig.weights,
       }),
     })
@@ -44,10 +42,10 @@ function App() {
         <h1>Profile Matching Application</h1>
         <FileImport onFileImport={handleFileImport} />
         {importedData && (
-          <SearchConfig
+          <SearchBuilder
             importedData={importedData}
             onSearch={handleSearch}
-          />
+            />
         )}
         <ResultsDashboard searchResults={searchResults} />
         <SavedSearches />

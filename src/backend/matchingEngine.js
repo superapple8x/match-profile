@@ -46,35 +46,46 @@ class MatchingEngine {
     return value1 && value2 ? this.config.optionalMatchWeight : 0;
   }
 
-  calculateMatchScore(profile1, profile2, matchingRules = this.defaultMatchingRules) {
+  calculateMatchScore(searchCriteria, profile, matchingRules = this.defaultMatchingRules) {
     let totalScore = 0;
     let maxPossibleScore = 0;
     console.log('Calculating match score using rules:', matchingRules);
 
-    for (const [attribute, rule] of Object.entries(matchingRules)) {
-      console.log(`Evaluating attribute: ${attribute}`);
-      console.log(`Profile1 value: ${profile1[attribute]}`);
-      console.log(`Profile2 value: ${profile2[attribute]}`);
-      const weight = this.weights[attribute] || 1;
-      let score = 0;
+    for (const attribute in searchCriteria) {
+      if (matchingRules.hasOwnProperty(attribute)) {
+        const rule = matchingRules[attribute];
+        const searchValue = searchCriteria[attribute];
+        const profileValue = profile[attribute];
 
-      switch (rule.type) {
-        case 'exact':
-          score = this.exactMatch(profile1[attribute], profile2[attribute]);
-          break;
-        case 'range':
-          score = this.rangeMatch(profile1[attribute], profile2[attribute], rule.tolerance);
-          break;
-        case 'partial':
-          score = this.partialTextMatch(profile1[attribute], profile2[attribute]);
-          break;
-        case 'optional':
-          score = this.optionalMatch(profile1[attribute], profile2[attribute]);
-          break;
+        console.log(`Evaluating attribute: ${attribute}`);
+        console.log(`Search value: ${searchValue}`);
+        console.log(`Profile value: ${profileValue}`);
+
+        const weight = this.weights[attribute] || 1;
+        let score = 0;
+
+        switch (rule.type) {
+          case 'exact':
+            score = this.exactMatch(searchValue, profileValue);
+            break;
+          case 'range':
+            score = this.rangeMatch(searchValue, profileValue, rule.tolerance);
+            break;
+          case 'partial':
+            score = this.partialTextMatch(searchValue, profileValue);
+            break;
+          case 'optional':
+            score = this.optionalMatch(searchValue, profileValue);
+            break;
+          default:
+            score = 0; // Default score for unknown rule types
+        }
+
+        totalScore += score * weight;
+        maxPossibleScore += this.config.exactMatchWeight * weight;
+      } else {
+        console.log(`Attribute ${attribute} not found in matching rules, assigning a default score of 0.`);
       }
-
-      totalScore += score * weight;
-      maxPossibleScore += this.config.exactMatchWeight * weight;
     }
 
     return maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 100 : 0;
