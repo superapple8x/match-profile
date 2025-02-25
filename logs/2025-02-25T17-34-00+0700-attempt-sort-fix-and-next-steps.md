@@ -20,6 +20,4 @@
 
 **Next steps for front end development (assuming the sorting button is fixed):**
 
-1.  Implement the new SearchBar component with auto-suggestions and attribute-value parsing.
-2.  Enhance the ResultsDashboard to display search criteria and improve visualization.
-3.  Implement the WeightAdjustmentModal for adjusting attribute weights.
+*   Phase 4: Integration and Testing

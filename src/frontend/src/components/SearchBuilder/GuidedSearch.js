@@ -23,8 +23,8 @@ function GuidedSearch({ importedData }) {
   }, [setSelectedAttributes]);
 
   const handleAttributeDeselect = useCallback((attribute) => {
-    setSelectedAttributes(selectedAttributes.filter((attr) => attr !== attribute));
-  }, [setSelectedAttributes]);
+    setSelectedAttributes(prev => prev.filter((attr) => attr !== attribute));
+  }, [selectedAttributes, setSelectedAttributes]);
 
   const handleRuleChange = useCallback((attribute, rule) => {
     setMatchingRules(prevRules => ({

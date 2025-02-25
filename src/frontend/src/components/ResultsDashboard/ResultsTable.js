@@ -10,12 +10,12 @@ function ResultsTable({ results, filteredData, onMatchClick }) {
     dataField: 'matchPercentage',
     order: 'desc' // Default to showing highest matches first
   });
-  
+
   // State for the actual data to display
   const [tableData, setTableData] = useState([]);
-  
-   // Process the input data and determine what to display
-   useEffect(() => {
+
+  // Process the input data and determine what to display
+  useEffect(() => {
     console.log('ResultsTable: data dependency array changed', { results, filteredData });
     let data;
     if (results && Array.isArray(results)) {
@@ -30,8 +30,44 @@ function ResultsTable({ results, filteredData, onMatchClick }) {
 
   useEffect(() => {
     console.log('Sort state changed:', sortState);
+    if (tableData.length > 0) {
+      const sortedData = [...tableData].sort((a, b) => {
+        const aValue = getNestedValue(a, sortState.dataField);
+        const bValue = getNestedValue(b, sortState.dataField);
+        
+        console.log('Sorting values:', { 
+          aValue, 
+          bValue, 
+          aValueType: typeof aValue, 
+          bValueType: typeof bValue,
+          sortOrder: sortState.order
+        });
+
+        if (sortState.order === 'asc') {
+          if (aValue === null || aValue === undefined) return 1;
+          if (bValue === null || bValue === undefined) return -1;
+          return Number(aValue) > Number(bValue) ? 1 : -1;
+        } else {
+          if (aValue === null || aValue === undefined) return 1;
+          if (bValue === null || bValue === undefined) return -1;
+          return Number(aValue) < Number(bValue) ? 1 : -1;
+        }
+      });
+
+      setTableData(sortedData);
+    }
   }, [sortState]);
 
+  // Helper function to get nested values (e.g., profile.name)
+  const getNestedValue = (obj, path) => {
+    const keys = path.split('.');
+    const value = keys.reduce((o, key) => (o && o[key] !== undefined) ? o[key] : null, obj);
+    // Convert percentage strings to numbers if needed
+    if (typeof value === 'string' && value.endsWith('%')) {
+      return parseFloat(value);
+    }
+    return value;
+  };
 
   // Handle all table changes including sorting
   const handleTableChange = (type, { sortField, sortOrder }) => {
@@ -48,13 +84,13 @@ function ResultsTable({ results, filteredData, onMatchClick }) {
   if (tableData.length === 0) {
     return <div>No data to display.</div>;
   }
-  
+
   // Determine if we should show match percentage
   const showMatchPercentage = results && Array.isArray(results);
-  
+
   // Build columns based on the data
   const columns = [];
-  
+
   if (showMatchPercentage) {
     columns.push({
       dataField: 'matchPercentage',
@@ -66,9 +102,9 @@ function ResultsTable({ results, filteredData, onMatchClick }) {
       }
     });
   }
-  
+
   const firstItem = tableData[0];
-  
+
   if (firstItem.profile) {
     Object.keys(firstItem.profile).forEach(key => {
       columns.push({
@@ -94,10 +130,13 @@ function ResultsTable({ results, filteredData, onMatchClick }) {
       }
     });
   }
-  
-  // Determine the key field for the table
-  const keyField = firstItem.id ? 'id' : columns[0].dataField;
-  
+
+  // Generate unique keys for each row
+  const keyField = 'uniqueKey';
+  tableData.forEach((item, index) => {
+    item.uniqueKey = `${index}-${item.matchPercentage || '0'}`;
+  });
+
   return (
     <div className="results-table-container">
       <BootstrapTable
@@ -107,7 +146,7 @@ function ResultsTable({ results, filteredData, onMatchClick }) {
         columns={columns}
         defaultSorted={[sortState]}
         onTableChange={handleTableChange}
-        remote={{ sort: true }} // Set to true if sorting should be handled by the server
+        remote={{ sort: false }} // Set to true if sorting should be handled by the server
       />
     </div>
   );
