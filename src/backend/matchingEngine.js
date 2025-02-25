@@ -7,6 +7,17 @@ class MatchingEngine {
       partialMatchWeight: 0.6,
       optionalMatchWeight: 0.4
     };
+    this.defaultMatchingRules = {
+      Age: { type: 'range', tolerance: 5 },
+      Gender: { type: 'exact' },
+      Location: { type: 'partial' },
+      Profession: { type: 'partial' },
+      Platform: { type: 'exact' },
+      'Video Category': { type: 'exact' },
+      'Watch Reason': { type: 'partial' },
+      DeviceType: { type: 'partial' },
+      OS: { type: 'partial' }
+    };
   }
 
   setWeights(weights) {
@@ -35,11 +46,15 @@ class MatchingEngine {
     return value1 && value2 ? this.config.optionalMatchWeight : 0;
   }
 
-  calculateMatchScore(profile1, profile2, matchingRules) {
+  calculateMatchScore(profile1, profile2, matchingRules = this.defaultMatchingRules) {
     let totalScore = 0;
     let maxPossibleScore = 0;
+    console.log('Calculating match score using rules:', matchingRules);
 
     for (const [attribute, rule] of Object.entries(matchingRules)) {
+      console.log(`Evaluating attribute: ${attribute}`);
+      console.log(`Profile1 value: ${profile1[attribute]}`);
+      console.log(`Profile2 value: ${profile2[attribute]}`);
       const weight = this.weights[attribute] || 1;
       let score = 0;
 

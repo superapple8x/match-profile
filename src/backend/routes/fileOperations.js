@@ -4,6 +4,7 @@ const multer = require('multer');
 const csv = require('csv-parser');
 const xlsx = require('xlsx');
 const MatchingEngine = require('../matchingEngine');
+const cors = require('cors');
 
 // Multer setup for file uploads
 const upload = multer({
@@ -17,10 +18,10 @@ const upload = multer({
 router.post('/import', upload.single('file'), async (req, res) => {
   try {
     console.log('Inside /import route handler');
-    //console.log('req.file:', req.file);
-    //console.log('req.files:', req.files);
-    //console.log('req.body', req.body);
-    if (!req.file) {
+        console.log('req.file:', req.file);
+        console.log('req.file.originalname:', typeof req.file.originalname);
+        console.log('req.file.buffer:', typeof req.file.buffer);
+        if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
@@ -83,7 +84,14 @@ router.get('/export/csv', (req, res) => {
 });
 
 // Match profiles endpoint
-router.post('/match', (req, res) => {
+router.post('/match', cors(), (req, res) => {
+  console.log('Inside /match route handler');
+  console.log('Request headers:', req.headers);
+  console.log('Request body:', req.body);
+  if (!req.body) {
+    console.error('No request body received');
+    return res.status(400).json({ error: 'No request body received' });
+  }
   try {
     const { baseProfile, compareProfiles, matchingRules, weights } = req.body;
     const engine = new MatchingEngine();

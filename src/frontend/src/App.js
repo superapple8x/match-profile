@@ -16,7 +16,7 @@ function App() {
   const handleSearch = (searchConfig) => {
     console.log('Search config:', searchConfig);
 
-    fetch('/api/files/match', {
+    fetch('http://localhost:3000/api/files/match', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
