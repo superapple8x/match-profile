@@ -1,33 +1,22 @@
-import React, { useState, useCallback } from 'react';
-import './SearchConfig.css';
-import AttributeSelector from './AttributeSelector';
+  import React, { useState, useCallback } from 'react';
 import CriteriaBuilder from './CriteriaBuilder';
 import GuidedSearch from './SearchBuilder/GuidedSearch';
 import SearchBar from './SearchBar';
 
 function SearchBuilder({ importedData, onSearch }) {
   const [isGuidedSearchOpen, setIsGuidedSearchOpen] = useState(false);
-  const [selectedAttributes, setSelectedAttributes] = useState([]);
   const [matchingRules, setMatchingRules] = useState({});
   const [searchValues, setSearchValues] = useState({});
 
-  const handleOpenGuidedSearch = () => {
-    setIsGuidedSearchOpen(true);
-  };
+    const handleOpenGuidedSearch = () => {
+        setIsGuidedSearchOpen(true);
+    };
 
-  const handleCloseGuidedSearch = () => {
-    setIsGuidedSearchOpen(false);
-  };
+    const handleCloseGuidedSearch = () => {
+        setIsGuidedSearchOpen(false);
+    };
 
-  const handleAttributeSelect = useCallback((attribute) => {
-    setSelectedAttributes(prev => [...prev, attribute]);
-  }, [setSelectedAttributes]);
-
-  const handleAttributeDeselect = useCallback((attribute) => {
-    setSelectedAttributes(prev => prev.filter((attr) => attr !== attribute));
-  }, [setSelectedAttributes]);
-
-  const handleRuleChange = useCallback((attribute, rule) => {
+    const handleRuleChange = useCallback((attribute, rule) => {
     setMatchingRules(prevRules => ({
       ...prevRules,
       [attribute]: rule
@@ -48,20 +37,7 @@ function SearchBuilder({ importedData, onSearch }) {
 
   return (
     <div className="search-config-container">
-      <h3>Search Configuration</h3>
-      <AttributeSelector
-        importedData={importedData}
-        onAttributeSelect={handleAttributeSelect}
-        onAttributeDeselect={handleAttributeDeselect}
-      />
-      {selectedAttributes.map(attribute => (
-        <CriteriaBuilder
-          key={attribute}
-          attribute={attribute}
-          onRuleChange={handleRuleChange}
-          onSearchValueChange={handleSearchValueChange}
-        />
-      ))}
+      
       <SearchBar importedData={importedData} onSearch={onSearch} />
       <button onClick={handleOpenGuidedSearch}>Guided Search</button>
       {isGuidedSearchOpen && (
