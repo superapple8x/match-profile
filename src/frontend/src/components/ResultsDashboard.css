@@ -19,3 +19,18 @@
   align-items: center;
   z-index: 1000;
 }
+
+.visualization-container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-around;
+  margin-top: 20px;
+}
+
+.visualization-container > * {
+  width: 45%; /* Adjust as needed */
+  margin-bottom: 20px;
+  border: 1px solid #ddd;
+  padding: 10px;
+  box-sizing: border-box;
+}
