@@ -1,0 +1,42 @@
+.attribute-selector-container {
+  border: 1px solid #ccc;
+  padding: 10px;
+}
+
+.attribute-search {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.attribute-category {
+  margin-bottom: 15px;
+}
+
+.attribute-category h4 {
+  margin-top: 0;
+  margin-bottom: 5px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #eee;
+}
+
+.attribute-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.attribute-item {
+  margin-bottom: 5px;
+}
+
+.attribute-item label {
+  display: flex;
+  align-items: center;
+}
+
+.attribute-item input[type="checkbox"] {
+  margin-right: 5px;
+}

@@ -1,0 +1,56 @@
+.weight-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+}
+
+.weight-modal-content {
+  background-color: white;
+  padding: 20px;
+  border-radius: 4px;
+  width: 80%;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.weight-slider-container {
+  margin-bottom: 15px;
+  display: flex;
+  align-items: center;
+}
+
+.weight-slider-container label {
+  width: 120px;
+  font-weight: bold;
+}
+
+.weight-slider {
+  flex: 1;
+  margin: 0 10px;
+}
+
+.weight-value {
+  font-weight: bold;
+  width: 30px;
+  text-align: center;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.apply-button {
+  background-color: #4caf50;
+  color: white;
+  padding: 8px 16px;
+}
