@@ -1,0 +1,53 @@
+.results-dashboard {
+  display: grid;
+  gap: 2rem;
+  padding: 1rem;
+}
+
+.visualization-switcher {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.viz-button {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.viz-button.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.viz-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.main-visualization {
+  min-height: 400px;
+  background: white;
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.chart-container {
+  position: relative;
+  height: 400px;
+}
+
+.coming-soon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 400px;
+  font-size: 1.2rem;
+  color: var(--text-secondary);
+}

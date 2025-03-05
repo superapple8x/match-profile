@@ -1,49 +1,55 @@
-import React, { useState } from 'react';
-import './SearchConfig.css';
-import AttributeSelector from './AttributeSelector';
+  import React, { useState, useCallback } from 'react';
 import CriteriaBuilder from './CriteriaBuilder';
+import GuidedSearch from './SearchBuilder/GuidedSearch';
+import SearchBar from './SearchBar';
 
 function SearchBuilder({ importedData, onSearch }) {
-  const [weights, setWeights] = useState({});
+  const [isGuidedSearchOpen, setIsGuidedSearchOpen] = useState(false);
   const [matchingRules, setMatchingRules] = useState({});
+  const [searchValues, setSearchValues] = useState({});
 
-  const handleWeightChange = (attribute, value) => {
-    setWeights(prevWeights => ({
-      ...prevWeights,
-      [attribute]: parseFloat(value)
-    }));
-  };
+    const handleOpenGuidedSearch = () => {
+        setIsGuidedSearchOpen(true);
+    };
 
-  const handleRuleChange = (attribute, rule) => {
+    const handleCloseGuidedSearch = () => {
+        setIsGuidedSearchOpen(false);
+    };
+
+    const handleRuleChange = useCallback((attribute, rule) => {
     setMatchingRules(prevRules => ({
       ...prevRules,
       [attribute]: rule
     }));
-  };
+  }, [setMatchingRules]);
 
-  const handleSearch = () => {
-    const searchConfig = {
-      weights,
-      matchingRules
-    };
-    onSearch(searchConfig);
+  const handleSearchValueChange = useCallback((attribute, value) => {
+    setSearchValues(prevValues => ({
+      ...prevValues,
+      [attribute]: value
+    }));
+  }, [setSearchValues]);
+
+  const handleGuidedSearch = (criteria) => {
+    // Implement search logic here based on the criteria
+    onSearch(criteria);
   };
 
   return (
     <div className="search-config-container">
-      <h3>Search Configuration</h3>
-      <AttributeSelector importedData={importedData} />
-      {importedData && Object.keys(importedData[0]).map(attribute => (
-        <CriteriaBuilder
-          key={attribute}
-          attribute={attribute}
-          onWeightChange={handleWeightChange}
-          onRuleChange={handleRuleChange}
-        />
-      ))}
-      <button onClick={handleSearch} className="search-button">
-        Run Search
-      </button>
+      
+      <SearchBar importedData={importedData} onSearch={onSearch} />
+      <button onClick={handleOpenGuidedSearch}>Guided Search</button>
+      {isGuidedSearchOpen && (
+        <div className="modal" style={{ display: 'block' }}>
+          <div className="modal-content">
+            <span className="close" onClick={handleCloseGuidedSearch}>
+              &times;
+            </span>
+            <GuidedSearch importedData={importedData} onSearch={handleGuidedSearch} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
