@@ -10,7 +10,7 @@ const cors = require('cors');
 const upload = multer({
   storage: multer.memoryStorage(), // Store files in memory
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10 MB limit
+    fileSize: 100 * 1024 * 1024, // 100 MB limit
   }
 });
 
