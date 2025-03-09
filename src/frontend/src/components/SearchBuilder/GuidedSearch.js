@@ -1,7 +1,8 @@
 import React, { useState, useCallback } from 'react';
+import './GuidedSearch.css';
 import AttributeSelector from '../AttributeSelector';
 import CriteriaBuilder from '../CriteriaBuilder';
-import ResultsTable from '../ResultsDashboard/ResultsTable';
+import ResultsTable from '../ResultsDashboard/ResultsTable.tsx';
 
 function GuidedSearch({ importedData }) {
   const [currentStep, setCurrentStep] = useState(1);
@@ -61,7 +62,7 @@ function GuidedSearch({ importedData }) {
   };
 
   return (
-    <div>
+    <div className="guided-search">
       <h2>Guided Search Wizard</h2>
       {currentStep === 1 && (
         <div>
@@ -71,7 +72,9 @@ function GuidedSearch({ importedData }) {
             onAttributeSelect={handleAttributeSelect}
             onAttributeDeselect={handleAttributeDeselect}
           />
-          <button onClick={nextStep}>Next</button>
+          <div className="step-navigation">
+            <button onClick={nextStep}>Next</button>
+          </div>
         </div>
       )}
       {currentStep === 2 && (
@@ -85,16 +88,20 @@ function GuidedSearch({ importedData }) {
               onSearchValueChange={handleSearchValueChange}
             />
           ))}
-          <button onClick={prevStep}>Previous</button>
-          <button onClick={nextStep}>Next</button>
+          <div className="step-navigation">
+            <button onClick={prevStep}>Previous</button>
+            <button onClick={nextStep}>Next</button>
+          </div>
         </div>
       )}
       {currentStep === 3 && (
         <div>
           <h3>Step 3: Preview Results</h3>
           <ResultsTable importedData={importedData} filteredData={filteredData} />
-          <button onClick={prevStep}>Previous</button>
-          <button onClick={() => handleSearch(selectedAttributes, matchingRules)}>Run Search</button>
+          <div className="step-navigation">
+            <button onClick={prevStep}>Previous</button>
+            <button onClick={() => handleSearch(selectedAttributes, matchingRules)}>Run Search</button>
+          </div>
         </div>
       )}
     </div>

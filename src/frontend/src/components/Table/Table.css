@@ -1,0 +1,72 @@
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-surface);
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.header-cell {
+  padding: var(--spacing-md);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+}
+
+.header-cell:hover {
+  background: var(--color-surface-3);
+}
+
+.row {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.cell {
+  padding: var(--spacing-md);
+  color: var(--color-text);
+}
+
+.row:hover {
+  background: var(--color-surface-2);
+}
+
+/* Dark Mode Styles */
+.dark .table {
+  background: var(--color-dark-surface);
+  border: 1px solid var(--color-dark-border);
+  box-shadow: var(--shadow-dark-sm);
+}
+
+.dark .header-cell {
+  background: var(--color-dark-surface-2);
+  color: var(--color-dark-text);
+  border-bottom: 1px solid var(--color-dark-border);
+}
+
+.dark .header-cell:hover {
+  background: var(--color-dark-surface-3);
+}
+
+.dark .row {
+  border-bottom: 1px solid var(--color-dark-border);
+}
+
+.dark .cell {
+  color: var(--color-dark-text);
+}
+
+.dark .row:hover {
+  background: var(--color-dark-surface-2);
+}

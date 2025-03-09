@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import './ResultsDashboard.css';
 import ResultsSummary from './ResultsDashboard/ResultsSummary';
-import ResultsTable from './ResultsDashboard/ResultsTable';
+import ResultsTable from './ResultsDashboard/ResultsTable.tsx';
 import MatchBreakdown from './ResultsDashboard/MatchBreakdown';
 
-function ResultsDashboard({ searchResults, searchCriteria }) {
+function ResultsDashboard({ searchResults, searchCriteria, darkMode = false }) {
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [totalMatches, setTotalMatches] = useState(0);
   const [averageMatchPercentage, setAverageMatchPercentage] = useState(0);
@@ -65,7 +65,11 @@ function ResultsDashboard({ searchResults, searchCriteria }) {
             averageMatchPercentage={averageMatchPercentage}
             highestMatch={highestMatch}
           />
-          <ResultsTable results={searchResults.matches} onMatchClick={handleMatchClick} />
+          <ResultsTable 
+            results={searchResults.matches} 
+            onMatchClick={handleMatchClick}
+            darkMode={darkMode}
+          />
           {selectedMatch && (
             <div className="match-breakdown-modal">
               <MatchBreakdown match={selectedMatch} />

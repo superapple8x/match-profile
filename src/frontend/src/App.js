@@ -86,9 +86,14 @@ function App() {
           <SearchBuilder
             importedData={importedData}
             onSearch={handleSearch}
-            />
+            darkMode={darkMode}
+          />
         )}
-        <ResultsDashboard searchResults={searchResults} searchCriteria={searchCriteria} />
+        <ResultsDashboard 
+          searchResults={searchResults} 
+          searchCriteria={searchCriteria}
+          darkMode={darkMode}
+        />
         <SavedSearches />
       </header>
     </div>
