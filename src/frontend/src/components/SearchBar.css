@@ -149,18 +149,21 @@
 
 .dark .search-button {
   background-color: var(--color-primary-600);
+  color: black;
 }
 
 .dark .search-button:hover {
   background-color: var(--color-primary-700);
+  color: black;
 }
 
 .dark .weight-button {
   background-color: var(--color-dark-surface);
-  color: var(--color-dark-text-primary);
+  color: black;
   border-color: var(--color-dark-border);
 }
 
 .dark .weight-button:hover {
   background-color: var(--color-dark-surface-hover);
+  color: black;
 }

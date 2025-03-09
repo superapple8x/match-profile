@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 import './SearchBar.css';
 import WeightAdjustmentModal from './WeightAdjustmentModal';
 
-function SearchBar({ importedData, onSearch }) {
+function SearchBar({ importedData, onSearch, darkMode = false }) {
   // Core search input state
   const [inputValue, setInputValue] = useState(''); // Current raw input text
   const [currentAttribute, setCurrentAttribute] = useState(''); // Parsed attribute part
@@ -300,7 +300,7 @@ const handleValueInput = (attributeInput, valueInput) => {
   };
   
   return (
-    <div className="enhanced-search-bar">
+    <div className={`enhanced-search-bar ${darkMode ? 'dark' : ''}`}>
       <div className="selected-criteria">
         {selectedCriteria.map((criteria, index) => (
           <span key={index} className="criteria-tag">
