@@ -2,18 +2,31 @@ import React, { useState, useCallback } from 'react';
 import Papa from 'papaparse';
 import './FileImport.css';
 
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 10MB
+
 function FileImport({ onFileImport }) {
   const [file, setFile] = useState(null);
   const [fileName, setFileName] = useState('No file chosen');
   const [parseError, setParseError] = useState(null);
+  const [fileSizeError, setFileSizeError] = useState(null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
 
   const handleFileChange = useCallback((event) => {
     if (event.target.files && event.target.files[0]) {
       const selectedFile = event.target.files[0];
-      setFile(selectedFile);
-      setFileName(selectedFile.name);
-      setParseError(null);
+      if (selectedFile.size > MAX_FILE_SIZE) {
+        setFileSizeError('File size exceeds the limit (100MB).');
+        setFile(null);
+        setFileName('No file chosen');
+        setParseError(null);
+        setUploadSuccess(false);
+      } else {
+        setFile(selectedFile);
+        setFileName(selectedFile.name);
+        setParseError(null);
+        setFileSizeError(null);
+        setUploadSuccess(false);
+      }
     }
   }, []);
   const handleUpload = () => {
@@ -29,6 +42,7 @@ function FileImport({ onFileImport }) {
         error: (error) => {
           console.error('Parsing error:', error.message);
           setParseError(error.message);
+          setUploadSuccess(false);
         },
         header: true,
       });
@@ -51,6 +65,9 @@ function FileImport({ onFileImport }) {
         />
       </div>
       <div className="file-info">Selected File: {fileName}</div>
+      {fileSizeError && (
+        <div className="error-message">{fileSizeError}</div>
+      )}
       {parseError && (
         <div className="parse-error">
           Error parsing file: {parseError}
