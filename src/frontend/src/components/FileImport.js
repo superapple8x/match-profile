@@ -6,6 +6,7 @@ function FileImport({ onFileImport }) {
   const [file, setFile] = useState(null);
   const [fileName, setFileName] = useState('No file chosen');
   const [parseError, setParseError] = useState(null);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
 
   const handleFileChange = useCallback((event) => {
     if (event.target.files && event.target.files[0]) {
@@ -22,6 +23,8 @@ function FileImport({ onFileImport }) {
         complete: (results) => {
           console.log('Parsed data:', results.data);
           onFileImport(results.data); // Pass data to parent component
+          setUploadSuccess(true);
+          setParseError(null);
         },
         error: (error) => {
           console.error('Parsing error:', error.message);
@@ -56,6 +59,9 @@ function FileImport({ onFileImport }) {
       <button onClick={handleUpload} disabled={!file}>
         Upload
       </button>
+      {uploadSuccess && (
+        <div className="upload-success">File uploaded successfully!</div>
+      )}
     </div>
   );
 }
