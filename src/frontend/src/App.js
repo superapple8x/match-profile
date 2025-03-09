@@ -81,7 +81,14 @@ function App() {
           </button>
         </div>
         <h1>Profile Matching Application</h1>
+      </header>
+
+      <div className="sidebar">
         <FileImport onFileImport={handleFileImport} />
+        <SavedSearches />
+      </div>
+
+      <div className="main-content">
         {importedData && (
           <SearchBuilder
             importedData={importedData}
@@ -94,8 +101,7 @@ function App() {
           searchCriteria={searchCriteria}
           darkMode={darkMode}
         />
-        <SavedSearches />
-      </header>
+      </div>
     </div>
   );
 }
