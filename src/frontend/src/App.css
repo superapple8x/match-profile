@@ -1,7 +1,36 @@
 .App {
-  text-align: center;
-  padding: 20px;
+  display: grid;
+  grid-template-columns: minmax(250px, 1fr) 3fr;
+  grid-template-rows: auto 1fr;
+  gap: var(--spacing-6);
+  min-height: 100vh;
+  padding: var(--spacing-6);
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.App-header {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-6);
+  padding: var(--spacing-6);
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.main-content {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-6);
+}
+
+.sidebar {
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-6);
 }
 
 .dark-mode-toggle {

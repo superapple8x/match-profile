@@ -2,8 +2,6 @@ import React, { useState, useCallback } from 'react';
 import Papa from 'papaparse';
 import './FileImport.css';
 
-
-
 function FileImport({ onFileImport }) {
   const [file, setFile] = useState(null);
   const [fileName, setFileName] = useState('No file chosen');
@@ -55,7 +53,9 @@ function FileImport({ onFileImport }) {
           Error parsing file: {parseError}
         </div>
       )}
-      <button onClick={handleUpload}>Upload</button>
+      <button onClick={handleUpload} disabled={!file}>
+        Upload
+      </button>
     </div>
   );
 }
