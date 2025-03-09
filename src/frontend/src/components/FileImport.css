@@ -1,28 +1,56 @@
 .file-import-container {
-    padding: 20px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    margin-bottom: 20px;
-  }
-  
-  .file-input-wrapper {
-    margin-bottom: 10px;
-  }
-  
-  .file-upload-label {
-    background-color: #4CAF50;
-    color: white;
-    padding: 10px 15px;
-    border-radius: 4px;
-    cursor: pointer;
-    display: inline-block;
-  }
-  
-  .file-info {
-    margin-bottom: 10px;
-  }
-  
-  /* Hide the default file input */
-  input[type="file"] {
-    display: none;
-  }
+  padding: var(--spacing-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-5);
+  background-color: var(--color-surface);
+  transition: all var(--transition-duration-normal) var(--transition-timing-function);
+}
+
+.file-input-wrapper {
+  margin-bottom: var(--spacing-3);
+}
+
+.file-upload-label {
+  background-color: var(--color-primary-500);
+  color: var(--color-neutral-50);
+  padding: var(--spacing-3) var(--spacing-4);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: inline-block;
+  transition: all var(--transition-duration-normal) var(--transition-timing-function);
+}
+
+.file-upload-label:hover {
+  background-color: var(--color-primary-600);
+}
+
+.file-info {
+  margin-bottom: var(--spacing-3);
+  color: var(--color-text-primary);
+  transition: color var(--transition-duration-normal) var(--transition-timing-function);
+}
+
+/* Hide the default file input */
+input[type="file"] {
+  display: none;
+}
+
+/* Dark Mode Styles */
+.dark .file-import-container {
+  background-color: var(--color-dark-surface);
+  border-color: var(--color-dark-border);
+}
+
+.dark .file-upload-label {
+  background-color: var(--color-primary-600);
+  color: var(--color-neutral-50);
+}
+
+.dark .file-upload-label:hover {
+  background-color: var(--color-primary-700);
+}
+
+.dark .file-info {
+  color: var(--color-dark-text-primary);
+}

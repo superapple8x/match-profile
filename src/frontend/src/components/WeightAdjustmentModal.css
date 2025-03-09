@@ -8,49 +8,83 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 100;
+  z-index: var(--z-index-50);
 }
 
 .weight-modal-content {
-  background-color: white;
-  padding: 20px;
-  border-radius: 4px;
+  background-color: var(--color-surface);
+  padding: var(--spacing-5);
+  border-radius: var(--radius-md);
   width: 80%;
   max-width: 500px;
   max-height: 80vh;
   overflow-y: auto;
+  transition: all var(--transition-duration-normal) var(--transition-timing-function);
 }
 
 .weight-slider-container {
-  margin-bottom: 15px;
+  margin-bottom: var(--spacing-4);
   display: flex;
   align-items: center;
 }
 
 .weight-slider-container label {
   width: 120px;
-  font-weight: bold;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  transition: color var(--transition-duration-normal) var(--transition-timing-function);
 }
 
 .weight-slider {
   flex: 1;
-  margin: 0 10px;
+  margin: 0 var(--spacing-3);
 }
 
 .weight-value {
-  font-weight: bold;
+  font-weight: 600;
   width: 30px;
   text-align: center;
+  color: var(--color-text-primary);
+  transition: color var(--transition-duration-normal) var(--transition-timing-function);
 }
 
 .modal-actions {
   display: flex;
   justify-content: flex-end;
-  margin-top: 20px;
+  margin-top: var(--spacing-5);
 }
 
 .apply-button {
-  background-color: #4caf50;
-  color: white;
-  padding: 8px 16px;
+  background-color: var(--color-success-500);
+  color: var(--color-neutral-50);
+  padding: var(--spacing-2) var(--spacing-4);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-duration-normal) var(--transition-timing-function);
+}
+
+.apply-button:hover {
+  background-color: var(--color-success-600);
+}
+
+/* Dark Mode Styles */
+.dark .weight-modal-content {
+  background-color: var(--color-dark-surface);
+}
+
+.dark .weight-slider-container label {
+  color: var(--color-dark-text-primary);
+}
+
+.dark .weight-value {
+  color: var(--color-dark-text-primary);
+}
+
+.dark .apply-button {
+  background-color: var(--color-success-600);
+}
+
+.dark .apply-button:hover {
+  background-color: var(--color-success-700);
 }

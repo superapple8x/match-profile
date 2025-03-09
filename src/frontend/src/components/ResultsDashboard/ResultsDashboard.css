@@ -1,41 +1,46 @@
 .results-dashboard {
   display: grid;
-  gap: 2rem;
-  padding: 1rem;
+  gap: var(--spacing-8);
+  padding: var(--spacing-4);
+  background-color: var(--color-background);
+  transition: background-color var(--transition-duration-normal) var(--transition-timing-function);
 }
 
 .visualization-switcher {
   display: flex;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  gap: var(--spacing-4);
+  margin-bottom: var(--spacing-4);
 }
 
 .viz-button {
-  padding: 0.5rem 1rem;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  background: white;
+  padding: var(--spacing-2) var(--spacing-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-duration-normal) var(--transition-timing-function);
 }
 
 .viz-button.active {
-  background: var(--primary-color);
-  color: white;
-  border-color: var(--primary-color);
+  background: var(--color-primary-500);
+  color: var(--color-neutral-50);
+  border-color: var(--color-primary-500);
 }
 
 .viz-button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: var(--shadow-sm);
+  background: var(--color-surface-hover);
 }
 
 .main-visualization {
   min-height: 400px;
-  background: white;
-  border-radius: 8px;
-  padding: 1rem;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-4);
+  box-shadow: var(--shadow-md);
+  transition: all var(--transition-duration-normal) var(--transition-timing-function);
 }
 
 .chart-container {
@@ -48,6 +53,36 @@
   align-items: center;
   justify-content: center;
   height: 400px;
-  font-size: 1.2rem;
-  color: var(--text-secondary);
+  font-size: var(--font-size-lg);
+  color: var(--color-text-secondary);
+}
+
+/* Dark Mode Styles */
+.dark .results-dashboard {
+  background-color: var(--color-dark-background);
+}
+
+.dark .viz-button {
+  background: var(--color-dark-surface);
+  color: var(--color-dark-text-primary);
+  border-color: var(--color-dark-border);
+}
+
+.dark .viz-button.active {
+  background: var(--color-primary-600);
+  color: var(--color-neutral-50);
+  border-color: var(--color-primary-600);
+}
+
+.dark .viz-button:hover {
+  background: var(--color-dark-surface-hover);
+}
+
+.dark .main-visualization {
+  background: var(--color-dark-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.dark .coming-soon {
+  color: var(--color-dark-text-secondary);
 }

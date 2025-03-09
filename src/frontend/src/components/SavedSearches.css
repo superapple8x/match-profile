@@ -1,6 +1,14 @@
 .saved-searches-container {
-    padding: 20px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    margin-bottom: 20px;
+  padding: var(--spacing-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-5);
+  background-color: var(--color-surface);
+  transition: all var(--transition-duration-normal) var(--transition-timing-function);
+}
+
+/* Dark Mode Styles */
+.dark .saved-searches-container {
+  background-color: var(--color-dark-surface);
+  border-color: var(--color-dark-border);
 }
