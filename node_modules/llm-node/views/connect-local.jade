@@ -1,0 +1,21 @@
+extends ./base.jade
+
+block content
+	.col-sm-6.col-sm-offset-3
+		h1
+			span.fa.fa-user
+			| &nbsp;Adicionar conta local
+		if message.length
+			div.alert.alert-danger #{message}
+		form(action="/connect/local", method="post")
+			div.form-group
+				label.form-control-label(for="email") Email
+				input.form-control(type="text", name="email",id="email")
+			div.form-group
+				label.form-control-label(for="password") Senha
+				input.form-control(type="password", name="password",id="password")
+			button.btn.btn-warning.btn-lg(type="submit") Adicionar conta
+		hr
+		p Voltar para o seu
+			a(href="/perfil") Perfil
+			| .

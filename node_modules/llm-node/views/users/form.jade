@@ -1,0 +1,38 @@
+- // /views/users/form.jade
+- // GET /usuarios/:item
+- // [START form]
+extends ../base.jade
+
+mixin strategy(title,name,texto)
+  .form-group.row
+    label.form-control-label.col-sm-2(for=name)= title
+    .col-sm-8
+      p= JSON.stringify(texto)
+block content
+  h3 #{action} usuário ID n.º #{item.id}
+  small
+    .btn-group
+      a(href="/usuarios", class='btn btn-success btn-sm')
+        i.glyphicon.glyphicon-arrow-left
+        span  Voltar para visão geral
+      a(href="/usuarios/#{item.id}", class='btn btn-danger btn-sm')
+        i.glyphicon.glyphicon-remove
+        span  Cancelar edição do usuário
+  p &nbsp;
+  form(method="POST")
+    .form-group.row
+      label.form-control-label.col-sm-2(for="perm") Permissões
+      .col-sm-8
+        input.form-control(type="text", name="perm", id="perm", value=item.perm)
+    +strategy('Local', 'local', item.local)
+    +strategy('Google+', 'google', item.google)
+    +strategy('LinkedIn', 'linkedin', item.linkedin)
+    +strategy('Facebook', 'facebook', item.facebook)
+    +strategy('Twitter', 'twitter', item.twitter)
+    .form-group.row
+      label.form-control-label.col-sm-2(for="observacoes") Observações
+      .col-sm-8
+        input.form-control(type="text", name="observacoes", id="observacoes", value=item.observacoes)
+    .form-group
+    .col-sm-offset-2
+      button.btn.btn-success.col-sm-2(type="submit") Salvar

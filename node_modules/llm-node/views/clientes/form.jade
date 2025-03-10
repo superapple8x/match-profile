@@ -1,0 +1,137 @@
+// [START form]
+extends ../base.jade
+
+apend scripts
+  script
+    include ../../scripts/processos-form.js
+
+block content
+  h3 #{action} processo
+  form(method="POST")
+    .form-group.row
+      label.form-control-label.col-sm-2(for="numero") Número do processo:
+      .col-sm-10
+        input.form-control(type="text", name="numero", id="numero", value=processo.numero)
+    .form-group.row
+      label.form-control-label.col-sm-2(for="numero") Acompanhamento:
+      .col-sm-10
+        select.form-control(name="acomp", id="acomp")
+          for acomp in categorias.acomps
+            if processo.acomp == acomp
+              option(selected="true") #{acomp}
+            else
+              option #{acomp}
+    .form-group.row
+      label.form-control-label.col-sm-2(for="link") Link de acompanhamento:
+      .col-sm-10
+        input.form-control(type="text", name="link", id="link", value=processo.link)
+    .form-group.row
+      label.form-control-label.col-sm-2(for="cliente") Cliente:
+      .col-sm-10
+        select.form-control(name="cliente", id="cliente")
+            for cliente in categorias.clientes
+              if processo.cliente == cliente
+                option(selected="true") #{cliente}
+              else
+                option #{cliente}
+    .form-group.row
+      label.form-control-label.col-sm-2(for="parteCliente") Parte cliente:
+      .col-sm-10
+        input.form-control(type="text", name="parteCliente", id="parteCliente", value=processo.parteCliente)
+    .form-group.row
+      label.form-control-label.col-sm-2(for="parteContraria") Parte contrária:
+      .col-sm-10
+        input.form-control(type="text", name="parteContraria", id="parteContraria", value=processo.parteContraria)
+    .form-group.row
+      label.form-control-label.col-sm-2(for="advogado") Advogado:
+      .col-sm-2
+        select.form-control(name="advogado", id="advogado", size="6", multiple="multiple")
+          for advogado in categorias.advogados
+            if processo.advogado == advogado
+              option(selected="true") #{advogado}
+            else
+              option #{advogado}
+      .col-sm-2
+        p.form-control-text (Seleção múltipla. Segura ctrl ou command para selecionar mais de um)
+    .form-group.row
+      label.form-control-label.col-sm-2(for="responsavel") Responsável&#58;
+      .col-sm-2
+        select.form-control(name="responsavel", id="responsavel", size="6", multiple="multiple")
+          for responsavel in categorias.responsaveis
+            if processo.responsavel == responsavel
+              option(selected="true") #{responsavel}
+            else
+              option #{responsavel}
+      .col-sm-2
+        p.form-control-text (Seleção múltipla. Segura ctrl ou command para selecionar mais de um)
+    hr
+    .form-group.row
+      h3 Escolha Estado (UF), Instância, Comarca e Vara (nessa ordem):
+      label.form-control-label.col-sm-2(for="estado") Estado (UF):
+      .col-sm-2
+        select.form-control.col-sm-2(name="estado", id="estado")
+          for estado in categorias.estados
+            if processo.estado == estado
+              option(selected="true") #{estado}
+            else
+              option #{estado}
+    .form-group.row
+      label.form-control-label.col-sm-2(for="comarca") Comarca:
+      .col-sm-2
+        select.form-control(name="comarca", id="comarca", disabled="disabled")
+          option Selecione o estado
+          
+    .form-group.row
+      label.form-control-label.col-sm-2(for="instancia") Instância:
+      .col-sm-2
+        select.form-control(name="instancia", id="instancia")
+          for instancia in categorias.instancias
+            if processo.instancia == instancia
+              option(selected="true") #{instancia}
+            else
+              option #{instancia}
+    .form-group.row
+      label.form-control-label.col-sm-2(for="numVara") Vara:
+      .col-sm-2
+        select.form-control(name="numVara", id="numVara")
+          for numVara in categorias.numVaras
+            if processo.numVara == numVara
+              option(selected="true") #{numVara}
+            else
+              option #{numVara}
+      .col-sm-2
+        select.form-control(name="natVara", id="natVara")
+          for natVara in categorias.natVaras
+            if processo.natVara == natVara
+              option(selected="true") #{natVara}
+            else
+              option #{natVara}
+    hr
+    .form-group.row
+      label.form-control-label.col-sm-2(for="fase") Fase
+      .col-sm-2
+        select.form-control(name="fase", id="fase")
+          for fase in categorias.fases
+            if processo.fase == fase
+              option(selected="true") #{fase}
+            else
+              option #{fase}
+    .form-group.row
+      label.form-control-label.col-sm-2(for="status") Status atual
+      .col-sm-2
+        select.form-control(name="status", id="status")
+          for stato in categorias.status
+            if processo.status == stato
+              option(selected="true") #{stato}
+            else
+              option #{stato}
+    .form-group.row
+      label.form-control-label.col-sm-2(for="observacoes") Observações
+      .col-sm-10
+        input.form-control(type="text", name="observacoes", id="observacoes", value=processo.observacoes)
+    .form-group
+    .col-sm-offset-2
+      button.btn.btn-success.col-sm-2(type="submit") Salvar
+
+// [END form]
+// LINK	ACOMP	NUM_PROC	CLIENTE	PARTE_CLIENTE	PARTE_EX	ADV	RESP	ESTADO	INST	COMARCA	NUM_VARA	NAT_VARA	NAT_ACAO	FASE	STATUS_ATUAL	AND_RELEVANTES	OBSERVACOES

@@ -1,0 +1,70 @@
+.chart-container {
+  max-width: 800px;
+  margin: 20px auto;
+  padding: 20px;
+  background: var(--background-color);
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.chart-container canvas {
+  max-height: 400px;
+  width: 100% !important;
+  height: auto !important;
+}
+
+.optimization-section {
+  margin-top: 20px;
+  padding: 15px;
+  background: var(--secondary-background);
+  border-radius: 6px;
+}
+
+.optimization-section h4 {
+  margin-bottom: 10px;
+  color: var(--text-color);
+}
+
+.optimization-section .alert {
+  margin-bottom: 8px;
+  background-color: var(--info-bg);
+  border-color: var(--info-border);
+  color: var(--info-text);
+}
+
+/* Tabs styling */
+.light-tabs .nav-link {
+  color: var(--text-color);
+  background-color: var(--tab-bg-light);
+  border-color: var(--tab-border-light);
+}
+
+.light-tabs .nav-link.active {
+  color: var(--text-color);
+  background-color: var(--tab-active-bg-light);
+  border-color: var(--tab-border-light);
+}
+
+.dark-tabs .nav-link {
+  color: var(--text-color-dark);
+  background-color: var(--tab-bg-dark);
+  border-color: var(--tab-border-dark);
+}
+
+.dark-tabs .nav-link.active {
+  color: var(--text-color-dark);
+  background-color: var(--tab-active-bg-dark);
+  border-color: var(--tab-border-dark);
+}
+
+/* Button styles */
+.optimization-section .btn-primary {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  color: var(--button-text-color);
+}
+
+.optimization-section .btn-primary:hover {
+  background-color: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
