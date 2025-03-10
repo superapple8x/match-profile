@@ -43,11 +43,11 @@ const originalConsoleLog = console.log;
 console.log = function (...args) {
   originalConsoleLog.apply(console, args);
   const logString = args.map(arg => (typeof arg === 'object' ? JSON.stringify(arg) : arg)).join(' ');
-  fs.appendFile('server.log', logString + '\n', (err) => {
-    if (err) {
-      originalConsoleLog.error('Error writing to log file:', err);
-    }
-  });
+  try {
+    fs.appendFileSync('server.log', logString + '\n');
+  } catch (err) {
+    originalConsoleError('Error writing to log file:', err);
+  }
 };
 
 const originalConsoleError = console.error;
@@ -55,9 +55,9 @@ const originalConsoleError = console.error;
 console.error = function (...args) {
   originalConsoleError.apply(console, args);
   const logString = args.map(arg => (typeof arg === 'object' ? JSON.stringify(arg) : arg)).join(' ');
-fs.appendFile('server.log', logString + '\n', (err) => {
-    if (err) {
-      originalConsoleLog.error('Error writing to log file:', err);
-    }
-  });
+try {
+    fs.appendFileSync('server.log', logString + '\n');
+  } catch (err) {
+    originalConsoleError('Error writing to log file:', err);
+  }
 };
