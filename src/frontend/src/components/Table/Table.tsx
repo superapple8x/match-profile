@@ -46,10 +46,12 @@ export function Table<T>({ data, columns, darkMode = false }: TableProps<T>) {
                     header.column.columnDef.header,
                     header.getContext()
                   )}
-                  {{
-                    asc: ' 🔼',
-                    desc: ' 🔽',
-                  }[header.column.getIsSorted() as string] ?? null}
+                  <span className="sort-indicator">{
+                    {
+                      asc: ' 🔼',
+                      desc: ' 🔽',
+                    }[header.column.getIsSorted() as string] ?? null
+                  }</span>
                 </th>
               ))}
             </tr>
