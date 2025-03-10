@@ -1,0 +1,82 @@
+extends ../base.jade
+
+block content
+  h3 Processo n.º #{processo.numero}
+    small
+
+  .btn-group
+    a(href="/processos/#{processo.id}/editar", class='btn btn-primary btn-sm')
+      i.glyphicon.glyphicon-edit
+      span  Editar processo
+    a(href="/processos/#{processo.id}/excluir", class='btn btn-danger btn-sm')
+      i.glyphicon.glyphicon-trash
+      span  Excluir processo
+  .media
+    .media-body
+      h4 Dados cadastrais
+        | &nbsp;
+        small 
+          | #{processo.cliente}
+          | &nbsp;(
+          | #{processo.advogado}
+          | /
+          | #{processo.responsavel}
+          | )
+      h5 #{processo.parteCliente||'(desconhecido)'} vs. #{processo.parteContraria||'(desconhecido)'} 
+      p 
+        | Acompanhamento&nbsp;
+        | #{processo.acomp}
+        | &nbsp;/&nbsp;
+        a(href="#{processo.link}" target="_blank") Link
+      p Foro: #{processo.comarca}/#{processo.estado} (#{processo.instancia})
+      p Unidade: #{processo.numVara} #{processo.natVara}
+      p Fase/Status: #{processo.fase}/#{processo.status}
+      p Observações: #{processo.observacoes}
+  h4 Andamentos do Processo n.º #{processo.numero}
+  if !processo.andamentos
+    p Nenhum andamento encontrado.
+    .btn-group
+      a(href="/processos/#{processo.id}/novo-andamento", class='btn btn-primary btn-sm')
+        i.glyphicon.glyphicon-plus
+        span  Novo andamento
+  else
+    .table-responsive
+      table.table.table-striped.table-condensed(border='1')
+        thead
+          tr
+            th #
+            th Data
+            th Tipo
+            th Andamento
+            th Relevante?
+            th Lançado por, em
+            th Modificado por, em
+            th Editar/Excluir
+        tbody
+          each andamento, i in processo.andamentos
+              tr
+                td= i+1
+                td= andamento.data
+                td= andamento.tipo
+                td= andamento.conteudo
+                if (andamento.eRelevante)
+                  td Sim
+                else
+                  td Não
+                td Lançado por #{andamento.lancadoPor} em #{andamento.lancadoEm}
+                  | .
+                td Modificado por #{andamento.modificadoPor} em #{andamento.modificadoEm}
+                  | .
+                td
+                  .btn-group
+                    a(href="/processos/#{processo.id}/#{andamento.id}/editar", class='btn btn-primary btn-sm')
+                      i.glyphicon.glyphicon-edit
+                      span  Editar
+                    a(href="/processos/#{processo.id}/#{andamento.id}/excluir", class='btn btn-danger btn-sm')
+                      i.glyphicon.glyphicon-trash
+                      span  Excluir
+  if nextPageToken
+    nav
+      ul.pager
+        li
+          a(href="?pageToken=#{encodeURIComponent(nextPageToken)}", class="btn btn-primary btn-sm") Mais

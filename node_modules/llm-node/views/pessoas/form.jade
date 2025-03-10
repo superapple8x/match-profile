@@ -1,0 +1,49 @@
+// === /pessoas/novo e /pessoas/:id/editar
+
+
+// [START form]
+extends ../base.jade
+
+
+block content
+	h3 #{action} pessoa
+	form(method="POST")
+		.form-group.row
+			label.form-control-label.col-sm-4(for="fullName") Nome completo/Razão social completa:
+			.col-sm-8
+				input.form-control(type="text", name="fullName", id="fullName", value=pessoa.fullName)
+		.form-group.row
+			label.form-control-label.col-sm-4(for="natPessoa") Natureza da pessoa:
+			.col-sm-8
+				select.form-control(name="natPessoa", id="natPessoa")
+					option
+					if pessoa.natPessoa == 'PF'
+						option(selected="true") PF
+						option PJ
+					else if pessoa.natPessoa=='PJ'
+						option PF
+						option(selected="true") PJ
+					else
+						option PF
+						option PJ
+		.form-group.row
+			.col-sm-offset-4.checkbox
+				label
+					if(pessoa.eParteClienteLegado=='S' || pessoa.parteCliente==true)
+						input(type="checkbox", name="parteCliente", id="parteCliente",checked="checked")
+					else
+						input(type="checkbox", name="parteCliente", id="parteCliente")
+					| É parte cliente.
+		.form-group.row
+			.col-sm-offset-4.checkbox
+				label
+					if(pessoa.eParteContrariaLegado=='S' || pessoa.parteContraria==true)
+						input(type="checkbox", name="parteContraria", id="parteContraria",checked="checked")
+					else
+						input(type="checkbox", name="parteContraria", id="parteContraria")
+					| É parte contrária.
+	.form-group
+	.col-sm-offset-2
+		button.btn.btn-success.col-sm-2(type="submit") Salvar
+
+// [END form]

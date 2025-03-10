@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import './ResultsTable.css';
 import { Table } from '../Table/Table.tsx';
+import AttributeDistributionChart from './AttributeDistributionChart';
 import {
   createColumnHelper,
   ColumnDef,
@@ -90,17 +91,26 @@ function ResultsTable({ results, filteredData, onMatchClick, darkMode = false }:
     getSortedRowModel: getSortedRowModel()
   });
 
-  if (data.length === 0) {
-    return <div>No data to display.</div>;
-  }
+    if (data.length === 0) {
+      return <div>No data to display.</div>;
+    }
 
-  return (
-    <Table
-      data={data}
-      columns={columns}
-      darkMode={darkMode}
-    />
-  );
-}
+    // Prepare match results data for the chart
+    const matchResults = data.map(result => ({
+      matchPercentage: result.matchPercentage || 0,
+      attributes: Object.entries(result.profile || result).map(([key, value]) => ({
+        name: key,
+        value: value
+      })),
+      timestamp: new Date().toISOString()
+    }));
+
+    return (
+      <div>
+        <AttributeDistributionChart matchResults={matchResults} />
+        <Table data={data} columns={columns} darkMode={darkMode} />
+      </div>
+      );
+    }
 
 export default ResultsTable;
