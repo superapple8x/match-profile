@@ -1,0 +1,34 @@
+extends ./base.pug
+block content
+  h3 #{action} item
+  form(method="POST")
+    .form-group.row
+      label.form-control-label.col-sm-2(for="name") Item name:
+      .col-sm-10
+        if !item
+          input.form-control(type="text", name="name", id="name", placeholder="Type the name")
+        else
+          input.form-control(type="text", name="name", id="name", value=item.name)
+    .form-group.row
+      label.form-control-label.col-sm-2(for="number") Item number:
+      .col-sm-10
+        if !item
+          input.form-control(type="number", name="number", id="number", placeholder="Type the number")
+        else
+          input.form-control(type="number", name="number", id="number", value=item.number)
+    .form-group.row
+      label.form-control-label.col-sm-2(for="name") Color:
+      .col-sm-10
+        select.form-control(name="color", id="color")
+          - var colors = ['red','green','blue']
+          for color in colors
+            if !item
+              option #{color}
+            else
+              if item.color == color
+                option(selected="true") #{color}
+              else
+                option #{color}
+    .form-group
+      .col-sm-offset-2
+        button.btn.btn-success.col-sm-2(type="submit") Save

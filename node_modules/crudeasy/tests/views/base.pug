@@ -1,0 +1,54 @@
+doctype html
+html(lang="pt-br", ng-app="crudEasy")
+	head
+		title Testing crudEasy [Node.js/ExpressJS/MongoDB]
+		meta(charset='utf-8')
+		meta(http-equiv="X-UA-Compatible", content="IE=edge")
+		meta(name="viewport", content="width=device-width, initial-scale=1")
+		// base(href="")
+		block scripts
+				script(src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.0/jquery.min.js")
+				script(src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js")
+				link(rel="stylesheet", href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css")
+				link(rel="stylesheet", href="https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css")
+				link(rel="stylesheet", href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap-theme.min.css")
+	body
+		header
+		nav
+			.navbar.navbar-default
+				.container-fluid
+					.navbar-header
+						button.navbar-toggle.collapsed(type="button", data-toggle="collapse", data-target="#main-navbar")
+							span.sr-only Navigation
+							span.icon-bar
+							span.icon-bar
+							span.icon-bar
+						.navbar-brand
+							span.glyphicon.glyphicon-cloud
+							| &nbsp;[crudEasy] Testing website
+					.collapse.navbar-collapse#main-navbar
+						ul.nav.navbar-nav.navbar-right
+							li
+								a(href="/")
+									span.glyphicon.glyphicon-home
+		main
+			#wrap(style="min-height: 100%;height: auto !important;height: 100%;margin: 0 auto 60px;}")
+				.container#wrap
+					block content
+		footer.container-fluid.text-center
+			#footer.container.well
+					p
+						| 2016 &copy; Renato Xavier da Silveira Rosa. All rights reserved.
+					p
+						| Please see the MIT license in 
+						a(href="http://github.com/RenatoXSR/crudEasy/") crudEasy's Github page
+						| &nbsp;or&nbsp;
+						a(href="http://npmjs.com/package/crudeasy") crudEasy's npm package <i>crudeasy</i> page
+						| .
+					script
+						| $(function(){
+						block footer-jquery
+						| })
+					block footer
+						
+		

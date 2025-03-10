@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors'); // Import the cors middleware
 const fs = require('fs');
-const db = require('../config/db');
+const db = require('./config/db');
 const fileOperationsRoutes = require('./routes/fileOperations');
 
 const app = express();
@@ -9,8 +9,8 @@ const port = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors()); // Enable CORS for all routes
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
 // Log request headers
 app.use((req, res, next) => {
@@ -30,7 +30,7 @@ app.get('/', (req, res) => {
 // Start server
 app.listen(port, () => {
   const logMessage = `Server running on port ${port}\n`;
-  fs.appendFile('/home/pepper/match-profile/server.log', logMessage, (err) => {
+  fs.appendFile('server.log', logMessage, (err) => {
     if (err) {
       console.error('Error writing to log file:', err);
     }
@@ -43,11 +43,11 @@ const originalConsoleLog = console.log;
 console.log = function (...args) {
   originalConsoleLog.apply(console, args);
   const logString = args.map(arg => (typeof arg === 'object' ? JSON.stringify(arg) : arg)).join(' ');
-  fs.appendFile('/home/pepper/match-profile/server.log', logString + '\n', (err) => {
-    if (err) {
-      originalConsoleLog.error('Error writing to log file:', err);
-    }
-  });
+  try {
+    fs.appendFileSync('server.log', logString + '\n');
+  } catch (err) {
+    originalConsoleError('Error writing to log file:', err);
+  }
 };
 
 const originalConsoleError = console.error;
@@ -55,9 +55,9 @@ const originalConsoleError = console.error;
 console.error = function (...args) {
   originalConsoleError.apply(console, args);
   const logString = args.map(arg => (typeof arg === 'object' ? JSON.stringify(arg) : arg)).join(' ');
-  fs.appendFile('/home/pepper/match-profile/server.log', logString + '\n', (err) => {
-    if (err) {
-      originalConsoleLog.error('Error writing to log file:', err);
-    }
-  });
+try {
+    fs.appendFileSync('server.log', logString + '\n');
+  } catch (err) {
+    originalConsoleError('Error writing to log file:', err);
+  }
 };

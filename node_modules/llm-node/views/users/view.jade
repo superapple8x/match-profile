@@ -1,0 +1,32 @@
+- // /views/users/view.jade
+- // GET usuarios/:item/
+extends ../base.jade
+
+mixin linha(title,texto)
+  .col-sm-4.col-md-8
+    h4= title
+    p.small= texto
+
+
+block content
+  h3 Usuário ID n.º #{item.id}
+  small
+    .btn-group
+      a(href="/usuarios", class='btn btn-success btn-sm')
+        i.glyphicon.glyphicon-arrow-left
+        span  Voltar para visão geral
+      a(href="/usuarios/#{item.id}/editar", class='btn btn-primary btn-sm')
+        i.glyphicon.glyphicon-edit
+        span  Editar usuário
+      a(href="/usuarios/#{item.id}/excluir", class='btn btn-danger btn-sm')
+        i.glyphicon.glyphicon-trash
+        span  Excluir usuário
+  .media
+    .media-body
+      .row
+        +linha('Permissões',JSON.stringify(item.perm))
+        +linha('Local',JSON.stringify(item.local))
+        +linha('Google+',JSON.stringify(item.google))
+        +linha('LinkedIn',JSON.stringify(item.linkedin))
+        +linha('Facebook',JSON.stringify(item.facebook))
+        +linha('Twitter',JSON.stringify(item.twitter))

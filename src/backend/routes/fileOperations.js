@@ -10,7 +10,7 @@ const cors = require('cors');
 const upload = multer({
   storage: multer.memoryStorage(), // Store files in memory
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10 MB limit
+    fileSize: 100 * 1024 * 1024, // 100 MB limit
   }
 });
 
@@ -31,6 +31,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
     let parsedData = [];
 
     // Handle different file types
+    const textDecoder = new TextDecoder('utf-8');
     if (fileName.endsWith('.csv')) {
       await new Promise((resolve, reject) => {
         require('stream').Readable.from(fileBuffer)
@@ -48,7 +49,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
           });
       });
     } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
-      const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
+      const workbook = xlsx.read(textDecoder.decode(fileBuffer), { type: 'string' });
       const sheetName = workbook.SheetNames[0];
       parsedData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
       console.log('Excel parsing complete');
@@ -97,10 +98,16 @@ router.post('/match', cors(), (req, res) => {
     const engine = new MatchingEngine();
     engine.setWeights(weights);
 
-    const results = compareProfiles.map(profile => ({
-      profileId: profile.id,
-      matchPercentage: engine.calculateMatchScore(baseProfile, profile, matchingRules)
-    }));
+    const results = compareProfiles.map(profile => {
+      const mappedProfile = {};
+      for (const key in baseProfile) {
+        mappedProfile[key] = profile[key] || ''; // Use empty string if property doesn't exist
+      }
+      return {
+        profileId: profile.id,
+        matchPercentage: engine.calculateMatchScore(baseProfile, mappedProfile, matchingRules)
+      };
+    });
     console.log('Matching results:', results);
     const responseData = {
       baseProfileId: baseProfile.id,

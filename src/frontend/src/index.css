@@ -1,13 +1,186 @@
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@import './design-tokens.css';
+@import './utilities.css';
+
+/* Josh Comeau Modern Reset */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-base);
+  line-height: var(--line-height-body);
+  color: var(--color-text-primary);
+  background-color: var(--color-background);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+body.dark {
+  color: var(--color-dark-text-primary);
+  background-color: var(--color-dark-background);
+}
+
+/* Typography Scale */
+h1 {
+  font-size: var(--font-size-2xl);
+  line-height: var(--line-height-tight);
+  font-weight: 700;
+  margin-bottom: var(--spacing-6);
+}
+
+h2 {
+  font-size: var(--font-size-xl);
+  line-height: var(--line-height-tight);
+  font-weight: 600;
+  margin-bottom: var(--spacing-5);
+}
+
+h3 {
+  font-size: var(--font-size-lg);
+  line-height: var(--line-height-tight);
+  font-weight: 600;
+  margin-bottom: var(--spacing-4);
+}
+
+h4 {
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-tight);
+  font-weight: 600;
+  margin-bottom: var(--spacing-3);
+}
+
+p {
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-normal);
+  margin-bottom: var(--spacing-4);
+}
+
+/* Remove default margins */
+h1,h2,h3,h4,h5,h6,p {
+  margin: 0;
+}
+
+/* Core responsive images */
+img {
+  max-width: 100%;
+  display: block;
+  height: auto;
+}
+
+/* Forms */
+input,
+textarea,
+button,
+select {
+  font: inherit;
+  color: inherit;
+  background-color: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-2) var(--spacing-3);
+  transition: all var(--transition-duration-normal) var(--transition-timing-function);
+}
+
+input:focus,
+textarea:focus,
+button:focus,
+select:focus {
+  outline: 2px solid var(--color-primary-300);
+  outline-offset: 2px;
+  border-color: var(--color-primary-500);
+}
+
+button {
+  cursor: pointer;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+button:hover {
+  background-color: var(--color-surface-hover);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary-500);
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: var(--color-dark-surface);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: var(--color-dark-border);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary-600);
+}
+
+/* Selection */
+::selection {
+  background-color: var(--color-primary-100);
+  color: var(--color-text-primary);
+}
+
+.dark ::selection {
+  background-color: var(--color-primary-800);
+  color: var(--color-dark-text-primary);
+}
+
+/* Links */
+a {
+  color: var(--color-primary-500);
+  text-decoration: none;
+  transition: color var(--transition-duration-fast) var(--transition-timing-function);
+}
+
+a:hover {
+  color: var(--color-primary-600);
+}
+
+/* Lists */
+ul, ol {
+  padding-left: var(--spacing-6);
+  margin-bottom: var(--spacing-4);
+}
+
+li {
+  margin-bottom: var(--spacing-2);
+}
+
+/* Utility classes */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }

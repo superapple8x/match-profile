@@ -1,0 +1,113 @@
+extends ./base.jade
+
+block content
+	.page-header.text-center
+		h1
+			span.fa.fa-anchor
+			| &nbsp;Perfil do usuário
+		a.btn.btn-default.btn-sm(href="sair") Sair
+	.row
+		.col-sm-6
+			.well
+				h3
+					span.fa.fa-user
+					| &nbsp; Local
+				if user.local.email
+					p
+						strong id
+						| : #{user._id}
+						br
+						strong Email
+						| : #{user.local.email}
+						br
+						strong Senha
+						| : #{user.local.password}
+					a.btn.btn-default(href="/unlink/local") Desconectar
+				else
+					a.btn.btn-default(href="/connect/local") Conectar conta local
+		.col-sm-6
+			.well
+				h3.text-primary
+					span.fa.fa-facebook
+					| &nbsp;Facebook
+				if user.facebook.token 
+					p
+						strong id
+						| : #{user.facebook.id}
+						br
+						strong Token
+						| : #{user.facebook.token}
+						br
+						strong Email
+						| : #{user.facebook.email}
+						br
+						strong Nome
+						| : #{user.facebook.name}
+					a.btn.btn-default(href="/unlink/facebook") Desconectar facebook
+				else
+					a.btn.btn-default(href="/connect/facebook") Conectar facebook
+	.row
+		.col-sm-6
+			.well
+				h3.text-danger
+					span.fa.fa-google-plus
+					| &nbsp;Google+
+				if user.google.token 
+					p
+						strong id
+						| : #{user.google.id}
+						br
+						strong Token
+						| : #{user.google.token}
+						br
+						strong Email
+						| : #{user.google.email}
+						br
+						strong Nome
+						| : #{user.google.name}
+					a.btn.btn-default(href="/unlink/google") Desconectar Google+
+				else
+					a.btn.btn-default(href="/connect/google") Conectar Google+
+		.col-sm-6
+			.well
+				h3.text-info
+					span.fa.fa-twitter
+					| &nbsp;Twitter
+				if user.twitter.token 
+					p
+						strong id
+						| : #{user.twitter.id}
+						br
+						strong Token
+						| : #{user.twitter.token}
+						br
+						strong Email
+						| : #{user.twitter.email}
+						br
+						strong Nome
+						| : #{user.twitter.name}
+					a.btn.btn-default(href="/unlink/twitter") Desconectar Twitter
+				else
+					a.btn.btn-default(href="/connect/twitter") Conectar Twitter
+	.row
+		.col-sm-6
+			.well
+				h3.text-info
+					span.fa.fa-linkedin
+					| &nbsp;LinkedIn
+				if user.linkedin.token 
+					p
+						strong id
+						| : #{user.linkedin.id}
+						br
+						strong Token
+						| : #{user.linkedin.token}
+						br
+						strong Email
+						| : #{user.linkedin.email}
+						br
+						strong Nome
+						| : #{user.linkedin.name}
+					a.btn.btn-default(href="/unlink/linkedin") Desconectar LinkedIn
+				else
+					a.btn.btn-default(href="/connect/linkedin") Conectar LinkedIn
