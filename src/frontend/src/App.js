@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import FileImport from './components/FileImport';
 import SearchBuilder from './components/SearchBuilder';
 import ResultsDashboard from './components/ResultsDashboard';
 import SavedSearches from './components/SavedSearches';
+import AttributeDistributionPage from './components/ResultsDashboard/AttributeDistributionPage';
 
 function App() {
   const [darkMode, setDarkMode] = useState(false);
@@ -73,36 +75,45 @@ function App() {
   };
 
   return (
-    <div className={`App ${darkMode ? 'dark' : ''}`}>
-      <header className="App-header">
-        <div className="dark-mode-toggle">
-          <button onClick={toggleDarkMode}>
-            {darkMode ? 'Light Mode' : 'Dark Mode'}
-          </button>
+    <Router>
+      <div className={`App ${darkMode ? 'dark' : ''}`}>
+        <header className="App-header">
+          <div className="dark-mode-toggle">
+            <button onClick={toggleDarkMode}>
+              {darkMode ? 'Light Mode' : 'Dark Mode'}
+            </button>
+          </div>
+          <h1>Profile Matching Application</h1>
+        </header>
+
+        <div className="sidebar">
+          <FileImport onFileImport={handleFileImport} />
+          <SavedSearches />
         </div>
-        <h1>Profile Matching Application</h1>
-      </header>
 
-      <div className="sidebar">
-        <FileImport onFileImport={handleFileImport} />
-        <SavedSearches />
+        <Routes>
+          <Route path="/" element={
+            <div className="main-content">
+              {importedData && (
+                <SearchBuilder
+                  importedData={importedData}
+                  onSearch={handleSearch}
+                  darkMode={darkMode}
+                />
+              )}
+              <ResultsDashboard 
+                searchResults={searchResults} 
+                searchCriteria={searchCriteria}
+                darkMode={darkMode}
+              />
+            </div>
+          } />
+          <Route path="/attribute-distribution" element={
+            <AttributeDistributionPage />
+          } />
+        </Routes>
       </div>
-
-      <div className="main-content">
-        {importedData && (
-          <SearchBuilder
-            importedData={importedData}
-            onSearch={handleSearch}
-            darkMode={darkMode}
-          />
-        )}
-        <ResultsDashboard 
-          searchResults={searchResults} 
-          searchCriteria={searchCriteria}
-          darkMode={darkMode}
-        />
-      </div>
-    </div>
+    </Router>
   );
 }
 
