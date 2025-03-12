@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import './ResultsTable.css';
 import { Table } from '../Table/Table.tsx';
-import AttributeDistributionChart from './AttributeDistributionChart';
+import { useNavigate } from 'react-router-dom';
 import {
   createColumnHelper,
   ColumnDef,
@@ -30,6 +30,7 @@ interface ResultsTableProps {
 function ResultsTable({ results, filteredData, onMatchClick, darkMode = false }: ResultsTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [data, setData] = useState<ResultData[]>([]);
+  const navigate = useNavigate();
   
   // Define columns with proper typing
   const columns = useMemo(() => {
@@ -78,6 +79,20 @@ function ResultsTable({ results, filteredData, onMatchClick, darkMode = false }:
     setData(processedData);
   }, [results, filteredData]);
 
+  const handleViewChart = () => {
+    const matchResults = data.map(result => ({
+      matchPercentage: result.matchPercentage || 0,
+      attributes: Object.entries(result.profile || result).map(([key, value]) => ({
+        name: key,
+        value: value
+      })),
+      timestamp: new Date().toISOString()
+    }));
+    
+    navigate('/attribute-distribution', {
+      state: { matchResults }
+    });
+  };
 
   // Create table instance with proper typing
   const table = useReactTable<ResultData>({
@@ -91,26 +106,23 @@ function ResultsTable({ results, filteredData, onMatchClick, darkMode = false }:
     getSortedRowModel: getSortedRowModel()
   });
 
-    if (data.length === 0) {
-      return <div>No data to display.</div>;
-    }
+  if (data.length === 0) {
+    return <div>No data to display.</div>;
+  }
 
-    // Prepare match results data for the chart
-    const matchResults = data.map(result => ({
-      matchPercentage: result.matchPercentage || 0,
-      attributes: Object.entries(result.profile || result).map(([key, value]) => ({
-        name: key,
-        value: value
-      })),
-      timestamp: new Date().toISOString()
-    }));
-
-    return (
-      <div>
-        <AttributeDistributionChart matchResults={matchResults} />
-        <Table data={data} columns={columns} darkMode={darkMode} />
+  return (
+    <div>
+      <div className={`action-buttons ${darkMode ? 'dark' : ''}`}>
+        <button 
+          className={`view-chart-button ${darkMode ? 'dark' : ''}`}
+          onClick={handleViewChart}
+        >
+          View Attribute Distribution
+        </button>
       </div>
-      );
-    }
+      <Table data={data} columns={columns} darkMode={darkMode} />
+    </div>
+  );
+}
 
 export default ResultsTable;
