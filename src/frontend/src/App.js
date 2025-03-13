@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import FileImport from './components/FileImport';
 import SearchBuilder from './components/SearchBuilder';
 import ResultsDashboard from './components/ResultsDashboard';
 import SavedSearches from './components/SavedSearches';
-import AttributeDistributionPage from './components/ResultsDashboard/AttributeDistributionPage';
+// import AttributeDistributionPage from './components/ResultsDashboard/AttributeDistributionPage'; // No longer needed
+import DataAnalysisPage from './components/ResultsDashboard/DataAnalysisPage';
+
 
 function App() {
   const [darkMode, setDarkMode] = useState(false);
@@ -108,9 +110,12 @@ function App() {
               />
             </div>
           } />
-          <Route path="/attribute-distribution" element={
-            <AttributeDistributionPage />
-          } />
+          <Route
+            path="/attribute-distribution"
+            element={<Navigate to="/data-analysis" replace state={{ matchResults: searchResults?.matches }} />}
+          />
+          <Route path="/data-analysis" element={<DataAnalysisPage />} />
+
         </Routes>
       </div>
     </Router>

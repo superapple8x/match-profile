@@ -1,14 +1,12 @@
-FROM node:18-alpine
+# Use a lightweight Python base image
+FROM python:3.9-slim
 
+# Set the working directory
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-COPY index.js matchingEngine.js matchingEngine.test.js ./
-COPY routes ./routes
-COPY config ./config
+# Install Plotly
+RUN pip install plotly
 
-RUN npm install
+# Expose no ports (for security)
 
-EXPOSE 3001
-
-CMD ["node", "index.js"]
+# No default command - we'll run the script directly
