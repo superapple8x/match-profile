@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './ResultsDashboard.css';
 import ResultsSummary from './ResultsDashboard/ResultsSummary';
 import ResultsTable from './ResultsDashboard/ResultsTable.tsx';
 import MatchBreakdown from './ResultsDashboard/MatchBreakdown';
 
 function ResultsDashboard({ searchResults, searchCriteria, darkMode = false }) {
+  const navigate = useNavigate();
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [totalMatches, setTotalMatches] = useState(0);
   const [averageMatchPercentage, setAverageMatchPercentage] = useState(0);
@@ -76,12 +78,15 @@ function ResultsDashboard({ searchResults, searchCriteria, darkMode = false }) {
               <button onClick={handleCloseBreakdown}>Close</button>
             </div>
           )}
+          <button onClick={() => navigate('/data-analysis', { state: { matchResults: searchResults.matches } })}>
+            Go to Data Analysis
+          </button>
         </>
       ) : (
         <div>No results to display.</div>
       )}
     </div>
-  );
+  )
 }
 
 export default ResultsDashboard;
