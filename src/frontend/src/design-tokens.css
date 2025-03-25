@@ -10,6 +10,74 @@
   --color-primary-700: #334e68;
   --color-primary-800: #243b53;
   --color-primary-900: #102a43;
+
+  /* Accent Colors */
+  --color-accent-teal-50: #f0fdfa;
+  --color-accent-teal-100: #ccfbf1;
+  --color-accent-teal-200: #99f6e4;
+  --color-accent-teal-300: #5eead4;
+  --color-accent-teal-400: #2dd4bf;
+  --color-accent-teal-500: #0d9488;
+  --color-accent-teal-600: #0f766e;
+  --color-accent-teal-700: #115e59;
+  --color-accent-teal-800: #134e4a;
+  --color-accent-teal-900: #042f2e;
+
+  --color-accent-purple-50: #faf5ff;
+  --color-accent-purple-100: #f3e8ff;
+  --color-accent-purple-200: #e9d5ff;
+  --color-accent-purple-300: #d8b4fe;
+  --color-accent-purple-400: #c084fc;
+  --color-accent-purple-500: #7e22ce;
+  --color-accent-purple-600: #6b21a8;
+  --color-accent-purple-700: #581c87;
+  --color-accent-purple-800: #3b0764;
+  --color-accent-purple-900: #2e1065;
+
+  --color-accent-pink-50: #fdf2f8;
+  --color-accent-pink-100: #fce7f3;
+  --color-accent-pink-200: #fbcfe8;
+  --color-accent-pink-300: #f9a8d4;
+  --color-accent-pink-400: #f472b6;
+  --color-accent-pink-500: #db2777;
+  --color-accent-pink-600: #be185d;
+  --color-accent-pink-700: #9d174d;
+  --color-accent-pink-800: #831843;
+  --color-accent-pink-900: #500724;
+
+  /* Enhanced Semantic Colors */
+  --color-success-50: #f0fdf4;
+  --color-success-100: #dcfce7;
+  --color-success-200: #bbf7d0;
+  --color-success-300: #86efac;
+  --color-success-400: #4ade80;
+  --color-success-500: #22c55e;
+  --color-success-600: #16a34a;
+  --color-success-700: #15803d;
+  --color-success-800: #166534;
+  --color-success-900: #14532d;
+
+  --color-warning-50: #fefce8;
+  --color-warning-100: #fef9c3;
+  --color-warning-200: #fef08a;
+  --color-warning-300: #fde047;
+  --color-warning-400: #facc15;
+  --color-warning-500: #eab308;
+  --color-warning-600: #ca8a04;
+  --color-warning-700: #a16207;
+  --color-warning-800: #854d0e;
+  --color-warning-900: #713f12;
+
+  --color-error-50: #fef2f2;
+  --color-error-100: #fee2e2;
+  --color-error-200: #fecaca;
+  --color-error-300: #fca5a5;
+  --color-error-400: #f87171;
+  --color-error-500: #ef4444;
+  --color-error-600: #dc2626;
+  --color-error-700: #b91c1c;
+  --color-error-800: #991b1b;
+  --color-error-900: #7f1d1d;
   
   --color-neutral-50: #f8f9fa;
   --color-neutral-100: #f1f3f5;
@@ -123,10 +191,34 @@
   --spacing-72: 18rem;
   --spacing-80: 20rem;
   --spacing-96: 24rem;
+
+  /* Container Sizes */
+  --container-xs: 20rem;
+  --container-sm: 24rem;
+  --container-md: 28rem;
+  --container-lg: 32rem;
+  --container-xl: 36rem;
+  --container-2xl: 42rem;
+  --container-3xl: 48rem;
+  --container-4xl: 56rem;
+  --container-5xl: 64rem;
+  --container-6xl: 72rem;
+  --container-7xl: 80rem;
+
+  /* Section Spacing */
+  --section-spacing-base: var(--spacing-8);
+  --section-spacing-sm: var(--spacing-6);
+  --section-spacing-md: var(--spacing-10);
+  --section-spacing-lg: var(--spacing-16);
+  --section-spacing-xl: var(--spacing-24);
   
   /* Typography */
   --font-base: 'Inter', system-ui, sans-serif;
+  --font-heading: 'Inter', sans-serif;
   --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  
+  /* Font Sizes */
+  --font-size-xxs: 0.6875rem;
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
   --font-size-base: 1rem;
@@ -140,6 +232,28 @@
   --font-size-7xl: 4.5rem;
   --font-size-8xl: 6rem;
   --font-size-9xl: 8rem;
+  --font-size-prose: 1.125rem;
+
+  /* Font Weights */
+  --font-weight-light: 300;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+  --font-weight-black: 900;
+
+  /* Letter Spacing */
+  --letter-spacing-tighter: -0.05em;
+  --letter-spacing-tight: -0.025em;
+  --letter-spacing-normal: 0;
+  --letter-spacing-wide: 0.025em;
+  --letter-spacing-wider: 0.05em;
+  --letter-spacing-widest: 0.1em;
+
+  /* Text Decoration */
+  --text-underline-offset: 0.125em;
+  --text-decoration-thickness: 0.0625em;
   
   --line-height-none: 1;
   --line-height-tight: 1.25;

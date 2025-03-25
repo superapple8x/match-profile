@@ -1,0 +1,29 @@
+.syntax-highlighter {
+  position: absolute;
+  pointer-events: none;
+  padding: var(--spacing-3);
+  color: var(--color-text-tertiary);
+}
+
+.highlight-attribute {
+  color: var(--color-accent-teal-600);
+  font-weight: var(--font-weight-semibold);
+}
+
+.highlight-value {
+  color: var(--color-accent-purple-600);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Dark mode styles */
+.dark .syntax-highlighter {
+  color: var(--color-dark-text-tertiary);
+}
+
+.dark .highlight-attribute {
+  color: var(--color-accent-teal-400);
+}
+
+.dark .highlight-value {
+  color: var(--color-accent-purple-400);
+}
