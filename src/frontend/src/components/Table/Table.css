@@ -1,32 +1,42 @@
 .table-container {
   width: 100%;
   overflow-x: auto;
+  border-radius: var(--radius-lg);
 }
 
 .table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   background: var(--color-surface);
-  border-radius: var(--border-radius-md);
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
 }
 
 .header-cell {
-  padding: var(--spacing-md);
-  background: var(--color-surface-2);
-  color: var(--color-text);
+  padding: var(--spacing-4);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
   font-weight: var(--font-weight-semibold);
   text-align: left;
   cursor: pointer;
   user-select: none;
+  transition: all var(--transition-duration-200) var(--transition-timing-function);
+  position: relative;
 }
 
 .header-cell:hover {
-  background: var(--color-surface-3);
+  background: var(--color-surface-hover);
+}
+
+.header-cell:active {
+  background: var(--color-surface-active);
 }
 
 .row {
   border-bottom: 1px solid var(--color-border);
+  transition: all var(--transition-duration-150) var(--transition-timing-function);
 }
 
 .row:last-child {
@@ -34,29 +44,34 @@
 }
 
 .cell {
-  padding: var(--spacing-md);
-  color: var(--color-text);
+  padding: var(--spacing-4);
+  color: var(--color-text-primary);
+  transition: background-color var(--transition-duration-150) var(--transition-timing-function);
 }
 
 .row:hover {
-  background: var(--color-surface-2);
+  background: var(--color-surface-hover);
 }
 
 /* Dark Mode Styles */
 .dark .table {
   background: var(--color-dark-surface);
   border: 1px solid var(--color-dark-border);
-  box-shadow: var(--shadow-dark-sm);
+  box-shadow: var(--shadow-dark-md);
 }
 
 .dark .header-cell {
-  background: var(--color-dark-surface-2);
-  color: var(--color-dark-text);
+  background: var(--color-dark-surface);
+  color: var(--color-dark-text-primary);
   border-bottom: 1px solid var(--color-dark-border);
 }
 
 .dark .header-cell:hover {
-  background: var(--color-dark-surface-3);
+  background: var(--color-dark-surface-hover);
+}
+
+.dark .header-cell:active {
+  background: var(--color-dark-surface-active);
 }
 
 .dark .row {
@@ -64,26 +79,29 @@
 }
 
 .dark .cell {
-  color: var(--color-dark-text);
+  color: var(--color-dark-text-primary);
 }
 
 .dark .row:hover {
-  background: var(--color-dark-surface-2);
+  background: var(--color-dark-surface-hover);
 }
 
 .sort-indicator {
-  margin-left: 8px;
-  display: inline-block;
-  font-size: 16px;
-  color: var(--color-primary-500);
-  transition: transform 0.2s ease;
+  margin-left: var(--spacing-2);
+  display: inline-flex;
+  color: var(--color-accent-teal-500);
+  transition: all var(--transition-duration-200) var(--transition-timing-function);
 }
 
 .sort-indicator:hover {
   transform: scale(1.2);
+  color: var(--color-accent-teal-600);
 }
 
 .dark .sort-indicator {
-  color: var(--color-primary-600);
-  filter: brightness(1.2);
+  color: var(--color-accent-teal-400);
+}
+
+.dark .sort-indicator:hover {
+  color: var(--color-accent-teal-300);
 }

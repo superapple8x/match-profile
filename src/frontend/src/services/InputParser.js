@@ -17,16 +17,14 @@ export const parseInput = (text) => {
 };
 
 export const validateCriteria = (attribute, value, attributeRegistry) => {
-  if (!attributeRegistry.has(attribute)) {
-    throw new Error(`Invalid attribute: ${attribute}`);
-  }
-
-  const validValues = attributeRegistry.get(attribute);
-  if (!validValues.includes(value)) {
-    throw new Error(`Invalid value for ${attribute}: ${value}`);
-  }
-
-  return true;
+  const isValidAttribute = attributeRegistry.has(attribute);
+  const isValidValue = isValidAttribute && attributeRegistry.get(attribute).includes(value);
+  
+  return {
+    isValid: isValidAttribute && isValidValue,
+    attributeError: isValidAttribute ? null : `Invalid attribute: ${attribute}`,
+    valueError: isValidValue ? null : `Invalid value for ${attribute}: ${value}`
+  };
 };
 
 export const formatCriteria = (attribute, value) => {
