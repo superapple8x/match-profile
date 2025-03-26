@@ -54,21 +54,21 @@ function FileImport({ onFileImport }) {
 
   // Dynamically set container classes based on state
   const containerClasses = `
-    p-6 border-2 border-dashed rounded-lg mb-6
-    bg-white dark:bg-gray-700
-    border-gray-300 dark:border-gray-600
-    transition-colors duration-150
+    p-4 border rounded-lg mb-6 shadow-md {/* Changed to solid border, adjusted padding/shadow */}
+    bg-white/80 dark:bg-gray-700/60 {/* Adjusted background for contrast with sidebar */}
+    border-gray-200 dark:border-gray-600/80 {/* Subtle border */}
+    transition-all duration-300 ease-in-out {/* Smoother transition */}
     min-h-[200px] flex flex-col items-center justify-center text-center
-    ${fileSizeError || parseError ? 'border-red-500 dark:border-red-400 bg-red-50 dark:bg-red-900/20' : ''}
-    ${uploadSuccess ? 'border-green-500 dark:border-green-400 bg-green-50 dark:bg-green-900/20' : ''}
+    ${fileSizeError || parseError ? 'border-red-400 dark:border-red-500 bg-red-50/80 dark:bg-red-900/30' : ''} {/* Adjusted error state colors */}
+    ${uploadSuccess ? 'border-green-400 dark:border-green-500 bg-green-50/80 dark:bg-green-900/30' : ''} {/* Adjusted success state colors */}
   `;
 
   return (
     <div className={containerClasses.trim()}>
-      <div className="mb-3">
+      <div className="mb-4"> {/* Increased margin */}
         <label
           htmlFor="file-upload"
-          className="inline-block px-4 py-2 bg-blue-500 hover:bg-blue-600 dark:bg-blue-700 dark:hover:bg-blue-800 text-white font-semibold rounded-md shadow cursor-pointer transition-colors duration-150"
+          className="inline-block px-4 py-2 bg-primary-500 hover:bg-primary-600 dark:bg-primary-700 dark:hover:bg-primary-800 text-white font-semibold rounded-md shadow-sm hover:shadow-md transform hover:-translate-y-0.5 transition-all duration-200 ease-in-out cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800" // Style like App.jsx button
         >
           Choose File
         </label>
@@ -94,7 +94,7 @@ function FileImport({ onFileImport }) {
       <button
         onClick={handleUpload}
         disabled={!file}
-        className="px-4 py-2 bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-700 text-white font-semibold rounded-md shadow transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="px-4 py-2 bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-700 text-white font-semibold rounded-md shadow-sm hover:shadow-md transform hover:-translate-y-0.5 transition-all duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800" // Style like App.jsx button, added disabled state styles
       >
         Upload
       </button>

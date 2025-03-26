@@ -40,7 +40,7 @@ function ResultsTable({ results, filteredData, onMatchClick }: ResultsTableProps
         header: 'Match %',
         cell: info => info.getValue() !== undefined ? `${info.getValue()?.toFixed(1)}%` : '-',
         enableSorting: true,
-        meta: { className: 'w-24 text-right pr-4 font-semibold' }
+        meta: { className: 'w-24 text-right pr-4 font-semibold' } // Styling handled in Table.tsx
       }));
     }
 
@@ -56,7 +56,7 @@ function ResultsTable({ results, filteredData, onMatchClick }: ResultsTableProps
         header: key.charAt(0).toUpperCase() + key.slice(1),
         cell: info => String(info.getValue() ?? '-'),
         enableSorting: true,
-        meta: { className: 'whitespace-nowrap px-3 py-2' }
+        meta: { className: 'whitespace-nowrap px-3 py-2' } // Styling handled in Table.tsx
       }));
     });
 
@@ -67,12 +67,13 @@ function ResultsTable({ results, filteredData, onMatchClick }: ResultsTableProps
          cell: ({ row }) => (
            <button
              onClick={() => onMatchClick(row.original)}
-             className="text-blue-600 dark:text-blue-400 hover:underline text-sm"
+             // Updated Details button style: subtle link-like appearance
+             className="text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium text-sm transition-colors duration-150 ease-in-out focus:outline-none focus:ring-1 focus:ring-primary-500 rounded"
            >
              Details
            </button>
          ),
-         meta: { className: 'w-20 text-center' }
+         meta: { className: 'w-20 text-center' } // Styling handled in Table.tsx
        }));
      }
 
@@ -109,8 +110,8 @@ function ResultsTable({ results, filteredData, onMatchClick }: ResultsTableProps
   return (
     <div className="overflow-x-auto">
       <div className="mb-4 flex justify-end gap-3">
-        <button
-          className="px-4 py-2 rounded-md border-none bg-teal-500 dark:bg-teal-600 text-white cursor-pointer font-medium transition duration-200 ease-in-out shadow-sm hover:bg-teal-600 dark:hover:bg-teal-700 hover:-translate-y-px hover:shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 dark:focus:ring-offset-gray-800"
+        <button // Matched standard button style
+          className="px-4 py-2 bg-primary-500 hover:bg-primary-600 dark:bg-primary-700 dark:hover:bg-primary-800 text-white font-semibold rounded-md shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
           onClick={handleViewChart}
         >
           View Attribute Distribution
