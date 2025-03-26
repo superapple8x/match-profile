@@ -1,21 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import './ResultsTable.css';
+// Removed: import './ResultsTable.css';
 import { Table } from '../Table/Table.tsx';
 import { useNavigate } from 'react-router-dom';
 import {
   createColumnHelper,
   ColumnDef,
-  flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  useReactTable,
-  SortingState
+  // Removed: flexRender (now handled inside Table.tsx)
+  // Removed: getCoreRowModel, getSortedRowModel, useReactTable, SortingState
 } from '@tanstack/react-table';
 
 type ResultData = {
   matchPercentage?: number;
   profile?: Record<string, any>;
-  [key: string]: any;
+  [key: string]: any; // Includes uniqueKey added later
 };
 
 const columnHelper = createColumnHelper<ResultData>();
@@ -24,57 +21,70 @@ interface ResultsTableProps {
   results?: ResultData[];
   filteredData?: ResultData[];
   onMatchClick?: (data: ResultData) => void;
-  darkMode?: boolean;
 }
 
-function ResultsTable({ results, filteredData, onMatchClick, darkMode = false }: ResultsTableProps) {
-  const [sorting, setSorting] = useState<SortingState>([]);
+function ResultsTable({ results, filteredData, onMatchClick }: ResultsTableProps) {
+  // Removed: sorting state
   const [data, setData] = useState<ResultData[]>([]);
   const navigate = useNavigate();
-  
-  // Define columns with proper typing
+
+  // Define columns - This logic remains the same
   const columns = useMemo(() => {
-    const cols: ColumnDef<ResultData>[] = [];
-    const showMatchPercentage = results && Array.isArray(results);
+    const cols: ColumnDef<ResultData, any>[] = []; // Explicitly type value as any
+    const showMatchPercentage = results && results.length > 0 && results[0]?.matchPercentage !== undefined;
     const firstItem = data[0] || {};
 
     if (showMatchPercentage) {
       cols.push(columnHelper.accessor(row => row.matchPercentage, {
         id: 'matchPercentage',
         header: 'Match %',
-        cell: info => `${info.getValue()?.toFixed(2)}%`,
-        enableSorting: true
+        cell: info => info.getValue() !== undefined ? `${info.getValue()?.toFixed(1)}%` : '-',
+        enableSorting: true,
+        meta: { className: 'w-24 text-right pr-4 font-semibold' }
       }));
     }
 
-    if (firstItem.profile) {
-      Object.keys(firstItem.profile).forEach(key => {
-        cols.push(columnHelper.accessor(row => row.profile?.[key], {
-          id: `profile.${key}`,
-          header: key,
-          enableSorting: true
-        }));
-      });
-    } else {
-      Object.keys(firstItem).forEach(key => {
-        if (key !== 'matchPercentage' || !showMatchPercentage) {
-          cols.push(columnHelper.accessor(row => row[key], {
-            id: key,
-            header: key,
-            enableSorting: true
-          }));
-        }
-      });
-    }
+    const dataKeys = firstItem.profile ? Object.keys(firstItem.profile) : Object.keys(firstItem);
+    const dataAccessor = (row: ResultData, key: string) => firstItem.profile ? row.profile?.[key] : row[key];
+
+    dataKeys.forEach(key => {
+      if ((key === 'matchPercentage' && showMatchPercentage) || key === 'uniqueKey') {
+        return;
+      }
+      cols.push(columnHelper.accessor(row => dataAccessor(row, key), {
+        id: key,
+        header: key.charAt(0).toUpperCase() + key.slice(1),
+        cell: info => String(info.getValue() ?? '-'),
+        enableSorting: true,
+        meta: { className: 'whitespace-nowrap px-3 py-2' }
+      }));
+    });
+
+    if (onMatchClick) {
+       cols.push(columnHelper.display({
+         id: 'actions',
+         header: 'Actions',
+         cell: ({ row }) => (
+           <button
+             onClick={() => onMatchClick(row.original)}
+             className="text-blue-600 dark:text-blue-400 hover:underline text-sm"
+           >
+             Details
+           </button>
+         ),
+         meta: { className: 'w-20 text-center' }
+       }));
+     }
 
     return cols;
-  }, [data, results]);
+  }, [data, results, onMatchClick]);
 
-  // Process input data
+  // Process input data - This logic remains the same
   useEffect(() => {
-    const processedData = (results || filteredData || []).map((item, index) => ({
+    const sourceData = results || filteredData || [];
+    const processedData = sourceData.map((item, index) => ({
       ...item,
-      uniqueKey: `${index}-${item.matchPercentage || '0'}`
+      uniqueKey: item.id || `${index}-${JSON.stringify(item)}` // Add uniqueKey here
     }));
     setData(processedData);
   }, [results, filteredData]);
@@ -82,45 +92,37 @@ function ResultsTable({ results, filteredData, onMatchClick, darkMode = false }:
   const handleViewChart = () => {
     const matchResults = data.map(result => ({
       matchPercentage: result.matchPercentage || 0,
-      attributes: Object.entries(result.profile || result).map(([key, value]) => ({
-        name: key,
-        value: value
-      })),
+      attributes: Object.entries(result.profile || result)
+        .filter(([key]) => key !== 'uniqueKey' && key !== 'matchPercentage')
+        .map(([key, value]) => ({ name: key, value: value })),
       timestamp: new Date().toISOString()
     }));
-    
-    navigate('/attribute-distribution', {
-      state: { matchResults }
-    });
+    navigate('/data-analysis', { state: { matchResults } });
   };
 
-  // Create table instance with proper typing
-  const table = useReactTable<ResultData>({
-    data,
-    columns,
-    state: {
-      sorting
-    },
-    onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel()
-  });
+  // Removed: useReactTable hook call
 
   if (data.length === 0) {
-    return <div>No data to display.</div>;
+    return <div className="text-center py-10 text-gray-500 dark:text-gray-400">No results to display in table.</div>;
   }
 
   return (
-    <div>
-      <div className={`action-buttons ${darkMode ? 'dark' : ''}`}>
-        <button 
-          className={`view-chart-button ${darkMode ? 'dark' : ''}`}
+    <div className="overflow-x-auto">
+      <div className="mb-4 flex justify-end gap-3">
+        <button
+          className="px-4 py-2 rounded-md border-none bg-teal-500 dark:bg-teal-600 text-white cursor-pointer font-medium transition duration-200 ease-in-out shadow-sm hover:bg-teal-600 dark:hover:bg-teal-700 hover:-translate-y-px hover:shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 dark:focus:ring-offset-gray-800"
           onClick={handleViewChart}
         >
           View Attribute Distribution
         </button>
       </div>
-      <Table data={data} columns={columns} darkMode={darkMode} />
+      {/* Pass data and columns directly to the Table component */}
+      <Table<ResultData> // Specify the type for the generic Table
+        data={data}
+        columns={columns}
+        // Add other props Table might need, e.g., enable sorting/resizing if needed
+        // enableRowSelection={false} // Example: if row selection isn't needed here
+      />
     </div>
   );
 }
