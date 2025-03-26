@@ -46,6 +46,8 @@ function FileImport({ onFileImport }) {
           setUploadSuccess(false);
         },
         header: true,
+        dynamicTyping: true,
+        skipEmptyLines: true, // <-- Add this line to skip empty rows
       });
     } else {
       console.log('No file selected.');
