@@ -52,9 +52,10 @@ const MatchBreakdown = ({ match, fullData }) => {
   if (!fullProfile) {
       console.error("Could not find matching profile in fullData using index derived from ID:", matchIdString);
       return (
-          <div className="text-center text-red-500 p-4">
+          // Keep error styling simple
+          <div className="text-center text-red-600 dark:text-red-400 p-6 bg-red-50 dark:bg-red-900/30 rounded-lg">
               Error: Could not find full profile details in original data for ID: {matchIdString ?? 'undefined'}.
-              <pre className="mt-2 text-xs text-left bg-gray-100 dark:bg-gray-900 p-2 rounded overflow-auto">
+              <pre className="mt-2 text-xs text-left bg-gray-100 dark:bg-gray-900 p-2 rounded overflow-auto text-gray-700 dark:text-gray-300">
                 {JSON.stringify(match, null, 2)}
               </pre>
           </div>
@@ -62,32 +63,33 @@ const MatchBreakdown = ({ match, fullData }) => {
   }
 
   return (
-    <div className="text-gray-800 dark:text-gray-100 p-1">
+    // Adjusted container to match modal content style from ResultsDashboard
+    <div className="text-gray-800 dark:text-gray-100"> {/* Removed padding/bg/shadow - handled by modal container */}
       {/* Card Header */}
-      <div className="mb-5 text-center border-b border-gray-300 dark:border-gray-600 pb-3">
+      <div className="mb-6 text-center border-b border-gray-300/70 dark:border-gray-600/50 pb-4"> {/* Adjusted border, padding */}
          <h3 className="text-xl font-bold text-gray-900 dark:text-white">
            Profile Details
          </h3>
          {/* Display original UserID if available */}
-         <p className="text-sm text-gray-500 dark:text-gray-400">Original UserID: {displayId}</p>
-         <div className="mt-2 text-lg font-bold text-blue-600 dark:text-blue-400">
+         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Original UserID: {displayId}</p> {/* Added margin */}
+         <div className="mt-2 text-lg font-bold text-primary-600 dark:text-primary-400"> {/* Use primary theme */}
            ({matchPercentage.toFixed(1)}% Match)
          </div>
       </div>
 
-      {/* Profile Attributes Section - "ID Card" Layout */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-sm">
+      {/* Profile Attributes Section - Refined Layout */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-5 text-sm"> {/* Increased gap-y */}
         {attributeKeys.map((key) => {
             // Use the value from the found fullProfile
             const profileValue = String(profileDataToDisplay[key] ?? 'N/A');
 
             return (
               // Attribute Item (Label + Value)
-              <div key={key} className="py-1 border-b border-gray-200 dark:border-gray-700">
+              <div key={key} className="py-1.5 border-b border-gray-200/80 dark:border-gray-700/60"> {/* Adjusted border, padding */}
                 {/* Label */}
-                <dt className="text-gray-500 dark:text-gray-400 font-medium truncate" title={key}>{key}:</dt>
+                <dt className="text-gray-500 dark:text-gray-400 font-medium truncate mb-0.5" title={key}>{key}:</dt> {/* Added margin */}
                 {/* Value */}
-                <dd className="text-gray-700 dark:text-gray-200 font-semibold break-words">{profileValue}</dd>
+                <dd className="text-gray-800 dark:text-gray-100 font-semibold break-words">{profileValue}</dd> {/* Adjusted text color */}
               </div>
             );
           })}

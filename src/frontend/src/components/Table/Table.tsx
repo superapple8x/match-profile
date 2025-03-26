@@ -76,22 +76,24 @@ export function GenericTable<T>({
     }
   }, [rowSelection, onRowSelectionChange, table]);
 
+  // Helper functions to apply meta classNames with defaults
   const getHeaderClassName = (header: Header<T, unknown>) => {
-    return header.column.columnDef.meta?.className ?? 'px-4 py-3';
+    return header.column.columnDef.meta?.className ?? 'px-4 py-3'; // Default padding
   };
   const getCellClassName = (cell: Cell<T, unknown>) => {
-    return cell.column.columnDef.meta?.className ?? 'px-4 py-3';
+    return cell.column.columnDef.meta?.className ?? 'px-4 py-3'; // Default padding
   };
 
 
   return (
-    // Main container div
-    <div className="w-full rounded-lg border border-gray-200 dark:border-gray-700 shadow-md overflow-hidden"> {/* Added overflow-hidden */}
+    // Main container div - Apply consistent glass effect
+    <div className="w-full rounded-xl border border-gray-200/80 dark:border-gray-700/50 shadow-lg overflow-hidden backdrop-blur-md bg-white/70 dark:bg-gray-800/60 transition-all duration-300 ease-in-out hover:shadow-xl"> {/* Matched parent styles */}
       {/* Table container */}
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse bg-white dark:bg-gray-800 text-left text-sm text-gray-800 dark:text-gray-200">
-          {/* ... (thead and tbody remain the same) ... */}
-           <thead className="bg-gray-50 dark:bg-gray-700">
+        {/* Adjusted table background for contrast */}
+        <table className="w-full border-collapse bg-transparent text-left text-sm text-gray-800 dark:text-gray-200">
+           {/* Refined header styling */}
+           <thead className="bg-gray-100/80 dark:bg-gray-700/70 backdrop-blur-sm sticky top-0 z-10"> {/* Sticky header */}
             {table.getHeaderGroups().map(headerGroup => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map(header => (
@@ -100,13 +102,13 @@ export function GenericTable<T>({
                     colSpan={header.colSpan}
                     style={{ width: header.getSize() }}
                     className={`
-                      ${getHeaderClassName(header)}
-                      font-semibold text-gray-900 dark:text-gray-100
-                      cursor-pointer select-none transition-colors duration-200
-                      hover:bg-gray-100 dark:hover:bg-gray-600
-                      active:bg-gray-200 dark:active:bg-gray-500
-                      relative group
-                    `}
+                       ${getHeaderClassName(header)} /* Apply padding from meta */
+                       font-semibold text-gray-700 dark:text-gray-100 /* Adjusted text color */
+                       cursor-pointer select-none transition-colors duration-150
+                       hover:bg-gray-200/70 dark:hover:bg-gray-600/60 /* Adjusted hover */
+                       border-b border-gray-300/60 dark:border-gray-600/40 /* Subtle bottom border */
+                       relative group
+                     `}
                     onClick={header.column.getToggleSortingHandler()}
                   >
                     <div className="flex items-center justify-between">
@@ -114,23 +116,25 @@ export function GenericTable<T>({
                         header.column.columnDef.header,
                         header.getContext()
                       )}
-                      <span className="ml-2 inline-flex text-teal-500 dark:text-teal-400 transition-transform duration-200 group-hover:scale-110">
+                      {/* Refined sorting indicator */}
+                      <span className="ml-2 inline-flex text-gray-400 dark:text-gray-500 transition-all duration-200 group-hover:text-primary-500 dark:group-hover:text-primary-400">
                         {
                           {
-                            asc: '🔼',
-                            desc: '🔽',
-                          }[header.column.getIsSorted() as string] ?? null
+                            asc: '▲', // Use arrows
+                            desc: '▼',
+                          }[header.column.getIsSorted() as string] ?? <span className="opacity-0 group-hover:opacity-50">↕</span> // Placeholder for unsorted hover
                         }
                       </span>
                     </div>
+                    {/* Refined resizing handle */}
                     {enableColumnResizing && (
                       <div
                         onMouseDown={header.getResizeHandler()}
                         onTouchStart={header.getResizeHandler()}
                         className={`
-                          absolute top-0 right-0 h-full w-1 cursor-col-resize select-none touch-none
-                          bg-gray-300 dark:bg-gray-600 opacity-0 group-hover:opacity-100
-                          ${header.column.getIsResizing() ? 'bg-blue-500 opacity-100' : ''}
+                          absolute top-0 right-0 h-full w-1.5 cursor-col-resize select-none touch-none
+                          bg-gray-300/50 dark:bg-gray-600/50 opacity-0 group-hover:opacity-100 transition-opacity duration-150
+                          ${header.column.getIsResizing() ? 'bg-primary-500 opacity-100' : ''} /* Use primary color when resizing */
                         `}
                       />
                     )}
@@ -139,21 +143,22 @@ export function GenericTable<T>({
               </tr>
             ))}
           </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-gray-700 border-t border-gray-100 dark:border-gray-700">
+          {/* Refined body styling */}
+          <tbody className="divide-y divide-gray-200/70 dark:divide-gray-700/50">
             {table.getRowModel().rows.map(row => ( // <-- Renders only rows for the current page
               <tr
                 key={row.id}
                 className={`
-                  transition-colors duration-150
-                  hover:bg-gray-50 dark:hover:bg-gray-700/50
-                  ${row.getIsSelected() ? 'bg-blue-50 dark:bg-blue-900/30' : ''}
+                  transition-colors duration-150 ease-in-out
+                  hover:bg-gray-100/60 dark:hover:bg-gray-700/50 /* Subtle hover */
+                  ${row.getIsSelected() ? 'bg-primary-50/60 dark:bg-primary-900/30' : ''} /* Subtle selection */
                 `}
               >
                 {row.getVisibleCells().map(cell => (
                   <td
                     key={cell.id}
                     className={`
-                      ${getCellClassName(cell)}
+                      ${getCellClassName(cell)} /* Apply padding from meta */
                       transition-colors duration-150
                     `}
                   >
@@ -166,21 +171,22 @@ export function GenericTable<T>({
         </table>
       </div>
 
-      {/* Pagination Controls START */}
-      <div className="flex items-center justify-between p-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-sm">
+      {/* Pagination Controls START - Refined Styling */}
+      <div className="flex items-center justify-between p-3 border-t border-gray-200/80 dark:border-gray-700/50 bg-gray-50/80 dark:bg-gray-700/60 backdrop-blur-sm text-gray-600 dark:text-gray-300 text-sm sticky bottom-0 z-10"> {/* Sticky footer */}
         {/* Left Side: Row Selection Info (Optional) */}
-        <div className="flex-1">
+        <div className="flex-1 min-w-0"> {/* Added min-w-0 for flex shrink */}
           {enableRowSelection && (
-             <span>
+             <span className="truncate"> {/* Added truncate */}
                {Object.keys(rowSelection).length} of {table.getPrePaginationRowModel().rows.length} row(s) selected.
              </span>
            )}
         </div>
 
         {/* Center: Page Navigation */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 mx-4"> {/* Added horizontal margin */}
+          {/* Styled Buttons */}
           <button
-            className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700"
+            className="px-2 py-1 border border-gray-300/70 dark:border-gray-600/50 rounded-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-200/60 dark:hover:bg-gray-600/50 transition-all duration-150 ease-out active:scale-95 transform focus:outline-none focus:ring-1 focus:ring-primary-500"
             onClick={() => table.setPageIndex(0)}
             disabled={!table.getCanPreviousPage()}
             aria-label="Go to first page"
@@ -188,21 +194,21 @@ export function GenericTable<T>({
             {'<<'}
           </button>
           <button
-            className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700"
+            className="px-2 py-1 border border-gray-300/70 dark:border-gray-600/50 rounded-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-200/60 dark:hover:bg-gray-600/50 transition-all duration-150 ease-out active:scale-95 transform focus:outline-none focus:ring-1 focus:ring-primary-500"
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
             aria-label="Go to previous page"
           >
             {'<'}
           </button>
-          <span className="mx-2">
+          <span className="mx-2 whitespace-nowrap"> {/* Added whitespace-nowrap */}
             Page{' '}
             <strong>
               {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
             </strong>
           </span>
           <button
-            className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700"
+            className="px-2 py-1 border border-gray-300/70 dark:border-gray-600/50 rounded-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-200/60 dark:hover:bg-gray-600/50 transition-all duration-150 ease-out active:scale-95 transform focus:outline-none focus:ring-1 focus:ring-primary-500"
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}
             aria-label="Go to next page"
@@ -210,7 +216,7 @@ export function GenericTable<T>({
             {'>'}
           </button>
           <button
-            className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700"
+            className="px-2 py-1 border border-gray-300/70 dark:border-gray-600/50 rounded-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-200/60 dark:hover:bg-gray-600/50 transition-all duration-150 ease-out active:scale-95 transform focus:outline-none focus:ring-1 focus:ring-primary-500"
             onClick={() => table.setPageIndex(table.getPageCount() - 1)}
             disabled={!table.getCanNextPage()}
             aria-label="Go to last page"
@@ -220,14 +226,15 @@ export function GenericTable<T>({
         </div>
 
         {/* Right Side: Page Size Selector */}
-        <div className="flex flex-1 justify-end items-center gap-2">
-           <span>Rows per page:</span>
+        <div className="flex flex-1 justify-end items-center gap-2 min-w-0"> {/* Added min-w-0 */}
+           <span className="whitespace-nowrap">Rows per page:</span> {/* Added whitespace-nowrap */}
+           {/* Styled Select */}
            <select
              value={table.getState().pagination.pageSize}
              onChange={e => {
                table.setPageSize(Number(e.target.value))
              }}
-             className="p-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+             className="p-1.5 border border-gray-300/70 dark:border-gray-600/50 rounded-md bg-white/80 dark:bg-gray-700/80 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none text-sm transition-colors duration-150"
            >
              {[10, 25, 50, 100].map(pageSize => (
                <option key={pageSize} value={pageSize}>

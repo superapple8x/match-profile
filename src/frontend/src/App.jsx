@@ -13,6 +13,7 @@ function App() {
   const [importedData, setImportedData] = useState(null);
   const [searchResults, setSearchResults] = useState(null);
   const [searchCriteria, setSearchCriteria] = useState(null);
+  const [isSearching, setIsSearching] = useState(false); // <-- Add isSearching state
 
   // Toggle dark mode class on body - Tailwind's dark: variant uses this
   useEffect(() => {
@@ -32,11 +33,15 @@ function App() {
 
   const handleFileImport = (data) => {
     setImportedData(data);
+    setSearchResults(null); // Clear previous results on new file import
+    setSearchCriteria(null); // Clear previous criteria
   };
 
   const handleSearch = (criteria) => {
     console.log('Search criteria:', criteria);
     setSearchCriteria(criteria);
+    setIsSearching(true); // <-- Set searching to true
+    setSearchResults(null); // Clear previous results before new search
 
     // Transform criteria array into baseProfile object
     const baseProfile = { id: 'searchCriteria' };
@@ -69,26 +74,35 @@ function App() {
         weights,
       }),
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
     .then(data => {
       console.log('Search results:', data);
       setSearchResults(data);
     })
     .catch(error => {
       console.error('Search error:', error);
+      setSearchResults({ error: error.message }); // Store error state if needed
+    })
+    .finally(() => {
+        setIsSearching(false); // <-- Set searching to false when done
     });
   };
 
   return (
     <Router>
       {/* Apply base background and text colors for light/dark mode */}
-      <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-200 dark:from-gray-800 dark:to-gray-950 text-gray-900 dark:text-gray-100 transition-colors duration-300 ease-in-out"> {/* Subtle gradient, adjusted duration */}
         {/* Header */}
-        <header className="bg-white dark:bg-gray-800 shadow p-4 flex justify-between items-center sticky top-0 z-10">
+        <header className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow p-4 flex justify-between items-center sticky top-0 z-20 transition-colors duration-300 ease-in-out"> {/* Added transparency, blur, z-index, transition */}
           <h1 className="text-xl font-bold text-gray-800 dark:text-white">Profile Matching Application</h1>
           <button
             onClick={toggleDarkMode}
-            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 dark:bg-blue-700 dark:hover:bg-blue-800 text-white font-semibold rounded-md shadow transition-colors duration-150"
+            className="px-4 py-2 bg-primary-500 hover:bg-primary-600 dark:bg-primary-700 dark:hover:bg-primary-800 text-white font-semibold rounded-md shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900" // Enhanced shadow, transform, transition, focus offset
             aria-label="Toggle dark mode"
           >
             {darkMode ? 'Light Mode' : 'Dark Mode'}
@@ -98,7 +112,7 @@ function App() {
         {/* Main Layout (Sidebar + Content) */}
         <div className="flex">
           {/* Sidebar */}
-          <aside className="w-64 p-4 space-y-6 bg-white dark:bg-gray-800 shadow h-[calc(100vh-64px)] sticky top-[64px]"> {/* Adjust height and stickiness */}
+          <aside className="w-64 p-4 space-y-6 bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm shadow-lg h-[calc(100vh-64px)] sticky top-[64px] z-10 transition-colors duration-300 ease-in-out"> {/* Added transparency, blur, z-index, transition, stronger shadow */}
             <FileImport onFileImport={handleFileImport} />
             <SavedSearches />
           </aside>
@@ -119,6 +133,7 @@ function App() {
                     searchResults={searchResults}
                     searchCriteria={searchCriteria}
                     importedData={importedData} // <-- Pass importedData
+                    isSearching={isSearching} // <-- Pass isSearching state
                   />
                 </div>
               } />
