@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'; // Removed Navigate
 import FileImport from './components/FileImport';
 import SearchBuilder from './components/SearchBuilder';
 import ResultsDashboard from './components/ResultsDashboard';
 import SavedSearches from './components/SavedSearches';
-import DataAnalysisPage from './components/ResultsDashboard/DataAnalysisPage';
+import DataOverview from './components/DataOverview'; // <-- Import DataOverview
 
 function App() {
   // Initialize state based on system preference or saved value (optional)
@@ -119,9 +119,13 @@ function App() {
 
           {/* Main Content Area */}
           <main className="flex-1 p-6 overflow-y-auto"> {/* Added overflow for scrolling */}
+             {/* Conditionally render Data Overview when data is imported */}
+             {importedData && <DataOverview importedData={importedData} />}
+
             <Routes>
               <Route path="/" element={
-                <div className="space-y-6"> {/* Add spacing between components */}
+                <div className="space-y-6 mt-6"> {/* Add spacing between components, added margin-top */}
+                  {/* SearchBuilder is now only rendered if data is imported */}
                   {importedData && (
                     <SearchBuilder
                       importedData={importedData}
@@ -129,20 +133,16 @@ function App() {
                       // darkMode prop might not be needed if components use dark: variants
                     />
                   )}
+                  {/* ResultsDashboard is always rendered to show placeholder or results */}
                   <ResultsDashboard
                     searchResults={searchResults}
                     searchCriteria={searchCriteria}
-                    importedData={importedData} // <-- Pass importedData
-                    isSearching={isSearching} // <-- Pass isSearching state
+                    importedData={importedData} // Pass importedData
+                    isSearching={isSearching} // Pass isSearching state
                   />
                 </div>
               } />
-              <Route
-                path="/attribute-distribution"
-                element={<Navigate to="/data-analysis" replace state={{ matchResults: searchResults?.matches }} />}
-              />
-              <Route path="/data-analysis" element={<DataAnalysisPage />} /> {/* Keep this as is for now */}
-
+              {/* Removed old /attribute-distribution and /data-analysis routes */}
             </Routes>
           </main>
         </div>

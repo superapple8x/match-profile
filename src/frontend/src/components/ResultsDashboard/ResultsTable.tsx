@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 // Removed: import './ResultsTable.css';
 import { Table } from '../Table/Table.tsx';
-import { useNavigate } from 'react-router-dom';
+// Removed useNavigate import
 import {
   createColumnHelper,
   ColumnDef,
@@ -26,7 +26,7 @@ interface ResultsTableProps {
 function ResultsTable({ results, filteredData, onMatchClick }: ResultsTableProps) {
   // Removed: sorting state
   const [data, setData] = useState<ResultData[]>([]);
-  const navigate = useNavigate();
+  // Removed navigate variable
 
   // Define columns - This logic remains the same
   const columns = useMemo(() => {
@@ -90,16 +90,7 @@ function ResultsTable({ results, filteredData, onMatchClick }: ResultsTableProps
     setData(processedData);
   }, [results, filteredData]);
 
-  const handleViewChart = () => {
-    const matchResults = data.map(result => ({
-      matchPercentage: result.matchPercentage || 0,
-      attributes: Object.entries(result.profile || result)
-        .filter(([key]) => key !== 'uniqueKey' && key !== 'matchPercentage')
-        .map(([key, value]) => ({ name: key, value: value })),
-      timestamp: new Date().toISOString()
-    }));
-    navigate('/data-analysis', { state: { matchResults } });
-  };
+  // Removed handleViewChart function
 
   // Removed: useReactTable hook call
 
@@ -109,14 +100,7 @@ function ResultsTable({ results, filteredData, onMatchClick }: ResultsTableProps
 
   return (
     <div className="overflow-x-auto">
-      <div className="mb-4 flex justify-end gap-3">
-        <button // Matched standard button style
-          className="px-4 py-2 bg-primary-500 hover:bg-primary-600 dark:bg-primary-700 dark:hover:bg-primary-800 text-white font-semibold rounded-md shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
-          onClick={handleViewChart}
-        >
-          View Attribute Distribution
-        </button>
-      </div>
+      {/* Removed the "View Attribute Distribution" button and its container div */}
       {/* Pass data and columns directly to the Table component */}
       <Table<ResultData> // Specify the type for the generic Table
         data={data}
