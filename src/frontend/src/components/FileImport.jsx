@@ -1,8 +1,8 @@
 import React, { useState, useCallback } from 'react';
 import Papa from 'papaparse';
-import './FileImport.css';
+// Removed: import './FileImport.css';
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 
 function FileImport({ onFileImport }) {
   const [file, setFile] = useState(null);
@@ -29,6 +29,7 @@ function FileImport({ onFileImport }) {
       }
     }
   }, []);
+
   const handleUpload = () => {
     if (file) {
       console.log('Uploading file:', fileName);
@@ -51,10 +52,24 @@ function FileImport({ onFileImport }) {
     }
   };
 
+  // Dynamically set container classes based on state
+  const containerClasses = `
+    p-6 border-2 border-dashed rounded-lg mb-6
+    bg-white dark:bg-gray-700
+    border-gray-300 dark:border-gray-600
+    transition-colors duration-150
+    min-h-[200px] flex flex-col items-center justify-center text-center
+    ${fileSizeError || parseError ? 'border-red-500 dark:border-red-400 bg-red-50 dark:bg-red-900/20' : ''}
+    ${uploadSuccess ? 'border-green-500 dark:border-green-400 bg-green-50 dark:bg-green-900/20' : ''}
+  `;
+
   return (
-    <div className="file-import-container">
-      <div className="file-input-wrapper">
-        <label htmlFor="file-upload" className="file-upload-label">
+    <div className={containerClasses.trim()}>
+      <div className="mb-3">
+        <label
+          htmlFor="file-upload"
+          className="inline-block px-4 py-2 bg-blue-500 hover:bg-blue-600 dark:bg-blue-700 dark:hover:bg-blue-800 text-white font-semibold rounded-md shadow cursor-pointer transition-colors duration-150"
+        >
           Choose File
         </label>
         <input
@@ -62,22 +77,29 @@ function FileImport({ onFileImport }) {
           type="file"
           onChange={handleFileChange}
           accept=".csv,.xls,.xlsx"
+          className="hidden" // Hide the default input
         />
       </div>
-      <div className="file-info">Selected File: {fileName}</div>
+      <div className="mb-3 text-sm text-gray-600 dark:text-gray-300">
+        Selected File: <span className="font-medium text-gray-800 dark:text-gray-100">{fileName}</span>
+      </div>
       {fileSizeError && (
-        <div className="error-message">{fileSizeError}</div>
+        <div className="mb-3 text-sm text-red-600 dark:text-red-400">{fileSizeError}</div>
       )}
       {parseError && (
-        <div className="parse-error">
+        <div className="mb-3 text-sm text-red-600 dark:text-red-400">
           Error parsing file: {parseError}
         </div>
       )}
-      <button onClick={handleUpload} disabled={!file}>
+      <button
+        onClick={handleUpload}
+        disabled={!file}
+        className="px-4 py-2 bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-700 text-white font-semibold rounded-md shadow transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
         Upload
       </button>
       {uploadSuccess && (
-        <div className="upload-success">File uploaded successfully!</div>
+        <div className="mt-3 text-sm text-green-600 dark:text-green-400">File uploaded successfully!</div>
       )}
     </div>
   );
