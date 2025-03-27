@@ -107,7 +107,7 @@ export function GenericTable<T>({
                        cursor-pointer select-none transition-colors duration-150
                        hover:bg-indigo-200/70 dark:hover:bg-gray-600/60 /* Light: indigo-200 hover */
                        border-b border-gray-300/60 dark:border-gray-600/40 /* Subtle bottom border */
-                       relative group
+                       relative group text-center /* Center align header text */
                      `}
                     onClick={header.column.getToggleSortingHandler()}
                   >

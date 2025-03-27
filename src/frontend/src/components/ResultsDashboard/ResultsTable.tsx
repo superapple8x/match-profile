@@ -40,7 +40,7 @@ function ResultsTable({ results, filteredData, onMatchClick }: ResultsTableProps
         header: 'Match %',
         cell: info => info.getValue() !== undefined ? `${info.getValue()?.toFixed(1)}%` : '-',
         enableSorting: true,
-        meta: { className: 'w-24 text-right pr-4 font-semibold' } // Styling handled in Table.tsx
+        meta: { className: 'w-24 text-center font-semibold' } // Changed to text-center, removed pr-4
       }));
     }
 
@@ -56,7 +56,7 @@ function ResultsTable({ results, filteredData, onMatchClick }: ResultsTableProps
         header: key.charAt(0).toUpperCase() + key.slice(1),
         cell: info => String(info.getValue() ?? '-'),
         enableSorting: true,
-        meta: { className: 'whitespace-nowrap px-3 py-2' } // Styling handled in Table.tsx
+        meta: { className: 'whitespace-nowrap px-3 py-2 text-center' } // Changed to text-center
       }));
     });
 

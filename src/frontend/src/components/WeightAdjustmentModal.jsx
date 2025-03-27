@@ -11,14 +11,14 @@ function WeightAdjustmentModal({ selectedCriteria, onWeightChange, onClose }) {
   }, []);
 
   return (
-    // Modal Overlay - Added backdrop blur
+    // Modal Overlay - Removed backdrop blur, using simple transparent background for click catching
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-md flex justify-center items-center z-[1000] transition-opacity duration-300 ease-out" // Matched ResultsDashboard modal overlay
+      className="fixed inset-0 bg-transparent flex justify-center items-center z-[1000] transition-opacity duration-300 ease-out"
       onClick={onClose} // Close modal on overlay click
     >
-      {/* Modal Content - Light: indigo-50 tint */}
+      {/* Modal Content - Added backdrop blur for glass effect, adjusted background opacity */}
       <div
-        className="bg-indigo-50/90 dark:bg-gray-800/90 backdrop-blur-lg p-6 rounded-xl shadow-2xl w-11/12 max-w-lg max-h-[80vh] overflow-y-auto transition-all duration-300 ease-out" // Matched ResultsDashboard modal content
+        className="bg-indigo-50/80 dark:bg-gray-800/80 backdrop-blur-md p-6 rounded-xl shadow-2xl w-11/12 max-w-lg max-h-[80vh] overflow-y-auto transition-all duration-300 ease-out border dark:border-gray-700/50" // Added border for definition
         onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside content
       >
         <h3 className="text-xl font-semibold mb-2 text-gray-800 dark:text-gray-100">Adjust Attribute Weights</h3>

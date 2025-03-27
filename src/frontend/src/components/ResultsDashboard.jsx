@@ -132,11 +132,11 @@ function ResultsDashboard({ searchResults, searchCriteria, importedData, isSearc
       {/* Match Breakdown Modal (remains unchanged) */}
       {selectedMatch && (
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-md flex justify-center items-center z-[1000] transition-opacity duration-300 ease-out"
+          className="fixed inset-0 bg-transparent flex justify-center items-center z-[1000] transition-opacity duration-300 ease-out" // Removed overlay blur/color
           onClick={handleCloseBreakdown}
         >
           <div
-            className="bg-indigo-50/90 dark:bg-gray-800/90 backdrop-blur-lg p-6 rounded-xl shadow-2xl w-11/12 max-w-2xl max-h-[90vh] overflow-y-auto transition-all duration-300 ease-out transform scale-95 group-hover:scale-100" // Light: indigo-50 tint
+            className="bg-indigo-50/80 dark:bg-gray-800/80 backdrop-blur-md p-6 rounded-xl shadow-2xl w-11/12 max-w-2xl max-h-[90vh] overflow-y-auto transition-all duration-300 ease-out border dark:border-gray-700/50" // Added glass effect + border
             onClick={(e) => e.stopPropagation()}
           >
             <MatchBreakdown match={selectedMatch} fullData={importedData} />
