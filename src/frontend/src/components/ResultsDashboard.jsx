@@ -5,12 +5,12 @@ import ResultsSummary from './ResultsDashboard/ResultsSummary';
 import ResultsTable from './ResultsDashboard/ResultsTable.tsx';
 import MatchBreakdown from './ResultsDashboard/MatchBreakdown';
 import ProgressBar from './ProgressBar';
-import DataAnalysisPage from './ResultsDashboard/DataAnalysisPage';
+// Removed: import DataAnalysisPage from './ResultsDashboard/DataAnalysisPage'; // No longer rendered here
 
-// Accept datasetId prop
-function ResultsDashboard({ searchResults, searchCriteria, importedData, isSearching, datasetId }) {
+// Removed datasetId prop as it's not used here anymore for analysis toggle
+function ResultsDashboard({ searchResults, searchCriteria, importedData, isSearching }) {
   const [selectedMatch, setSelectedMatch] = useState(null);
-  const [showAnalysisPage, setShowAnalysisPage] = useState(false);
+  // Removed: const [showAnalysisPage, setShowAnalysisPage] = useState(false);
   const [totalMatches, setTotalMatches] = useState(0);
   const [averageMatchPercentage, setAverageMatchPercentage] = useState(0);
   const [highestMatch, setHighestMatch] = useState(0);
@@ -39,11 +39,7 @@ function ResultsDashboard({ searchResults, searchCriteria, importedData, isSearc
         setAverageMatchPercentage(0);
         setHighestMatch(0);
     }
-    // Reset analysis page visibility when search results change or searching starts
-    // Add null check for searchResults
-    if (searchResults || isSearching) {
-        setShowAnalysisPage(false);
-    }
+    // Removed logic related to resetting showAnalysisPage
   }, [searchResults, isSearching]);
 
   const handleMatchClick = (match) => {
@@ -67,7 +63,7 @@ function ResultsDashboard({ searchResults, searchCriteria, importedData, isSearc
     searchError: !!searchError,
     resultsDataLength: resultsData.length,
     searchCriteriaExists: !!searchCriteria,
-    datasetIdExists: !!datasetId,
+    // datasetIdExists: !!datasetId, // datasetId removed from props
     searchResults // Log the raw searchResults prop
   });
   // --- END DEBUG LOGGING ---
@@ -86,7 +82,7 @@ function ResultsDashboard({ searchResults, searchCriteria, importedData, isSearc
     );
   } else if (resultsData.length > 0) {
     // Results are available
-    console.log('ResultsDashboard: Rendering Results Content (Summary, Table, etc.)'); // <-- ADDED LOG
+    console.log('ResultsDashboard: Rendering Results Content (Summary, Table, etc.)');
     resultsContent = (
       <div className="space-y-6">
         <ResultsSummary
@@ -98,23 +94,7 @@ function ResultsDashboard({ searchResults, searchCriteria, importedData, isSearc
           results={resultsData}
           onMatchClick={handleMatchClick}
         />
-        {/* Conditionally render Data Analysis Button */}
-        {datasetId && ( // Simplified check: just need datasetId
-          <div className="flex justify-end mt-4">
-            <button
-              onClick={() => setShowAnalysisPage(!showAnalysisPage)}
-              className="px-4 py-2 bg-primary-500 hover:bg-primary-600 dark:bg-primary-700 dark:hover:bg-primary-800 text-white font-semibold rounded-md shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
-            >
-              {showAnalysisPage ? 'Hide LLM Analysis' : 'Analyze Results with LLM'}
-            </button>
-          </div>
-        )}
-        {/* Conditionally render DataAnalysisPage */}
-        {showAnalysisPage && datasetId && (
-          <div className="mt-6 border-t pt-6">
-            <DataAnalysisPage datasetId={datasetId} />
-          </div>
-        )}
+        {/* Removed LLM Analysis Button and conditional rendering block */}
       </div>
     );
   } else {

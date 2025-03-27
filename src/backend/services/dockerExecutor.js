@@ -2,6 +2,7 @@ const Docker = require('dockerode');
 const fs = require('fs').promises; // Use promises for async operations
 const path = require('path');
 const os = require('os');
+const { PassThrough } = require('stream'); // Import PassThrough for log streaming
 
 const docker = new Docker();
 
@@ -53,8 +54,8 @@ async function ensureImageExists() {
  *
  * @param {string} pythonCode The Python code to execute.
  * @param {string} datasetId The identifier (filename) of the dataset to use.
- * @returns {Promise<{imagePath: string|null, statsPath: string|null, logs: string, error: string|null}>}
- *          Paths to the generated plot and stats files (if successful), logs, and any error message.
+ * @returns {Promise<{imagePaths: string[], statsPath: string|null, logs: string, error: string|null, tempDir: string|null}>}
+ *          Paths to the generated plot(s) and stats file (if successful), logs, any error message, and temp dir path on success.
  */
 async function runPythonInSandbox(pythonCode, datasetId) {
   await ensureImageExists(); // Make sure the image is ready
@@ -62,15 +63,13 @@ async function runPythonInSandbox(pythonCode, datasetId) {
   let tempDir;
   let container;
   const executionId = `exec-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-  let outputPaths = { imagePath: null, statsPath: null };
+  let outputPaths = { imagePaths: [], statsPath: null }; // Changed imagePath to imagePaths array
   let executionLogs = '';
   let executionError = null;
 
   try {
     // 1. Prepare Host Environment
-    // Ensure the base temp directory exists
     await fs.mkdir(TEMP_BASE_DIR, { recursive: true });
-    // Now create the unique execution directory within the base temp dir
     tempDir = await fs.mkdtemp(path.join(TEMP_BASE_DIR, `${executionId}-`));
     const scriptPath = path.join(tempDir, 'script.py');
     const inputDirPath = path.join(tempDir, 'input');
@@ -80,13 +79,10 @@ async function runPythonInSandbox(pythonCode, datasetId) {
 
     await fs.mkdir(inputDirPath);
     await fs.mkdir(outputDirPath);
-    // Ensure the output directory on the host is writable by the container user (UID 1001)
-    // Setting 777 is easiest for now, but consider more specific permissions if needed.
-    await fs.chmod(outputDirPath, 0o777);
+    await fs.chmod(outputDirPath, 0o777); // Make output dir writable by container user
     await fs.writeFile(scriptPath, pythonCode);
 
-    // Copy dataset (consider linking for large files if appropriate)
-    // Ensure source file exists before copying
+    // Copy dataset
     try {
         await fs.access(sourceDataPath);
         await fs.copyFile(sourceDataPath, inputDataHostPath);
@@ -102,23 +98,22 @@ async function runPythonInSandbox(pythonCode, datasetId) {
     container = await docker.createContainer({
       Image: IMAGE_NAME,
       Cmd: ['python', '/app/script.py'],
-      User: 'pythonuser', // Run as non-root user defined in Dockerfile
+      User: 'pythonuser',
       WorkingDir: '/app',
       HostConfig: {
         Binds: [
-          `${scriptPath}:/app/script.py:ro`, // Mount script read-only
-          `${inputDataHostPath}:/input/data.csv:ro`, // Mount data read-only
-          `${outputDirPath}:/output`, // Mount output directory writable
+          `${scriptPath}:/app/script.py:ro`,
+          `${inputDataHostPath}:/input/data.csv:ro`,
+          `${outputDirPath}:/output`,
         ],
-        NetworkMode: 'none', // Disable networking
-        Memory: MEMORY_LIMIT_MB * 1024 * 1024, // Memory limit in bytes
-        // CpuShares: CPU_SHARES, // Adjust CPU allocation if needed
-        // Consider adding --pids-limit if necessary
-        AutoRemove: false, // Keep container for log retrieval, remove manually
+        NetworkMode: 'none',
+        Memory: MEMORY_LIMIT_MB * 1024 * 1024,
+        // CpuShares: CPU_SHARES,
+        AutoRemove: false,
       },
       Tty: false,
-      AttachStdout: true, // Capture stdout
-      AttachStderr: true, // Capture stderr
+      AttachStdout: true,
+      AttachStderr: true,
     });
 
     console.log(`Docker Executor [${executionId}]: Starting container ${container.id}...`);
@@ -130,11 +125,19 @@ async function runPythonInSandbox(pythonCode, datasetId) {
 
     const executionPromise = new Promise(async (resolve, reject) => {
         try {
-            const stream = await container.attach({ stream: true, stdout: true, stderr: true });
-            stream.on('data', (chunk) => {
+            // Use PassThrough to capture logs reliably
+            const logStream = new PassThrough();
+            logStream.on('data', (chunk) => {
                 executionLogs += chunk.toString('utf8');
             });
-            stream.on('end', () => console.log(`Docker Executor [${executionId}]: Container stream ended.`));
+
+            const stream = await container.attach({ stream: true, stdout: true, stderr: true });
+            container.modem.demuxStream(stream, logStream, logStream); // Demux stdout/stderr into one stream
+
+            stream.on('end', () => {
+                logStream.end(); // End the PassThrough stream when Docker stream ends
+                console.log(`Docker Executor [${executionId}]: Container stream ended.`);
+            });
 
             await container.start();
             const status = await container.wait(); // Wait for container to finish
@@ -157,39 +160,60 @@ async function runPythonInSandbox(pythonCode, datasetId) {
     } else {
       console.log(`Docker Executor [${executionId}]: Script executed successfully.`);
       // Check for output files
-      const potentialImagePath = path.join(outputDirPath, 'plot.png');
-      const potentialStatsPath = path.join(outputDirPath, 'stats.json');
       try {
-        await fs.access(potentialImagePath);
-        outputPaths.imagePath = potentialImagePath;
-        console.log(`Docker Executor [${executionId}]: Found output plot: ${potentialImagePath}`);
-      } catch { /* File doesn't exist */ }
-      try {
-        await fs.access(potentialStatsPath);
-        outputPaths.statsPath = potentialStatsPath;
-         console.log(`Docker Executor [${executionId}]: Found output stats: ${potentialStatsPath}`);
-      } catch { /* File doesn't exist */ }
+        const files = await fs.readdir(outputDirPath);
+        for (const file of files) {
+          // Find all PNG images
+          if (file.toLowerCase().endsWith('.png')) {
+            const imagePath = path.join(outputDirPath, file);
+            outputPaths.imagePaths.push(imagePath);
+            console.log(`Docker Executor [${executionId}]: Found output plot: ${imagePath}`);
+          }
+          // Find stats file
+          else if (file === 'stats.json') {
+            const statsPath = path.join(outputDirPath, file);
+            outputPaths.statsPath = statsPath;
+            console.log(`Docker Executor [${executionId}]: Found output stats: ${statsPath}`);
+          }
+        }
+        // Sort image paths numerically if possible (plot_1.png, plot_2.png, plot_10.png)
+        outputPaths.imagePaths.sort((a, b) => {
+            const numA = parseInt(a.match(/_(\d+)\.png$/)?.[1] || '0');
+            const numB = parseInt(b.match(/_(\d+)\.png$/)?.[1] || '0');
+            return numA - numB;
+        });
+
+      } catch (readDirError) {
+        console.error(`Docker Executor [${executionId}]: Error reading output directory ${outputDirPath}:`, readDirError);
+        // executionError = `Failed to read output directory: ${readDirError.message}`; // Optionally set error
+      }
     }
 
   } catch (error) {
     console.error(`Docker Executor [${executionId}]: Error during execution:`, error);
     executionError = error.message;
+    // If timeout occurred, make sure the container is stopped
+     if (error.message.includes('timed out') && container) {
+        try {
+            console.log(`Docker Executor [${executionId}]: Attempting to stop container ${container.id} due to timeout...`);
+            await container.stop({ t: 5 }); // Force stop after 5 seconds
+            console.log(`Docker Executor [${executionId}]: Container ${container.id} stopped.`);
+        } catch (stopError) {
+            console.error(`Docker Executor [${executionId}]: Error stopping timed out container ${container.id}:`, stopError);
+        }
+    }
   } finally {
     // 4. Cleanup
     if (container) {
       try {
         console.log(`Docker Executor [${executionId}]: Removing container ${container.id}...`);
-        // Ensure container is stopped before removing, especially after timeout
-        try { await container.stop({ t: 5 }); } catch { /* Ignore error if already stopped */ }
-        await container.remove();
+        // Container should be stopped already from wait() or timeout handling
+        await container.remove({ force: true }); // Force remove just in case
       } catch (cleanupError) {
         console.error(`Docker Executor [${executionId}]: Error removing container ${container?.id}:`, cleanupError);
-        // Log but don't throw, prioritize returning results/main error
       }
     }
-    // Keep temp dir for now if files were generated, remove otherwise or if error?
-    // For simplicity now, let's keep it if successful, remove on error.
-    // A better approach might involve returning paths and letting the caller manage cleanup.
+
     if (executionError && tempDir) {
         try {
             console.log(`Docker Executor [${executionId}]: Removing temporary directory due to error: ${tempDir}`);
@@ -197,22 +221,30 @@ async function runPythonInSandbox(pythonCode, datasetId) {
         } catch (rmError) {
             console.error(`Docker Executor [${executionId}]: Error removing temporary directory ${tempDir}:`, rmError);
         }
+    } else if (tempDir && !outputPaths.imagePaths.length && !outputPaths.statsPath) {
+         try {
+            console.log(`Docker Executor [${executionId}]: Removing empty temporary directory: ${tempDir}`);
+            await fs.rm(tempDir, { recursive: true, force: true });
+            tempDir = null; // Nullify tempDir as it's removed
+        } catch (rmError) {
+            console.error(`Docker Executor [${executionId}]: Error removing empty temporary directory ${tempDir}:`, rmError);
+        }
     } else if (tempDir) {
          console.log(`Docker Executor [${executionId}]: Temporary directory with results kept at: ${tempDir}`);
-         // Caller will need to handle cleanup later based on returned paths.
-         // Or modify to return file contents (e.g., base64 image) and delete here.
+         // The caller needs to handle cleanup using the returned tempDir path.
     }
   }
 
   // Return results
   return {
-    ...outputPaths, // imagePath, statsPath (paths on the host machine)
+    ...outputPaths, // imagePaths (array), statsPath
     logs: executionLogs,
     error: executionError,
-    tempDir: !executionError ? tempDir : null // Return tempDir path only on success for potential cleanup by caller
+    tempDir: !executionError && (outputPaths.imagePaths.length > 0 || outputPaths.statsPath) ? tempDir : null // Return tempDir only on success with results
   };
 }
 
 module.exports = {
   runPythonInSandbox,
+  ensureImageExists, // Export ensureImageExists if needed elsewhere (e.g., initial setup)
 };

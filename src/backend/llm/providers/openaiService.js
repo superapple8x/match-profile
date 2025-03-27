@@ -51,6 +51,7 @@ class OpenAILLMService extends ILLMService {
   _buildCodeGenerationPrompt(userQuery, datasetMetadata) {
     // Basic prompt template - needs refinement based on testing
     const metadataString = JSON.stringify(datasetMetadata, null, 2);
+    // Updated prompt:
     return `
 You are a data analysis assistant. Your task is to write Python code to analyze a dataset based on a user's query.
 
@@ -62,36 +63,106 @@ ${metadataString}
 **User Query:** "${userQuery}"
 
 **Instructions:**
-1.  Use the pandas library for data manipulation. Assume the data is loaded into a DataFrame named \`df\` from '/input/data.csv'.
+1.  Use pandas for data manipulation. Assume data is loaded into a DataFrame \`df\` from '/input/data.csv'.
 2.  Use matplotlib and seaborn for plotting.
-3.  **Crucially:** If a plot is generated, save it ONLY to '/output/plot.png'. Do not display it.
-4.  Calculate relevant summary statistics based on the query (e.g., counts, means, correlations). Save these statistics as a JSON object to '/output/stats.json'.
-5.  Output ONLY the raw Python code. Do not include any explanations, comments outside the code, or markdown formatting.
-6.  Handle potential errors gracefully (e.g., if a column mentioned in the query doesn't exist).
-7.  Ensure the code is runnable in a standard Python environment with pandas, matplotlib, and seaborn installed.
-8.  **Important:** When calculating correlations (e.g., using \`df.corr()\`), ensure you only select numeric columns first (e.g., \`df.select_dtypes(include='number').corr()\`).
+3.  **Plotting:**
+    *   If the query requires plot(s), generate them.
+    *   You MAY generate MULTIPLE plots if relevant (e.g., for a general EDA query).
+    *   Save EACH plot to a SEPARATE file in the '/output/' directory using indexed filenames: '/output/plot_1.png', '/output/plot_2.png', etc.
+    *   **Crucially:** Do NOT display plots (e.g., using \`plt.show()\`). Call \`plt.close()\` after saving each plot figure to free memory.
+4.  **Statistics:**
+    *   Calculate relevant summary statistics based on the query (e.g., counts, means, correlations, value counts).
+    *   Save ALL calculated statistics into a SINGLE JSON object to '/output/stats.json'.
+    *   **VERY IMPORTANT for JSON:** Before saving to JSON, ensure all values are JSON serializable. NumPy types (like int64, float64) are NOT directly serializable. Convert them to standard Python types (int, float). You MUST include and use the provided \`convert_numpy_types\` helper function for this.
+5.  **Code Output:** Output ONLY the raw Python code. No explanations, comments outside code, or markdown formatting.
+6.  **Error Handling:** Handle potential errors (e.g., missing columns, non-numeric data for numeric operations). If an error occurs during analysis (e.g., attempting a numeric operation on text), print a descriptive error message to standard output and continue if possible, or exit gracefully if not.
+7.  **Environment:** Assume a standard Python environment with pandas, matplotlib, seaborn installed.
+8.  **Correlations:** When calculating correlations (e.g., \`df.corr()\`), select numeric columns first (\`df.select_dtypes(include='number').corr()\`).
 
-**Example Snippet (Saving Plot):**
+**Helper Function (MUST INCLUDE and USE for saving stats.json):**
+\`\`\`python
+import numpy as np
+import json
+import pandas as pd # Assuming pandas is imported
+
+def convert_numpy_types(obj):
+    if isinstance(obj, (np.integer, np.int64)): # Handle numpy integers specifically
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float64)): # Handle numpy floats specifically
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, pd.Timestamp):
+        return obj.isoformat() # Convert timestamps to strings
+    elif isinstance(obj, (pd.Series, pd.Index)): # Convert pandas Series/Index
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {str(k): convert_numpy_types(v) for k, v in obj.items()} # Ensure keys are strings
+    elif isinstance(obj, (list, tuple)):
+        return [convert_numpy_types(i) for i in obj]
+    # Add handling for other non-serializable types if necessary
+    elif hasattr(obj, 'isoformat'): # General date/time objects
+        return obj.isoformat()
+    try:
+        # Attempt a default serialization test; if it fails, convert to string
+        json.dumps(obj)
+        return obj
+    except TypeError:
+        return str(obj) # Fallback: convert unknown types to string
+\`\`\`
+
+**Example Snippet (Saving Multiple Plots):**
 \`\`\`python
 import matplotlib.pyplot as plt
 import pandas as pd
 # ... perform analysis ...
-plt.figure()
-# ... create plot ...
-plt.savefig('/output/plot.png')
-plt.close() # Important to close the plot
+
+# Plot 1
+plt.figure(figsize=(10, 6)) # Recommend setting figsize
+# ... create plot 1 ...
+plt.tight_layout() # Adjust layout
+plt.savefig('/output/plot_1.png')
+plt.close() # Essential: close figure
+
+# Plot 2
+plt.figure(figsize=(10, 6))
+# ... create plot 2 ...
+plt.tight_layout()
+plt.savefig('/output/plot_2.png')
+plt.close()
 \`\`\`
 
-**Example Snippet (Saving Stats):**
+**Example Snippet (Saving Stats with Conversion):**
 \`\`\`python
 import json
+import numpy as np
+import pandas as pd
+
+# --- Include the convert_numpy_types function definition here ---
+def convert_numpy_types(obj):
+    if isinstance(obj, (np.integer, np.int64)): return int(obj)
+    elif isinstance(obj, (np.floating, np.float64)): return float(obj)
+    elif isinstance(obj, np.ndarray): return obj.tolist()
+    elif isinstance(obj, pd.Timestamp): return obj.isoformat()
+    elif isinstance(obj, (pd.Series, pd.Index)): return obj.tolist()
+    elif isinstance(obj, dict): return {str(k): convert_numpy_types(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)): return [convert_numpy_types(i) for i in obj]
+    elif hasattr(obj, 'isoformat'): return obj.isoformat()
+    try: json.dumps(obj); return obj
+    except TypeError: return str(obj)
+# --- End of function definition ---
+
 # ... perform analysis ...
-stats = {'mean_age': df['age'].mean(), 'count': len(df)}
+raw_stats = {'mean_age': df['age'].mean(), 'counts': df['category'].value_counts()} # May contain numpy/pandas types
+
+# Convert before saving
+stats = convert_numpy_types(raw_stats)
+
 with open('/output/stats.json', 'w') as f:
-    json.dump(stats, f)
+    json.dump(stats, f, indent=2) # Use indent for readability
 \`\`\`
 
-Now, generate the Python code for the user query.
+Now, generate the Python code for the user query, remembering to include and use the \`convert_numpy_types\` function when saving statistics. Ensure plots are saved as '/output/plot_1.png', '/output/plot_2.png', etc.
 `;
   }
 
@@ -102,10 +173,10 @@ Now, generate the Python code for the user query.
    * @returns {Promise<string>} Generated Python code.
    */
   async generatePythonCode(userQuery, datasetMetadata) {
-    console.log(`OpenAI Service: Generating Python code for query: "${userQuery}"`);
+    console.log(`${this.serviceName} Service: Generating Python code for query: "${userQuery}" using model ${this.codeModel}`);
     const systemPrompt = this._buildCodeGenerationPrompt(userQuery, datasetMetadata);
 
-    
+
         try {
           const completion = await this.client.chat.completions.create({
             model: this.codeModel, // Use the dynamic model name stored in the instance
@@ -119,27 +190,27 @@ Now, generate the Python code for the user query.
       const generatedCode = completion.choices[0]?.message?.content?.trim();
 
       if (!generatedCode) {
-        throw new Error("OpenAI API returned an empty response for code generation.");
+        throw new Error(`${this.serviceName} API returned an empty response for code generation.`);
       }
 
       // Basic validation: Check if it looks like Python code (heuristic)
       // More robust validation might involve trying to parse it, but that's complex here.
       if (!generatedCode.includes('import ') && !generatedCode.includes('def ') && !generatedCode.includes('print(')) {
-         console.warn("OpenAI Service: Generated content doesn't look like Python code:", generatedCode);
+         console.warn(`${this.serviceName} Service: Generated content doesn't obviously look like Python code:`, generatedCode.substring(0, 100) + '...');
          // Decide whether to throw an error or return the potentially incorrect code
          // For now, let's return it and let the execution phase handle errors.
       }
 
-      console.log("OpenAI Service: Code generation successful.");
+      console.log(`${this.serviceName} Service: Code generation successful.`);
       // Clean potential markdown code blocks if the LLM doesn't follow instructions
       return generatedCode.replace(/^```python\n?/, '').replace(/\n?```$/, '');
 
-    
+
         } catch (error) {
           console.error(`${this.serviceName} Service: Error during code generation API call:`, error);
           throw new Error(`${this.serviceName} API call failed: ${error.message}`);
         }
-    } // <<< Add missing closing brace for generatePythonCode method
+    } // Closing brace for generatePythonCode method
 
   /**
    * Constructs the prompt for text summary generation.
@@ -203,7 +274,7 @@ Now, generate the summary based on the provided query and statistics.
       const generatedSummary = completion.choices[0]?.message?.content?.trim();
 
       if (!generatedSummary) {
-        throw new Error("OpenAI API returned an empty response for text summary generation.");
+        throw new Error(`${this.serviceName} API returned an empty response for text summary generation.`);
       }
 
       console.log(`${this.serviceName} Service: Text summary generation successful.`);
