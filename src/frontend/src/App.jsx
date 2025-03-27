@@ -5,6 +5,7 @@ import SearchBuilder from './components/SearchBuilder';
 import ResultsDashboard from './components/ResultsDashboard';
 import SavedSearches from './components/SavedSearches';
 import DataOverview from './components/DataOverview'; // <-- Import DataOverview
+import DataAnalysisPage from './components/ResultsDashboard/DataAnalysisPage'; // <-- Import DataAnalysisPage
 
 function App() {
   // Initialize state based on system preference or saved value (optional)
@@ -142,6 +143,8 @@ function App() {
                   />
                 </div>
               } />
+              {/* Add route for the new Data Analysis Page */}
+              <Route path="/data-analysis" element={<DataAnalysisPage />} />
               {/* Removed old /attribute-distribution and /data-analysis routes */}
             </Routes>
           </main>
