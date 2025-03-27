@@ -31,87 +31,67 @@ function calculateMedian(arr) {
 // Helper function to analyze data for categorical, numerical insights, and missing values
 const analyzeData = (data) => {
   if (!data || data.length === 0) {
-    return { recordCount: 0, attributeCount: 0, categoricalAnalyses: [], numericalAnalyses: [], missingValueCounts: {} }; // Initialize numericalAnalyses as array
+    return { recordCount: 0, attributeCount: 0, categoricalAnalyses: [], numericalAnalyses: [], missingValueCounts: {} };
   }
-
-  // --- DIAGNOSTIC LOG ---
-  // if (data.length > 0) {
-  //   console.log("DatasetInsightsChart - Data types in first row:", Object.entries(data[0]).map(([key, value]) => `${key}: ${typeof value}`).join(', '));
-  // }
-  // --- END DIAGNOSTIC LOG ---
 
   const recordCount = data.length;
   const attributes = Object.keys(data[0]);
   const attributeCount = attributes.length;
   const categoricalAnalyses = [];
-  const numericalAnalyses = []; // Store analysis for ALL suitable numerical columns
+  const numericalAnalyses = [];
   const missingValueCounts = {};
+  const NUMERIC_THRESHOLD = 0.8; // Require 80% of non-empty values to be parsable as numbers
 
-  // console.log(`DatasetInsightsChart: Starting analysis for ${recordCount} records, ${attributeCount} attributes.`);
+  console.log(`DatasetInsightsChart: Starting analysis for ${recordCount} records, ${attributeCount} attributes.`);
 
   for (const attr of attributes) {
     // console.log(`DatasetInsightsChart: Checking attribute '${attr}'...`);
 
     const uniqueValues = new Set();
     let isPotentialCategorical = true;
-    let isPotentialNumerical = true;
     let firstValueType = null;
     let missingCount = 0;
     const numericalValues = [];
+    let parsableNumericCount = 0;
+    let nonMissingCount = 0;
 
-    // --- First Pass: Check types, count missing, collect values ---
+    // --- First Pass: Check types, count missing/numeric, collect values ---
     for (const row of data) {
-      const value = row[attr];
-      const valueType = typeof value;
-      if (firstValueType === null && value !== null && value !== undefined && value !== "") firstValueType = valueType;
+      let value = row[attr];
+      const isEmpty = value === null || value === undefined || value === "";
 
-      if (value === null || value === undefined || value === "") {
+      if (isEmpty) {
         missingCount++;
+      } else {
+        nonMissingCount++;
+        // Attempt numeric conversion
+        const numValue = parseFloat(value); // Try parsing as float
+        if (!isNaN(numValue)) {
+            numericalValues.push(numValue); // Store the parsed number
+            parsableNumericCount++;
+        }
+
+        // Check for potential categorical
+        if (typeof value !== 'string' && typeof value !== 'boolean' && typeof value !== 'number') { // Allow numbers for categorical too initially
+          isPotentialCategorical = false;
+        }
+        if (firstValueType === null) firstValueType = typeof value; // Note type of first non-empty
       }
 
-      if (valueType !== 'string' && valueType !== 'boolean' && value !== null && value !== undefined && value !== "") {
-        isPotentialCategorical = false;
-      }
-
-      if (valueType !== 'number' && value !== null && value !== undefined && value !== "") {
-         isPotentialNumerical = false;
-      } else if (valueType === 'number') {
-         numericalValues.push(value);
-      }
-
-      const valueStr = String(value);
+      const valueStr = String(value); // Use string for uniqueness check
       uniqueValues.add(valueStr);
     } // End row loop
 
     missingValueCounts[attr] = missingCount;
 
-    // --- Process Categorical ---
-    const uniqueValueCount = uniqueValues.size;
-    if (missingCount === recordCount && uniqueValueCount <= 1) {
-        isPotentialCategorical = false;
-    } else if (uniqueValueCount > 15) {
-        isPotentialCategorical = false;
-    } else if (uniqueValueCount <= 1) {
-         isPotentialCategorical = false;
-    }
+    // --- Determine if Numerical ---
+    const numericRatio = nonMissingCount > 0 ? parsableNumericCount / nonMissingCount : 0;
+    const isNumerical = numericRatio >= NUMERIC_THRESHOLD && numericalValues.length > 0 && !attr.toLowerCase().includes('id'); // Check ratio and ensure not an ID
+    // console.log(`DatasetInsightsChart: Attribute '${attr}' - Numeric Ratio: ${numericRatio.toFixed(2)}, Is Numerical: ${isNumerical}`);
 
-    if (isPotentialCategorical) {
-      const frequency = {};
-      for (const row of data) {
-         if (row[attr] !== null && row[attr] !== undefined && row[attr] !== "") {
-            const valueStr = String(row[attr]);
-            frequency[valueStr] = (frequency[valueStr] || 0) + 1;
-         }
-      }
-      const chartData = Object.entries(frequency)
-        .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count);
-      categoricalAnalyses.push({ attributeName: attr, chartData: chartData });
-    }
 
-    // --- Process Numerical (For ALL suitable columns) ---
-    // Ensure it's primarily numeric and not an ID field
-    if (isPotentialNumerical && numericalValues.length > 0 && !attr.toLowerCase().includes('id')) { // Removed numericalAnalysis === null check
+    // --- Process Numerical (If deemed numerical) ---
+    if (isNumerical) {
         // console.log(`DatasetInsightsChart: Attribute '${attr}' is suitable (Numerical). Calculating stats and histogram.`);
 
         const min = Math.min(...numericalValues);
@@ -125,45 +105,79 @@ const analyzeData = (data) => {
         const binLabels = [];
 
         // Handle case where min === max (all values are the same)
-        if (binWidth === 0) {
+        if (binWidth === 0 && max !== undefined) { // Check max exists
              binLabels.push(`[${min.toFixed(1)}]`);
              bins[0] = numericalValues.length;
-        } else {
+        } else if (max !== undefined) { // Proceed only if max is valid
             for (let i = 0; i < numBins; i++) {
                 const binMin = min + i * binWidth;
-                const binMax = min + (i + 1) * binWidth;
-                const label = `[${binMin.toFixed(1)}, ${ (i === numBins - 1) ? max.toFixed(1) + ']' : binMax.toFixed(1) + ')'}`;
+                // Make the last bin inclusive of the max value
+                const binMax = (i === numBins - 1) ? max : (min + (i + 1) * binWidth);
+                const label = `[${binMin.toFixed(1)}, ${binMax.toFixed(1)}${i === numBins - 1 ? ']' : ')'}`; // Adjust label for last bin
                 binLabels.push(label);
 
                 for (const val of numericalValues) {
+                    // Check if value falls into the bin, ensuring last bin includes max
                     if ((val >= binMin && val < binMax) || (i === numBins - 1 && val === max)) {
                         bins[i]++;
                     }
                 }
             }
+        } else {
+             console.log(`DatasetInsightsChart: Skipping histogram for '${attr}' due to invalid min/max.`);
         }
 
-         const histogramData = bins.map((count, i) => ({
+
+         const histogramData = binLabels.length > 0 ? bins.map((count, i) => ({ // Check if binLabels were generated
             name: binLabels[i] || '', // Ensure name is always a string
             count: count,
-         })).filter(bin => bin.count > 0 || bins.length === 1); // Filter out empty bins unless it's the only bin
+         })).filter(bin => bin.count > 0 || bins.length === 1) // Filter empty bins unless only one bin
+         : []; // Default to empty if no labels
 
         // Push analysis for this numerical column
         numericalAnalyses.push({
             attributeName: attr,
-            stats: { min, max, mean, median },
+            stats: {
+                min: isNaN(min) ? null : min, // Handle potential NaN
+                max: isNaN(max) ? null : max,
+                mean: isNaN(mean) ? null : mean,
+                median: isNaN(median) ? null : median
+             },
             histogramData: histogramData,
         });
     }
-    // else if (isPotentialNumerical) { // Log if it was numerical but failed (e.g., ID)
-    //      console.log(`DatasetInsightsChart: Attribute '${attr}' disqualified (Numerical). Reason: ${attr.toLowerCase().includes('id') ? 'Is ID field' : 'No valid numerical values found'}.`);
-    // }
+
+    // --- Process Categorical ---
+    // Refined Categorical Check: Exclude if it was determined to be numerical, limit unique values
+    const uniqueValueCount = uniqueValues.size - (uniqueValues.has("null") || uniqueValues.has("undefined") || uniqueValues.has("") ? 1 : 0); // Effective unique count
+    if (!isNumerical && uniqueValueCount >= 2 && uniqueValueCount <= 15) {
+      isPotentialCategorical = true; // Re-affirm if not numerical and fits criteria
+      // console.log(`DatasetInsightsChart: Attribute '${attr}' is suitable (Categorical). Unique values: ${uniqueValueCount}`);
+    } else {
+      isPotentialCategorical = false;
+      // console.log(`DatasetInsightsChart: Attribute '${attr}' disqualified (Categorical). Reason: ${isNumerical ? 'Is Numerical' : uniqueValueCount < 2 ? 'Too few unique' : 'Too many unique'}. Unique count: ${uniqueValueCount}`);
+    }
+
+    if (isPotentialCategorical) {
+      const frequency = {};
+      for (const row of data) {
+         const value = row[attr];
+         if (value !== null && value !== undefined && value !== "") {
+            const valueStr = String(value);
+            frequency[valueStr] = (frequency[valueStr] || 0) + 1;
+         }
+      }
+      const chartData = Object.entries(frequency)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count);
+      categoricalAnalyses.push({ attributeName: attr, chartData: chartData });
+    }
 
   } // End attribute loop
 
   console.log(`DatasetInsightsChart: Finished analysis. Found ${categoricalAnalyses.length} suitable categorical attributes. Found ${numericalAnalyses.length} suitable numerical attributes.`);
 
-  return { recordCount, attributeCount, categoricalAnalyses, numericalAnalyses, missingValueCounts }; // Return numericalAnalyses array
+  return { recordCount, attributeCount, categoricalAnalyses, numericalAnalyses, missingValueCounts };
 };
 
 // Define tab constants locally as well for conditional rendering
@@ -222,42 +236,48 @@ function DatasetInsightsChart({ data, activeTab }) {
                   </h3>
                   {/* Stats Display */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4 text-sm text-center">
-                        <div className="bg-gray-100 dark:bg-gray-600 p-2 rounded">
+                        {analysis.stats.min !== null && <div className="bg-gray-100 dark:bg-gray-600 p-2 rounded">
                             <div className="font-medium text-gray-500 dark:text-gray-300">Min</div>
                             <div className="text-gray-800 dark:text-gray-100">{analysis.stats.min.toFixed(2)}</div>
-                        </div>
-                        <div className="bg-gray-100 dark:bg-gray-600 p-2 rounded">
+                        </div>}
+                        {analysis.stats.max !== null && <div className="bg-gray-100 dark:bg-gray-600 p-2 rounded">
                             <div className="font-medium text-gray-500 dark:text-gray-300">Max</div>
                             <div className="text-gray-800 dark:text-gray-100">{analysis.stats.max.toFixed(2)}</div>
-                        </div>
-                        <div className="bg-gray-100 dark:bg-gray-600 p-2 rounded">
+                        </div>}
+                        {analysis.stats.mean !== null && <div className="bg-gray-100 dark:bg-gray-600 p-2 rounded">
                             <div className="font-medium text-gray-500 dark:text-gray-300">Mean</div>
                             <div className="text-gray-800 dark:text-gray-100">{analysis.stats.mean.toFixed(2)}</div>
-                        </div>
-                        <div className="bg-gray-100 dark:bg-gray-600 p-2 rounded">
+                        </div>}
+                        {analysis.stats.median !== null && <div className="bg-gray-100 dark:bg-gray-600 p-2 rounded">
                             <div className="font-medium text-gray-500 dark:text-gray-300">Median</div>
                             <div className="text-gray-800 dark:text-gray-100">{analysis.stats.median.toFixed(2)}</div>
-                        </div>
+                        </div>}
                   </div>
                   {/* Histogram */}
-                  <h4 className="text-md font-semibold text-gray-700 dark:text-gray-200 mb-3 text-center">
-                    Histogram
-                  </h4>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <BarChart data={analysis.histogramData} margin={{ top: 5, right: 5, left: 5, bottom: 40 }}>
-                      <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.5} className="stroke-gray-300 dark:stroke-gray-600" />
-                      <XAxis dataKey="name" angle={-45} textAnchor="end" height={50} interval={0} className="text-xs text-gray-600 dark:text-gray-400" />
-                      <YAxis allowDecimals={false} className="text-xs text-gray-600 dark:text-gray-400" />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(4px)',
-                          border: '1px solid #ccc', borderRadius: '4px', color: '#333'
-                        }}
-                        cursor={{ fill: 'rgba(200, 200, 200, 0.3)' }}
-                      />
-                      <Bar dataKey="count" fill="#82ca9d" name="Count" className="fill-green-500 dark:fill-green-600" />
-                    </BarChart>
-                  </ResponsiveContainer>
+                   {analysis.histogramData.length > 0 ? (
+                     <>
+                        <h4 className="text-md font-semibold text-gray-700 dark:text-gray-200 mb-3 text-center">
+                            Histogram
+                        </h4>
+                        <ResponsiveContainer width="100%" height={250}>
+                        <BarChart data={analysis.histogramData} margin={{ top: 5, right: 5, left: 5, bottom: 40 }}>
+                          <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.5} className="stroke-gray-300 dark:stroke-gray-600" />
+                          <XAxis dataKey="name" angle={-45} textAnchor="end" height={50} interval={0} className="text-xs text-gray-600 dark:text-gray-400" />
+                          <YAxis allowDecimals={false} className="text-xs text-gray-600 dark:text-gray-400" />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(4px)',
+                              border: '1px solid #ccc', borderRadius: '4px', color: '#333'
+                            }}
+                            cursor={{ fill: 'rgba(200, 200, 200, 0.3)' }}
+                          />
+                          <Bar dataKey="count" fill="#82ca9d" name="Count" className="fill-green-500 dark:fill-green-600" />
+                        </BarChart>
+                        </ResponsiveContainer>
+                    </>
+                   ) : (
+                     <p className="text-sm text-gray-500 dark:text-gray-400 italic text-center">Could not generate histogram (e.g., single value or parsing issue).</p>
+                   )}
                 </div>
              ))
           ) : (

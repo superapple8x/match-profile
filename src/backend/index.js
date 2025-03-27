@@ -4,9 +4,10 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
+const fsp = require('fs').promises; // Use fs.promises
 const path = require('path'); // Added for path resolution if needed
 const Docker = require('dockerode');
-const { promisify } = require('util');
+// const { promisify } = require('util'); // No longer needed with fs.promises
 const db = require('./config/db');
 const fileOperationsRoutes = require('./routes/fileOperations');
 const metadataService = require('./services/metadataService'); // Import Metadata Service
@@ -14,21 +15,16 @@ const { getLLMServiceInstance } = require('./llm/llmFactory'); // Import LLM Fac
 const dockerExecutor = require('./services/dockerExecutor'); // Import Docker Executor Service
 
 const docker = new Docker();
-const writeFileAsync = promisify(fs.writeFile); // Note: fs.promises is generally preferred now
-const readFileAsync = promisify(fs.readFile); // Needed for reading results
-const unlinkAsync = promisify(fs.unlink);
-const rmAsync = promisify(fs.rm); // Needed for cleaning up temp dir
- 
+const readFileAsync = fsp.readFile; // Use fsp.readFile directly
+const rmAsync = fsp.rm; // Use fsp.rm directly
+
  // --- Initialize LLM Service ---
- // This will throw an error until a provider is implemented and uncommented in the factory
 let llmService;
 try {
   llmService = getLLMServiceInstance();
   console.log(`Successfully initialized LLM Service for provider: ${process.env.LLM_PROVIDER}`);
 } catch (error) {
   console.error(`Failed to initialize LLM Service: ${error.message}`);
-  // Decide if the application should exit or continue with limited functionality
-  // For now, we'll log the error and continue, but the analyze endpoint will fail if called.
   llmService = null; // Ensure llmService is null if initialization fails
 }
 // --- ---
@@ -44,13 +40,13 @@ app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 // Log request headers
 app.use((req, res, next) => {
   console.log('Request received:', req.method, req.url);
-  console.log('Request Headers:', req.headers);
+  // console.log('Request Headers:', req.headers); // Optional: Can be verbose
   next();
 });
 
 // Mount the file operations routes
 app.use('/api', fileOperationsRoutes);
- 
+
  // // Data Analysis Endpoint (Old MCP/Plotly version - commented out)
  // app.post('/api/analyze', async (req, res) => {
  //   try {
@@ -94,7 +90,7 @@ app.use('/api', fileOperationsRoutes);
  //
  //   try {
  //     // Write the code to a temporary file
- //     await writeFileAsync(tempFileName, code);
+ //     await fsp.writeFile(tempFileName, code);
  //
  //     // Build the Docker image (if it doesn't exist)
  //     const images = await docker.listImages({ filters: { reference: [imageName] } });
@@ -133,7 +129,7 @@ app.use('/api', fileOperationsRoutes);
  //     // Remove the container
  //     await container.remove();
  //     // Remove the temporary file
- //     await unlinkAsync(tempFileName);
+ //     await fsp.unlink(tempFileName);
  //
  //     // Attempt to parse the output as JSON (Plotly chart)
  //     try {
@@ -149,65 +145,73 @@ app.use('/api', fileOperationsRoutes);
  //     console.error("Error executing Python code in Docker:", error);
  //      // Attempt to remove the temporary file
  //     try {
- //       await unlinkAsync(tempFileName);
+ //       await fsp.unlink(tempFileName);
  //     } catch(unlinkError) {
  //       // ignore error
  //     }
  //     throw error;
  //   }
  // }
- 
- // New Data Analysis Endpoint (Phase 1)
+
+ // New Data Analysis Endpoint (Updated for multiple images)
  app.post('/api/analyze-data', async (req, res) => {
    console.log('Received request for /api/analyze-data');
+   let tempDirToClean = null; // Keep track of temp dir for cleanup on error
+
    try {
-     const { query, datasetId } = req.body; // Assuming datasetId identifies the uploaded data
- 
+     const { query, datasetId } = req.body;
+
      if (!query || !datasetId) {
        return res.status(400).json({ error: 'Missing query or datasetId in request body' });
      }
 
      // --- Phase 1 ---
      console.log(`Fetching metadata for dataset: ${datasetId}`);
-     const metadata = await metadataService.getMetadata(datasetId); // Call Metadata Service
-     console.log('Metadata fetched:', metadata); // Log fetched metadata (optional)
+     const metadata = await metadataService.getMetadata(datasetId);
+     console.log('Metadata fetched');
 
      if (!llmService) {
        throw new Error("LLM Service is not initialized. Check configuration and implementation.");
      }
      console.log(`Generating Python code using ${process.env.LLM_PROVIDER} for query: "${query}"`);
-     const pythonCode = await llmService.generatePythonCode(query, metadata); // Call LLM Service
-     console.log('Python code generated (first 100 chars):', pythonCode.substring(0, 100)); // Log snippet (optional)
+     const pythonCode = await llmService.generatePythonCode(query, metadata);
+     console.log('Python code generated (first 100 chars):', pythonCode.substring(0, 100));
      // --- ---
 
      // --- Phase 3: Execute Code in Docker ---
      console.log(`Executing Python code in Docker sandbox for dataset: ${datasetId}`);
      const execResult = await dockerExecutor.runPythonInSandbox(pythonCode, datasetId);
+     tempDirToClean = execResult.tempDir;
 
-     console.log('Docker execution finished. Logs:', execResult.logs); // Log execution output
+     console.log('Docker execution finished. Logs:', execResult.logs);
 
      if (execResult.error) {
        console.error(`Docker execution error: ${execResult.error}`);
-       // Optionally include logs in the error response to the client for debugging
        return res.status(500).json({
            error: `Error executing analysis code: ${execResult.error}`,
-           logs: execResult.logs // Be cautious about exposing detailed logs
+           logs: execResult.logs
        });
      }
 
-     let imageUri = null;
+     let imageUris = []; // Array to hold multiple image data URIs
      let stats = null;
 
-     // Read generated image if it exists
-     if (execResult.imagePath) {
-       try {
-         const imageBuffer = await readFileAsync(execResult.imagePath);
-         imageUri = `data:image/png;base64,${imageBuffer.toString('base64')}`;
-         console.log('Successfully read and encoded plot.png');
-       } catch (readError) {
-         console.error(`Error reading generated image file ${execResult.imagePath}:`, readError);
-         // Decide if this is a critical error - maybe just log and continue without image
+     // Read generated images if they exist
+     if (execResult.imagePaths && execResult.imagePaths.length > 0) {
+       console.log(`Found ${execResult.imagePaths.length} plot image(s). Reading...`);
+       for (const imagePath of execResult.imagePaths) {
+           try {
+             const imageBuffer = await readFileAsync(imagePath);
+             const imageUri = `data:image/png;base64,${imageBuffer.toString('base64')}`;
+             imageUris.push(imageUri);
+             console.log(`Successfully read and encoded ${path.basename(imagePath)}`);
+           } catch (readError) {
+             console.error(`Error reading generated image file ${imagePath}:`, readError);
+             // Log error but continue without this specific image
+           }
        }
+     } else {
+        console.log('No plot images found in execution results.');
      }
 
      // Read generated stats if it exists
@@ -215,36 +219,36 @@ app.use('/api', fileOperationsRoutes);
        try {
          const statsBuffer = await readFileAsync(execResult.statsPath);
          stats = JSON.parse(statsBuffer.toString('utf8'));
-         console.log('Successfully read and parsed stats.json:', stats);
+         console.log('Successfully read and parsed stats.json');
        } catch (readError) {
          console.error(`Error reading or parsing stats file ${execResult.statsPath}:`, readError);
-         // Decide if this is critical - maybe just log and continue without stats
+         // Log error but continue without stats
        }
+     } else {
+        console.log('No stats file found in execution results.');
      }
 
-     // Cleanup the temporary directory now that we've read the files
-     if (execResult.tempDir) {
+     // Cleanup the temporary directory
+     if (tempDirToClean) {
        try {
-         console.log(`Cleaning up temporary directory: ${execResult.tempDir}`);
-         await rmAsync(execResult.tempDir, { recursive: true, force: true });
+         console.log(`Cleaning up temporary directory: ${tempDirToClean}`);
+         await rmAsync(tempDirToClean, { recursive: true, force: true });
+         tempDirToClean = null; // Nullify after successful removal
        } catch (rmError) {
-         console.error(`Error cleaning up temporary directory ${execResult.tempDir}:`, rmError);
+         console.error(`Error cleaning up temporary directory ${tempDirToClean}:`, rmError);
        }
      }
      // --- ---
 
      // --- Phase 4: Generate Text Summary ---
-     let summary = 'Analysis complete. Summary generation skipped or failed.'; // Default summary
+     let summary = 'Analysis complete. Summary generation skipped or failed.';
      if (llmService) {
        try {
          console.log(`Generating text summary using ${process.env.LLM_PROVIDER} for query: "${query}"`);
-         // Pass the original query and the parsed stats object
          summary = await llmService.generateTextSummary(query, stats);
          console.log('Text summary generated:', summary);
        } catch (summaryError) {
          console.error(`LLM summary generation failed: ${summaryError.message}`);
-         // Keep the default summary message, but log the error
-         // Optionally, you could pass a specific error message to the frontend
          summary = `Analysis complete, but summary generation failed: ${summaryError.message}`;
        }
      } else {
@@ -253,57 +257,80 @@ app.use('/api', fileOperationsRoutes);
      }
      // --- ---
 
-     // Final Response (Phase 4)
+     // Final Response (Updated)
      res.json({
-       imageUri: imageUri, // data:image/png;base64,... or null
-       summary: summary, // Placeholder text for now
-       stats: stats, // The actual stats object or null
-       logs: execResult.logs // Optionally include logs for debugging
+       imageUris: imageUris, // Send array of image URIs
+       summary: summary,
+       stats: stats,
+       logs: execResult.logs
      });
 
    } catch (error) {
-     // Catch errors from metadata, LLM, or Docker execution setup
      console.error("Error in /api/analyze-data:", error);
-     res.status(500).json({ error: "An error occurred during data analysis." });
+     // Attempt cleanup if tempDirToClean was set before the error
+     if (tempDirToClean) {
+       try {
+         console.error(`Cleaning up temporary directory ${tempDirToClean} due to error...`);
+         await rmAsync(tempDirToClean, { recursive: true, force: true });
+       } catch (rmError) {
+         console.error(`Error cleaning up temporary directory ${tempDirToClean} during error handling:`, rmError);
+       }
+     }
+     res.status(500).json({ error: `An error occurred during data analysis: ${error.message}` });
    }
  });
- 
+
  // Test route
  app.get('/', (req, res) => {
   res.send('Profile Matching API is running');
 });
 
-// Start server
+// Start server and logging setup
+const logStream = fs.createWriteStream('server.log', { flags: 'a' });
+
 app.listen(port, () => {
-  const logMessage = `Server running on port ${port}\n`;
-  fs.appendFile('server.log', logMessage, (err) => {
-    if (err) {
-      console.error('Error writing to log file:', err);
-    }
-    console.log(logMessage.trim());
-  });
+  const logMessage = `Server running on port ${port} at ${new Date().toISOString()}\n`;
+  logStream.write(logMessage);
+  console.log(logMessage.trim()); // Log to console as well
 });
 
-//const originalConsoleLog = console.log;
+// Monkey-patch console.log and console.error to write to file
 const originalConsoleLog = console.log;
 console.log = function (...args) {
   originalConsoleLog.apply(console, args);
-  const logString = args.map(arg => (typeof arg === 'object' ? JSON.stringify(arg) : arg)).join(' ');
+  const logString = args.map(arg => (typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg)).join(' '); // Pretty print objects
   try {
-    fs.appendFileSync('server.log', logString + '\n');
+    logStream.write(`[LOG] ${new Date().toISOString()} - ${logString}\n`);
   } catch (err) {
-    originalConsoleError('Error writing to log file:', err);
+    originalConsoleError('Error writing to log file (console.log):', err);
   }
 };
 
 const originalConsoleError = console.error;
-
 console.error = function (...args) {
   originalConsoleError.apply(console, args);
-  const logString = args.map(arg => (typeof arg === 'object' ? JSON.stringify(arg) : arg)).join(' ');
-try {
-    fs.appendFileSync('server.log', logString + '\n');
+   // Include stack trace for Error objects
+   const logString = args.map(arg => {
+       if (arg instanceof Error) {
+           return arg.stack || arg.toString();
+       }
+       return typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg;
+   }).join(' ');
+  try {
+    logStream.write(`[ERROR] ${new Date().toISOString()} - ${logString}\n`);
   } catch (err) {
-    originalConsoleError('Error writing to log file:', err);
+    originalConsoleError('Error writing to log file (console.error):', err);
   }
 };
+
+process.on('exit', () => {
+    logStream.end();
+});
+process.on('SIGINT', () => {
+    logStream.end();
+    process.exit();
+});
+process.on('SIGTERM', () => {
+    logStream.end();
+    process.exit();
+});
