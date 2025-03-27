@@ -29,8 +29,8 @@ function DataOverview({ importedData }) {
       onClick={() => setActiveTab(tabKey)}
       className={`px-4 py-2 text-sm font-medium rounded-md transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 dark:focus:ring-offset-gray-800 ${
         activeTab === tabKey
-          ? 'bg-primary-500 text-white shadow-sm'
-          : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+          ? 'bg-primary-500 text-white shadow-sm' // Active tab uses primary color
+          : 'text-gray-600 dark:text-gray-300 hover:bg-indigo-100/80 dark:hover:bg-gray-700' // Light hover: indigo-100
       }`}
     >
       {label}
@@ -38,11 +38,11 @@ function DataOverview({ importedData }) {
   );
 
   return (
-    <div className="mb-6 bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm shadow-md rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+    <div className="mb-6 bg-indigo-100/60 dark:bg-gray-800/70 backdrop-blur-sm shadow-md rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden"> {/* Light: indigo-100 tint */}
       {/* Header Button - Enhanced */}
       <button
         onClick={toggleExpansion}
-        className="w-full flex justify-between items-center text-left p-4 focus:outline-none group hover:bg-gray-50/50 dark:hover:bg-gray-700/50 transition-colors duration-150 ease-in-out" // Added group, hover effect
+        className="w-full flex justify-between items-center text-left p-4 focus:outline-none group hover:bg-indigo-100/50 dark:hover:bg-gray-700/50 transition-colors duration-150 ease-in-out" // Light hover: indigo-100
         aria-expanded={isExpanded}
         aria-controls="dataset-insights-content"
       >
@@ -52,7 +52,7 @@ function DataOverview({ importedData }) {
            <span className="text-lg font-semibold text-gray-800 dark:text-white">
              Dataset Overview & Insights
            </span>
-           <span className="text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">
+           <span className="text-xs font-medium text-gray-600 dark:text-gray-400 bg-indigo-200/70 dark:bg-gray-700 px-2 py-0.5 rounded-full"> {/* Light: indigo-200 tint */}
              {recordCount} Records {/* Display Record Count */}
            </span>
         </div>

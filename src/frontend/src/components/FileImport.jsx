@@ -73,7 +73,7 @@ function FileImport({ onFileImport }) {
 
   const containerClasses = `
     p-4 border rounded-lg mb-6 shadow-md
-    bg-white/80 dark:bg-gray-700/60
+    bg-indigo-100/60 dark:bg-gray-700/60  /* Light: indigo-100 tint */
     border-gray-200 dark:border-gray-600/80
     transition-all duration-300 ease-in-out
     min-h-[200px] flex flex-col items-center justify-center text-center
@@ -92,8 +92,8 @@ function FileImport({ onFileImport }) {
       <div className="mb-4">
         <label
           htmlFor="file-upload"
-          // Subtle Gray Style for "Choose File"
-          className={`${baseButtonClasses} ${activeStyle} cursor-pointer`}
+          // Subtle Gray Style for "Choose File" with hover outline
+          className={`${baseButtonClasses} ${activeStyle} cursor-pointer ring-2 ring-transparent hover:ring-primary-700 hover:ring-offset-2 dark:hover:ring-offset-gray-900`}
         >
           Choose File
         </label>
