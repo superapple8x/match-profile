@@ -1,0 +1,34 @@
+# Node Modules
+node_modules/
+*/node_modules/
+
+# Logs
+*.log
+logs/
+*logs/
+*log/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Build & Temp directories
+dist/
+build/
+.cache/
+.tmp/
+*.tmp
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Env files (Root level - backend already ignores its own)
+# .env
+
+# Uploads directory
+src/backend/uploads/
+
+# Specific log file in backend
+src/backend/server.log

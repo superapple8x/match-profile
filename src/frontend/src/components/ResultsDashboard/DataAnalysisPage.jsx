@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // Import useEffect
 
-function DataAnalysisPage() {
+function DataAnalysisPage({ datasetId }) { // Accept datasetId as a prop
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -9,9 +9,17 @@ function DataAnalysisPage() {
   const [resultStats, setResultStats] = useState(null);
   const [resultLogs, setResultLogs] = useState('');
 
-  // TODO: Get the actual datasetId - this might come from props, context, or URL params
-  // For now, using a placeholder. This needs to be connected to the uploaded file.
-  const datasetId = 'test.csv'; // <<< --- !!! PLACEHOLDER - NEEDS ACTUAL ID !!!
+  // Use the datasetId passed via props. Add effect to clear results if ID changes.
+  useEffect(() => {
+    // Clear results if the dataset ID changes (e.g., new file uploaded)
+    setQuery('');
+    setIsLoading(false);
+    setError(null);
+    setResultImage(null);
+    setResultSummary('');
+    setResultStats(null);
+    setResultLogs('');
+  }, [datasetId]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();

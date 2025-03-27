@@ -58,16 +58,64 @@ async function getMetadata(datasetId) {
       })
       .on('end', () => {
         console.log(`Metadata Service: Finished reading ${metadata.rowCount} rows.`);
-        // TODO: Calculate summary statistics (min, max, mean, median, unique, missing) from columnData
-        // TODO: Refine data type detection based on all values in a column
-        // Example placeholder for summaries:
-        metadata.columns.forEach(({ name }) => {
-          metadata.summaries[name] = {
-            missingCount: columnData[name].filter(v => v === null || v === undefined || v === '').length,
-            // Add other stats here after calculation
+
+        // --- Data Type Detection & Summary Calculation ---
+        metadata.columns.forEach(column => {
+          const { name } = column;
+          const values = columnData[name];
+          const validValues = values.filter(v => v !== null && v !== undefined && v !== '');
+          const missingCount = metadata.rowCount - validValues.length;
+
+          let detectedType = 'string'; // Default to string
+          let numericValues = [];
+          let uniqueValuesSet = new Set();
+
+          if (validValues.length > 0) {
+            // Attempt numeric conversion
+            numericValues = validValues.map(v => Number(v)).filter(n => !isNaN(n));
+
+            // Basic Type Inference Logic (can be expanded)
+            if (numericValues.length / validValues.length > 0.9) { // If >90% are numbers
+              detectedType = 'number';
+            } else {
+              // Could add boolean detection (e.g., 'true'/'false', '0'/'1')
+              // Could add date detection (try parsing with Date.parse or a library like moment/date-fns)
+              detectedType = 'string'; // Fallback to string
+            }
+          } else {
+              detectedType = 'empty'; // Column is entirely missing values
+          }
+
+          column.type = detectedType; // Update column type
+
+          // Calculate Summaries
+          const summary = {
+            missingCount: missingCount,
+            missingPercent: (missingCount / metadata.rowCount) * 100,
           };
-          metadata.summaries[name].missingPercent = (metadata.summaries[name].missingCount / metadata.rowCount) * 100;
+
+          if (detectedType === 'number' && numericValues.length > 0) {
+            numericValues.sort((a, b) => a - b); // Sort for median
+            summary.min = numericValues[0];
+            summary.max = numericValues[numericValues.length - 1];
+            summary.mean = numericValues.reduce((sum, val) => sum + val, 0) / numericValues.length;
+            const mid = Math.floor(numericValues.length / 2);
+            summary.median = numericValues.length % 2 !== 0
+              ? numericValues[mid]
+              : (numericValues[mid - 1] + numericValues[mid]) / 2;
+          } else if (detectedType === 'string') {
+            validValues.forEach(v => uniqueValuesSet.add(v));
+            summary.uniqueCount = uniqueValuesSet.size;
+            // Only list unique values if count is low (e.g., < 20)
+            if (summary.uniqueCount <= 20) {
+              summary.uniqueValues = Array.from(uniqueValuesSet);
+            }
+          }
+          // Add summaries for other types (boolean, date) if implemented
+
+          metadata.summaries[name] = summary;
         });
+        // --- End Calculation ---
 
         console.log('Metadata Service: Generated metadata:', JSON.stringify(metadata, null, 2));
         resolve(metadata);

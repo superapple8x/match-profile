@@ -68,6 +68,9 @@ async function runPythonInSandbox(pythonCode, datasetId) {
 
   try {
     // 1. Prepare Host Environment
+    // Ensure the base temp directory exists
+    await fs.mkdir(TEMP_BASE_DIR, { recursive: true });
+    // Now create the unique execution directory within the base temp dir
     tempDir = await fs.mkdtemp(path.join(TEMP_BASE_DIR, `${executionId}-`));
     const scriptPath = path.join(tempDir, 'script.py');
     const inputDirPath = path.join(tempDir, 'input');
@@ -77,6 +80,9 @@ async function runPythonInSandbox(pythonCode, datasetId) {
 
     await fs.mkdir(inputDirPath);
     await fs.mkdir(outputDirPath);
+    // Ensure the output directory on the host is writable by the container user (UID 1001)
+    // Setting 777 is easiest for now, but consider more specific permissions if needed.
+    await fs.chmod(outputDirPath, 0o777);
     await fs.writeFile(scriptPath, pythonCode);
 
     // Copy dataset (consider linking for large files if appropriate)

@@ -8,4 +8,16 @@ export default defineConfig({
       include: /\.(?:jsx|tsx|js)$/, // Explicitly include .js files
     }),
   ],
+  // Add server proxy configuration
+  server: {
+    proxy: {
+      // Proxy requests starting with /api to the backend server
+      '/api': {
+        target: 'http://localhost:3001', // Your backend server address
+        changeOrigin: true, // Recommended for virtual hosted sites
+        // secure: false, // Uncomment if backend is not HTTPS
+        // rewrite: (path) => path.replace(/^\/api/, ''), // Uncomment if backend doesn't expect /api prefix
+      }
+    }
+  }
 })

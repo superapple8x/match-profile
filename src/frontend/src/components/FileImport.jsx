@@ -30,25 +30,41 @@ function FileImport({ onFileImport }) {
     }
   }, []);
 
-  const handleUpload = () => {
+  const handleUpload = async () => { // Make async
     if (file) {
-      console.log('Uploading file:', fileName);
-      Papa.parse(file, {
-        complete: (results) => {
-          console.log('Parsed data:', results.data);
-          onFileImport(results.data); // Pass data to parent component
-          setUploadSuccess(true);
-          setParseError(null);
-        },
-        error: (error) => {
-          console.error('Parsing error:', error.message);
-          setParseError(error.message);
-          setUploadSuccess(false);
-        },
-        header: true,
-        dynamicTyping: true,
-        skipEmptyLines: true, // <-- Add this line to skip empty rows
-      });
+      console.log('Uploading file to backend:', fileName);
+      setParseError(null);
+      setUploadSuccess(false);
+      // Use FormData to send the file
+      const formData = new FormData();
+      formData.append('file', file); // 'file' must match the field name expected by multer upload.single('file')
+
+      try {
+        // Send the file to the backend /api/import endpoint
+        const response = await fetch('/api/import', { // Assuming backend runs on same origin or proxy is set up
+          method: 'POST',
+          body: formData,
+          // No 'Content-Type' header needed for FormData, browser sets it with boundary
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          console.error('Backend upload error:', result);
+          throw new Error(result.error || `Upload failed with status ${response.status}`);
+        }
+
+        console.log('Backend upload success:', result);
+        // Pass BOTH data and the (potentially sanitized) filename from the backend response
+        onFileImport(result.data, result.fileName);
+        setUploadSuccess(true);
+
+      } catch (error) {
+        console.error('Upload/Parsing error:', error.message);
+        setParseError(error.message);
+        setUploadSuccess(false);
+      }
+
     } else {
       console.log('No file selected.');
     }
