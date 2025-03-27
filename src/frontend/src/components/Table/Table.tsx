@@ -86,14 +86,14 @@ export function GenericTable<T>({
 
 
   return (
-    // Main container div - Apply consistent glass effect
-    <div className="w-full rounded-xl border border-gray-200/80 dark:border-gray-700/50 shadow-lg overflow-hidden backdrop-blur-md bg-white/70 dark:bg-gray-800/60 transition-all duration-300 ease-in-out hover:shadow-xl"> {/* Matched parent styles */}
+    // Main container div - Light: indigo-100 tint
+    <div className="w-full rounded-xl border border-gray-200/80 dark:border-gray-700/50 shadow-lg overflow-hidden backdrop-blur-md bg-indigo-100/60 dark:bg-gray-800/60 transition-all duration-300 ease-in-out hover:shadow-xl"> {/* Matched parent styles */}
       {/* Table container */}
       <div className="overflow-x-auto">
         {/* Adjusted table background for contrast */}
         <table className="w-full border-collapse bg-transparent text-left text-sm text-gray-800 dark:text-gray-200">
-           {/* Refined header styling */}
-           <thead className="bg-gray-100/80 dark:bg-gray-700/70 backdrop-blur-sm sticky top-0 z-10"> {/* Sticky header */}
+           {/* Refined header styling - Light: indigo-100 tint */}
+           <thead className="bg-indigo-100/80 dark:bg-gray-700/70 backdrop-blur-sm sticky top-0 z-10"> {/* Sticky header */}
             {table.getHeaderGroups().map(headerGroup => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map(header => (
@@ -105,7 +105,7 @@ export function GenericTable<T>({
                        ${getHeaderClassName(header)} /* Apply padding from meta */
                        font-semibold text-gray-700 dark:text-gray-100 /* Adjusted text color */
                        cursor-pointer select-none transition-colors duration-150
-                       hover:bg-gray-200/70 dark:hover:bg-gray-600/60 /* Adjusted hover */
+                       hover:bg-indigo-200/70 dark:hover:bg-gray-600/60 /* Light: indigo-200 hover */
                        border-b border-gray-300/60 dark:border-gray-600/40 /* Subtle bottom border */
                        relative group
                      `}
@@ -150,8 +150,8 @@ export function GenericTable<T>({
                 key={row.id}
                 className={`
                   transition-colors duration-150 ease-in-out
-                  hover:bg-gray-100/60 dark:hover:bg-gray-700/50 /* Subtle hover */
-                  ${row.getIsSelected() ? 'bg-primary-50/60 dark:bg-primary-900/30' : ''} /* Subtle selection */
+                  hover:bg-indigo-100/60 dark:hover:bg-gray-700/50 /* Light: indigo-100 subtle hover */
+                  ${row.getIsSelected() ? 'bg-primary-100/60 dark:bg-primary-900/30' : ''} /* Light: primary-100 subtle selection */
                 `}
               >
                 {row.getVisibleCells().map(cell => (
@@ -171,8 +171,8 @@ export function GenericTable<T>({
         </table>
       </div>
 
-      {/* Pagination Controls START - Refined Styling */}
-      <div className="flex items-center justify-between p-3 border-t border-gray-200/80 dark:border-gray-700/50 bg-gray-50/80 dark:bg-gray-700/60 backdrop-blur-sm text-gray-600 dark:text-gray-300 text-sm sticky bottom-0 z-10"> {/* Sticky footer */}
+      {/* Pagination Controls START - Refined Styling - Light: indigo-50 tint */}
+      <div className="flex items-center justify-between p-3 border-t border-gray-200/80 dark:border-gray-700/50 bg-indigo-50/80 dark:bg-gray-700/60 backdrop-blur-sm text-gray-600 dark:text-gray-300 text-sm sticky bottom-0 z-10"> {/* Sticky footer */}
         {/* Left Side: Row Selection Info (Optional) */}
         <div className="flex-1 min-w-0"> {/* Added min-w-0 for flex shrink */}
           {enableRowSelection && (
@@ -184,9 +184,9 @@ export function GenericTable<T>({
 
         {/* Center: Page Navigation */}
         <div className="flex items-center gap-1 mx-4"> {/* Added horizontal margin */}
-          {/* Styled Buttons */}
+          {/* Styled Buttons - Light: hover:bg-indigo-100 */}
           <button
-            className="px-2 py-1 border border-gray-300/70 dark:border-gray-600/50 rounded-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-200/60 dark:hover:bg-gray-600/50 transition-all duration-150 ease-out active:scale-95 transform focus:outline-none focus:ring-1 focus:ring-primary-500"
+            className="px-2 py-1 border border-gray-300/70 dark:border-gray-600/50 rounded-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-100/70 dark:hover:bg-gray-600/50 transition-all duration-150 ease-out active:scale-95 transform focus:outline-none focus:ring-1 focus:ring-primary-500"
             onClick={() => table.setPageIndex(0)}
             disabled={!table.getCanPreviousPage()}
             aria-label="Go to first page"
@@ -194,7 +194,7 @@ export function GenericTable<T>({
             {'<<'}
           </button>
           <button
-            className="px-2 py-1 border border-gray-300/70 dark:border-gray-600/50 rounded-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-200/60 dark:hover:bg-gray-600/50 transition-all duration-150 ease-out active:scale-95 transform focus:outline-none focus:ring-1 focus:ring-primary-500"
+            className="px-2 py-1 border border-gray-300/70 dark:border-gray-600/50 rounded-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-100/70 dark:hover:bg-gray-600/50 transition-all duration-150 ease-out active:scale-95 transform focus:outline-none focus:ring-1 focus:ring-primary-500"
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
             aria-label="Go to previous page"
@@ -208,7 +208,7 @@ export function GenericTable<T>({
             </strong>
           </span>
           <button
-            className="px-2 py-1 border border-gray-300/70 dark:border-gray-600/50 rounded-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-200/60 dark:hover:bg-gray-600/50 transition-all duration-150 ease-out active:scale-95 transform focus:outline-none focus:ring-1 focus:ring-primary-500"
+            className="px-2 py-1 border border-gray-300/70 dark:border-gray-600/50 rounded-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-100/70 dark:hover:bg-gray-600/50 transition-all duration-150 ease-out active:scale-95 transform focus:outline-none focus:ring-1 focus:ring-primary-500"
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}
             aria-label="Go to next page"
@@ -216,7 +216,7 @@ export function GenericTable<T>({
             {'>'}
           </button>
           <button
-            className="px-2 py-1 border border-gray-300/70 dark:border-gray-600/50 rounded-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-200/60 dark:hover:bg-gray-600/50 transition-all duration-150 ease-out active:scale-95 transform focus:outline-none focus:ring-1 focus:ring-primary-500"
+            className="px-2 py-1 border border-gray-300/70 dark:border-gray-600/50 rounded-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-100/70 dark:hover:bg-gray-600/50 transition-all duration-150 ease-out active:scale-95 transform focus:outline-none focus:ring-1 focus:ring-primary-500"
             onClick={() => table.setPageIndex(table.getPageCount() - 1)}
             disabled={!table.getCanNextPage()}
             aria-label="Go to last page"
@@ -228,13 +228,13 @@ export function GenericTable<T>({
         {/* Right Side: Page Size Selector */}
         <div className="flex flex-1 justify-end items-center gap-2 min-w-0"> {/* Added min-w-0 */}
            <span className="whitespace-nowrap">Rows per page:</span> {/* Added whitespace-nowrap */}
-           {/* Styled Select */}
+           {/* Styled Select - Light: indigo-50 bg */}
            <select
              value={table.getState().pagination.pageSize}
              onChange={e => {
                table.setPageSize(Number(e.target.value))
              }}
-             className="p-1.5 border border-gray-300/70 dark:border-gray-600/50 rounded-md bg-white/80 dark:bg-gray-700/80 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none text-sm transition-colors duration-150"
+             className="p-1.5 border border-indigo-200/70 dark:border-gray-600/50 rounded-md bg-indigo-50/80 dark:bg-gray-700/80 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none text-sm transition-colors duration-150"
            >
              {[10, 25, 50, 100].map(pageSize => (
                <option key={pageSize} value={pageSize}>

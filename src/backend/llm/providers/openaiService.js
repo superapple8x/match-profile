@@ -242,7 +242,7 @@ ${statsString}
 
 **Instructions:**
 1.  Analyze the provided statistics/data in the context of the original user query.
-2.  Write a brief, easy-to-understand summary (1-3 sentences) explaining the key findings based *only* on the provided data.
+2.  Write a detailed, easy-to-understand summary explaining the key findings based *only* on the provided data. Elaborate on the meaning of the statistics or data points found in relation to the user's query.
 3.  If the data includes details about a specific row (e.g., max value details), mention the key information from that row relevant to the query.
 4.  If the data contains an 'error' or 'warning' key, state that the analysis could not be fully completed and mention the reason if provided.
 5.  Do not invent information not present in the data.

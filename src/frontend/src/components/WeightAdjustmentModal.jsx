@@ -16,9 +16,9 @@ function WeightAdjustmentModal({ selectedCriteria, onWeightChange, onClose }) {
       className="fixed inset-0 bg-black/60 backdrop-blur-md flex justify-center items-center z-[1000] transition-opacity duration-300 ease-out" // Matched ResultsDashboard modal overlay
       onClick={onClose} // Close modal on overlay click
     >
-      {/* Modal Content - Applied glass effect */}
+      {/* Modal Content - Light: indigo-50 tint */}
       <div
-        className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-lg p-6 rounded-xl shadow-2xl w-11/12 max-w-lg max-h-[80vh] overflow-y-auto transition-all duration-300 ease-out" // Matched ResultsDashboard modal content
+        className="bg-indigo-50/90 dark:bg-gray-800/90 backdrop-blur-lg p-6 rounded-xl shadow-2xl w-11/12 max-w-lg max-h-[80vh] overflow-y-auto transition-all duration-300 ease-out" // Matched ResultsDashboard modal content
         onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside content
       >
         <h3 className="text-xl font-semibold mb-2 text-gray-800 dark:text-gray-100">Adjust Attribute Weights</h3>
@@ -49,7 +49,7 @@ function WeightAdjustmentModal({ selectedCriteria, onWeightChange, onClose }) {
         <div className="flex justify-end mt-8"> {/* Increased margin */}
           <button
             onClick={onClose}
-            // Applied standard primary button style
+            // Applied standard primary button style (uses new primary colors from config)
             className="px-4 py-2 bg-primary-500 hover:bg-primary-600 dark:bg-primary-700 dark:hover:bg-primary-800 text-white font-semibold rounded-md shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
           >
             Apply Weights

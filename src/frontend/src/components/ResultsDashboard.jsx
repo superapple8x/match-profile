@@ -109,12 +109,12 @@ function ResultsDashboard({ searchResults, searchCriteria, importedData, isSearc
 
 
   return (
-    <div className="p-5 bg-white/70 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/80 dark:border-gray-700/50 rounded-xl shadow-lg transition-all duration-300 ease-in-out hover:shadow-xl min-h-[200px]">
+    <div className="p-5 bg-indigo-100/60 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/80 dark:border-gray-700/50 rounded-xl shadow-lg transition-all duration-300 ease-in-out hover:shadow-xl min-h-[200px]"> {/* Light: indigo-100 tint */}
       <h2 className="text-2xl font-semibold mb-5 text-gray-800 dark:text-gray-100">Results Dashboard</h2>
 
       {/* Display Search Criteria */}
       {searchCriteria && searchCriteria.length > 0 && (
-        <div className="mb-6 p-4 bg-gray-100/80 dark:bg-gray-700/60 backdrop-blur-sm rounded-lg border border-gray-200/60 dark:border-gray-600/40 transition-all duration-300 ease-in-out shadow-sm">
+        <div className="mb-6 p-4 bg-indigo-50/80 dark:bg-gray-700/60 backdrop-blur-sm rounded-lg border border-gray-200/60 dark:border-gray-600/40 transition-all duration-300 ease-in-out shadow-sm"> {/* Light: indigo-50 tint */}
           <h3 className="text-lg font-semibold mb-2 text-gray-700 dark:text-gray-200">Search Criteria:</h3>
           <ul className="list-disc list-inside space-y-1 text-sm text-gray-600 dark:text-gray-300">
             {searchCriteria.map((criteria, index) => (
@@ -136,14 +136,14 @@ function ResultsDashboard({ searchResults, searchCriteria, importedData, isSearc
           onClick={handleCloseBreakdown}
         >
           <div
-            className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-lg p-6 rounded-xl shadow-2xl w-11/12 max-w-2xl max-h-[90vh] overflow-y-auto transition-all duration-300 ease-out transform scale-95 group-hover:scale-100"
+            className="bg-indigo-50/90 dark:bg-gray-800/90 backdrop-blur-lg p-6 rounded-xl shadow-2xl w-11/12 max-w-2xl max-h-[90vh] overflow-y-auto transition-all duration-300 ease-out transform scale-95 group-hover:scale-100" // Light: indigo-50 tint
             onClick={(e) => e.stopPropagation()}
           >
             <MatchBreakdown match={selectedMatch} fullData={importedData} />
             <div className="flex justify-end mt-4">
               <button
                 onClick={handleCloseBreakdown}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100 font-semibold border border-gray-300 dark:border-gray-500 rounded-md shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                className="px-4 py-2 bg-indigo-100 hover:bg-indigo-200 dark:bg-gray-600 dark:hover:bg-gray-500 text-indigo-800 dark:text-gray-100 font-semibold border border-indigo-200 dark:border-gray-500 rounded-md shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 dark:focus:ring-gray-400 dark:focus:ring-offset-gray-800" // Light: indigo button
               >
                 Close
               </button>

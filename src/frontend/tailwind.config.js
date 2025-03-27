@@ -8,11 +8,11 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        primary: {
-          500: '#3b82f6', // Base blue
-          600: '#2563eb', // Hover blue
-          700: '#1d4ed8', // Dark base blue
-          800: '#1e40af', // Dark hover blue
+        primary: { // New Dark Indigo Palette
+          500: '#4f46e5', // Indigo 600 - Lighter primary
+          600: '#4338ca', // Indigo 700 - Main primary
+          700: '#3730a3', // Indigo 800 - Darker primary/hover
+          800: '#312e81', // Indigo 900 - Darkest primary/hover
         },
         gray: {
           150: '#f3f4f6', // Lighter gray for subtle backgrounds/borders

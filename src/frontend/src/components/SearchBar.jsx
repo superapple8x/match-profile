@@ -162,15 +162,15 @@ function SearchBar({ importedData, onSearch }) {
     <div
       ref={suggestionsRef}
       style={dropdownStyle}
-      className="w-full max-h-60 overflow-y-auto mt-1.5 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm border border-gray-200/80 dark:border-gray-600/70 rounded-lg shadow-2xl z-50 animate-fade-in-fast" // Slightly adjusted dark border
+      className="w-full max-h-60 overflow-y-auto mt-1.5 bg-indigo-50/95 dark:bg-gray-800/95 backdrop-blur-sm border border-gray-200/80 dark:border-gray-600/70 rounded-lg shadow-2xl z-50 animate-fade-in-fast" // Light: indigo-50 tint
     >
       {suggestions.map((suggestion, index) => (
         <div
           key={`${suggestion.type}-${suggestion.value}-${index}`}
           className={`px-3.5 py-2.5 cursor-pointer text-gray-800 dark:text-gray-200 transition-colors duration-150 ease-in-out text-sm ${ // Ensure text size consistency
             index === highlightedIndex
-              ? 'bg-gray-200 dark:bg-gray-600' // Simple gray highlight
-              : 'hover:bg-gray-100 dark:hover:bg-gray-700' // Simple gray hover
+              ? 'bg-indigo-200/70 dark:bg-gray-600' // Light: indigo-200 highlight
+              : 'hover:bg-indigo-100/80 dark:hover:bg-gray-700' // Light: indigo-100 hover
           }`}
           onClick={() => handleSuggestionSelect(suggestion)}
           dangerouslySetInnerHTML={{ __html: suggestion.display }}
@@ -188,21 +188,21 @@ function SearchBar({ importedData, onSearch }) {
 
 
   return (
-    <div className="flex flex-col w-full mb-6 border border-gray-200 dark:border-gray-700 rounded-xl p-5 bg-white dark:bg-gray-800 shadow-md transition-shadow duration-300 ease-in-out hover:shadow-lg">
+    <div className="flex flex-col w-full mb-6 border border-gray-200 dark:border-gray-700 rounded-xl p-5 bg-indigo-50/70 dark:bg-gray-800 shadow-md transition-shadow duration-300 ease-in-out hover:shadow-lg"> {/* Light: indigo-50 tint */}
       {/* Selected Criteria Tags */}
       {selectedCriteria.length > 0 && (
         <div className="flex flex-wrap mb-4 gap-2">
           {selectedCriteria.map((criteria, index) => (
             <span
               key={index}
-              // Using subtle gray-blue tags
-              className="inline-flex items-center bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-full px-2.5 py-0.5 text-xs font-medium text-gray-700 dark:text-gray-200 shadow-sm"
+              // Using subtle indigo tags
+              className="inline-flex items-center bg-indigo-100 dark:bg-gray-700 border border-indigo-200 dark:border-gray-600 rounded-full px-2.5 py-0.5 text-xs font-medium text-indigo-800 dark:text-gray-200 shadow-sm" // Light: indigo-100 bg, indigo-800 text
             >
               {criteria.attribute}:{String(criteria.value)}
               <button
                 type="button"
                 aria-label={`Remove ${criteria.attribute}:${criteria.value}`}
-                className="ml-1.5 -mr-0.5 flex-shrink-0 h-4 w-4 rounded-full inline-flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-200 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:bg-gray-500/20 focus:text-gray-700 dark:focus:bg-gray-600/30 dark:focus:text-gray-200 transition-all duration-150 ease-in-out"
+                className="ml-1.5 -mr-0.5 flex-shrink-0 h-4 w-4 rounded-full inline-flex items-center justify-center text-indigo-500 hover:text-indigo-700 hover:bg-indigo-200/70 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:bg-indigo-500/20 focus:text-indigo-700 dark:focus:bg-gray-600/30 dark:focus:text-gray-200 transition-all duration-150 ease-in-out" // Light: indigo colors
                 onClick={() => setSelectedCriteria(
                   selectedCriteria.filter((_, i) => i !== index)
                 )}
@@ -246,8 +246,8 @@ function SearchBar({ importedData, onSearch }) {
         {selectedCriteria.length > 0 && (
           <button
             onClick={() => setShowWeightAdjuster(true)}
-             // Subtle Lighter Gray Style for "Adjust Weights"
-            className={`${baseButtonClasses} ${secondaryButtonStyle} ${disabledClasses}`}
+             // Subtle Indigo Style for "Adjust Weights"
+            className={`${baseButtonClasses} bg-indigo-100 hover:bg-indigo-200 text-indigo-800 focus:ring-indigo-500 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 dark:focus:ring-gray-500 ${disabledClasses}`} // Light: Indigo secondary button
           >
              <AdjustmentsHorizontalIcon className="h-4 w-4 mr-2"/> Adjust Weights
           </button>
