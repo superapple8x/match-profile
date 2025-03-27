@@ -1,9 +1,9 @@
 const ILLMService = require('./ILLMService');
-// Placeholder for actual implementations - will be created in Phase 2 & 5
-// const OpenAILLMService = require('./providers/openaiService');
-// const GeminiLLMService = require('./providers/geminiService');
-// const DeepSeekLLMService = require('./providers/deepseekService');
-// const OllamaLLMService = require('./providers/ollamaService');
+// Import implemented services
+const OpenAILLMService = require('./providers/openaiService'); // Now implemented
+// const GeminiLLMService = require('./providers/geminiService'); // Placeholder
+// const DeepSeekLLMService = require('./providers/deepseekService'); // Placeholder
+// const OllamaLLMService = require('./providers/ollamaService'); // Placeholder
 
 /**
  * Factory function to get an instance of the configured LLM service.
@@ -22,9 +22,7 @@ function getLLMServiceInstance() {
 
   switch (provider) {
     case 'openai':
-      // return new OpenAILLMService(); // Uncomment when implemented
-      console.warn(`LLM provider '${provider}' is configured but the implementation is not yet uncommented in llmFactory.js.`);
-      throw new Error(`LLM provider '${provider}' is configured but not yet implemented.`);
+      return new OpenAILLMService(); // Use the implemented service
     case 'gemini':
       // return new GeminiLLMService(); // Uncomment when implemented
       console.warn(`LLM provider '${provider}' is configured but the implementation is not yet uncommented in llmFactory.js.`);
