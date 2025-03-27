@@ -90,6 +90,7 @@ function DataAnalysisPage({ datasetId, messages, setMessages, onCloseAnalysis })
                             summary: data.result.summary,
                             stats: data.result.stats,
                             logs: '', // Assume logs were sent incrementally
+                            generatedCode: data.result.generatedCode // Store the generated code
                         }
                     }]);
                     setIsLoading(false);
@@ -255,8 +256,8 @@ function DataAnalysisPage({ datasetId, messages, setMessages, onCloseAnalysis })
                     : 'bg-indigo-50/90 dark:bg-gray-700/80 text-gray-900 dark:text-gray-100'
                 }`}
                 >
-                {msg.sender === 'user' && <p className="text-sm">{msg.content}</p>}
-                {msg.sender === 'bot' && ( <div className="space-y-4 text-sm"> {/* Added text-sm for consistent size */}
+                {msg.sender === 'user' && <p className="text-sm whitespace-normal break-words">{msg.content}</p>}
+                {msg.sender === 'bot' && ( <div className="space-y-4 text-sm whitespace-normal break-words"> {/* Added text-sm, wrap, and break */}
                     {msg.content.error && ( <div className="text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/30 p-3 rounded-md shadow-inner">
                         <p className="font-semibold text-sm flex items-center mb-1"><ExclamationCircleIcon className="h-5 w-5 mr-1.5"/>Error:</p>
                         <p className="text-sm">{msg.content.error}</p>
@@ -266,9 +267,11 @@ function DataAnalysisPage({ datasetId, messages, setMessages, onCloseAnalysis })
                     </div> )}
                     {/* Render summary using ReactMarkdown, removed className */}
                     {msg.content.summary && (
-                         <ReactMarkdown>
+                        <div className="prose prose-sm dark:prose-invert max-w-none"> {/* Apply prose styles */}
+                            <ReactMarkdown>
                             {msg.content.summary}
-                         </ReactMarkdown>
+                            </ReactMarkdown>
+                        </div>
                     )}
                     {/* Horizontal scroll for images */}
                     {msg.content.imageUris && msg.content.imageUris.length > 0 && (
@@ -286,7 +289,12 @@ function DataAnalysisPage({ datasetId, messages, setMessages, onCloseAnalysis })
                     )}
                     {msg.content.stats && ( <CollapsibleCard title="Calculated Statistics">
                          {/* Light: indigo-100 tint */}
-                        <pre className="bg-indigo-100/60 dark:bg-gray-900 p-2 rounded text-xs overflow-x-auto">{JSON.stringify(msg.content.stats, null, 2)}</pre>
+                        <pre className="bg-indigo-100/60 dark:bg-gray-900 p-2 rounded text-xs overflow-x-auto max-h-60 overflow-y-auto">{JSON.stringify(msg.content.stats, null, 2)}</pre>
+                    </CollapsibleCard> )}
+                    {/* Display Generated Code */}
+                    {msg.content.generatedCode && ( <CollapsibleCard title="Generated Python Code">
+                         {/* Light: indigo-100 tint */}
+                        <pre className="bg-indigo-100/60 dark:bg-gray-900 p-2 rounded text-xs whitespace-pre-wrap break-all max-h-60 overflow-y-auto">{msg.content.generatedCode}</pre>
                     </CollapsibleCard> )}
                     {msg.content.logs && !msg.content.error && ( <CollapsibleCard title="Execution Logs">
                         <pre className="text-xs text-gray-500 dark:text-gray-400 whitespace-pre-wrap overflow-x-auto max-h-40">{msg.content.logs}</pre>
