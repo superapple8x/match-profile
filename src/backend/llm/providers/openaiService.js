@@ -295,7 +295,6 @@ Now, generate the summary based on the provided query and data.
           { role: "system", content: systemPrompt },
         ],
         temperature: 0.5,
-        max_tokens: 150,
       });
 
       const generatedSummary = completion.choices[0]?.message?.content?.trim();

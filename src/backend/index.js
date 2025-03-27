@@ -75,6 +75,7 @@ async function performAnalysis(res, analysisId, query, datasetId) {
         }
         sendSseUpdate(res, { status: `Generating Python code...` });
         const pythonCode = await llmService.generatePythonCode(query, metadata);
+        // Store the generated code to send later
         console.log(`[${analysisId}] Python code generated (first 100 chars):`, pythonCode.substring(0, 100));
         console.log(`[${analysisId}] --- Full Generated Python Code --- \n${pythonCode}\n--- End Generated Python Code ---`); // Log the full code
         // --- Save generated code to a temporary file for inspection ---
@@ -170,14 +171,18 @@ async function performAnalysis(res, analysisId, query, datasetId) {
              summary = "Analysis complete. LLM Service not available for summary generation.";
         }
 
-        // Send final result
+        // Construct final result
+        const finalResult = {
+            imageUris: imageUris,
+            summary: summary,
+            stats: stats, // Send the actual stats object
+            logs: null, // Logs were sent incrementally or as part of error
+            generatedCode: pythonCode // Include the generated code
+        };
+        console.log(`DEBUG_SSE_RESULT [${analysisId}] Lengths - Summary: ${summary?.length || 0}, Code: ${pythonCode?.length || 0}`);
+        console.log(`DEBUG_SSE_RESULT [${analysisId}] Full Summary:`, summary); // Log the full summary for debugging
         sendSseUpdate(res, {
-            result: {
-                imageUris: imageUris,
-                summary: summary,
-                stats: stats, // Send the actual stats object
-                logs: null // Logs were sent incrementally or as part of error
-            }
+            result: finalResult
         });
 
     } catch (error) {

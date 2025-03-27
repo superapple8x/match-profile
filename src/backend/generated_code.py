@@ -21,70 +21,21 @@ analysis_results = {}
 try:
     df = pd.read_csv('/input/data.csv', encoding='utf-8')
 
-    # Basic dataset info
-    analysis_results['dataset_info'] = {
-        'row_count': len(df),
-        'column_count': len(df.columns),
-        'columns': list(df.columns)
-    }
+    required_col = 'ProductivityLoss'
+    if required_col not in df.columns:
+        analysis_results['error'] = "Error: Column '" + required_col + "' not found."
+        print("Error: Column '" + required_col + "' not found.")
+    else:
+        df[f'{required_col}_numeric'] = pd.to_numeric(df[required_col], errors='coerce')
 
-    # Numeric columns summary
-    numeric_cols = df.select_dtypes(include=[np.number]).columns
-    numeric_summary = {}
-    for col in numeric_cols:
-        df[f'{col}_numeric'] = pd.to_numeric(df[col], errors='coerce')
-        if not df[f'{col}_numeric'].isnull().all():
-            numeric_summary[col] = {
-                'min': df[f'{col}_numeric'].min(),
-                'max': df[f'{col}_numeric'].max(),
-                'mean': df[f'{col}_numeric'].mean(),
-                'median': df[f'{col}_numeric'].median(),
-                'std': df[f'{col}_numeric'].std()
-            }
-    analysis_results['numeric_summary'] = numeric_summary
-
-    # Categorical columns summary
-    categorical_cols = df.select_dtypes(include=['object']).columns
-    categorical_summary = {}
-    for col in categorical_cols:
-        categorical_summary[col] = {
-            'unique_values': df[col].nunique(),
-            'top_value': df[col].mode().iloc[0] if not df[col].mode().empty else None,
-            'top_value_count': df[col].value_counts().max()
-        }
-    analysis_results['categorical_summary'] = categorical_summary
-
-    # Correlation matrix for numeric columns
-    if len(numeric_cols) > 1:
-        corr_matrix = df[[f'{col}_numeric' for col in numeric_cols]].corr()
-        analysis_results['correlation_matrix'] = corr_matrix.to_dict()
-
-        plt.figure(figsize=(12, 8))
-        sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0)
-        plt.title('Correlation Matrix of Numeric Columns')
-        plt.tight_layout()
-        plt.savefig('/output/plot_1.png')
-        plt.close()
-
-    # Distribution plots for numeric columns
-    for i, col in enumerate(numeric_cols[:3]):  # Limit to first 3 for brevity
-        if not df[f'{col}_numeric'].isnull().all():
-            plt.figure(figsize=(10, 6))
-            sns.histplot(df[f'{col}_numeric'].dropna(), kde=True)
-            plt.title(f'Distribution of {col}')
-            plt.tight_layout()
-            plt.savefig(f'/output/plot_{i+2}.png')
-            plt.close()
-
-    # Count plots for categorical columns
-    for i, col in enumerate(categorical_cols[:3]):  # Limit to first 3 for brevity
-        plt.figure(figsize=(10, 6))
-        sns.countplot(data=df, x=col)
-        plt.title(f'Count of {col}')
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        plt.savefig(f'/output/plot_{i+5}.png')
-        plt.close()
+        if not df[f'{required_col}_numeric'].isnull().all():
+            max_val = df[f'{required_col}_numeric'].max()
+            max_row = df[df[f'{required_col}_numeric'] == max_val].iloc[0].to_dict()
+            analysis_results['max_productivity_loss'] = max_val
+            analysis_results['person_with_max_loss'] = max_row
+        else:
+            analysis_results['warning'] = "Warning: Column '" + required_col + "' could not be treated as numeric."
+            print("Warning: Column '" + required_col + "' could not be treated as numeric.")
 
     final_stats = convert_numpy_types(analysis_results)
     with open('/output/stats.json', 'w') as f:
