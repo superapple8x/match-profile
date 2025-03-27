@@ -43,41 +43,66 @@ class OpenAILLMService extends ILLMService {
   }
 
   /**
-   * Constructs the prompt for Python code generation.
+   * Sanitizes a string to be safely embedded within a JavaScript template literal.
+   * Escapes backticks, dollar signs followed by curly braces.
+   * @param {string} str The string to sanitize.
+   * @returns {string} The sanitized string.
+   */
+  _sanitizeForTemplateLiteral(str) {
+      if (typeof str !== 'string') return str; // Return non-strings as is
+      return str
+          .replace(/\\/g, '\\\\') // Escape backslashes first
+          .replace(/`/g, '\\`')   // Escape backticks
+          .replace(/\$\{/g, '\\${'); // Escape ${ sequences
+  }
+
+
+  /**
+   * Constructs the prompt for Python code generation with enhanced safety.
    * @param {string} userQuery
    * @param {object} datasetMetadata
    * @returns {string} The system prompt content.
    */
   _buildCodeGenerationPrompt(userQuery, datasetMetadata) {
-    // Basic prompt template - needs refinement based on testing
     const metadataString = JSON.stringify(datasetMetadata, null, 2);
-    // Updated prompt:
+    // Sanitize the user query before inserting into the template literal
+    const sanitizedUserQuery = this._sanitizeForTemplateLiteral(userQuery);
+
+    // Enhanced prompt with stricter error handling and type checking:
     return `
-You are a data analysis assistant. Your task is to write Python code to analyze a dataset based on a user's query.
+You are a data analysis assistant writing Python code. Generate ONLY the raw Python code based on the user query and metadata.
 
 **Dataset Metadata:**
 \`\`\`json
 ${metadataString}
 \`\`\`
 
-**User Query:** "${userQuery}"
+**User Query:** "${sanitizedUserQuery}" {/* Use sanitized query */}
 
-**Instructions:**
-1.  Use pandas for data manipulation. Assume data is loaded into a DataFrame \`df\` from '/input/data.csv'.
-2.  Use matplotlib and seaborn for plotting.
-3.  **Plotting:**
-    *   If the query requires plot(s), generate them.
-    *   You MAY generate MULTIPLE plots if relevant (e.g., for a general EDA query).
-    *   Save EACH plot to a SEPARATE file in the '/output/' directory using indexed filenames: '/output/plot_1.png', '/output/plot_2.png', etc.
-    *   **Crucially:** Do NOT display plots (e.g., using \`plt.show()\`). Call \`plt.close()\` after saving each plot figure to free memory.
-4.  **Statistics:**
-    *   Calculate relevant summary statistics based on the query (e.g., counts, means, correlations, value counts).
-    *   Save ALL calculated statistics into a SINGLE JSON object to '/output/stats.json'.
-    *   **VERY IMPORTANT for JSON:** Before saving to JSON, ensure all values are JSON serializable. NumPy types (like int64, float64) are NOT directly serializable. Convert them to standard Python types (int, float). You MUST include and use the provided \`convert_numpy_types\` helper function for this.
-5.  **Code Output:** Output ONLY the raw Python code. No explanations, comments outside code, or markdown formatting.
-6.  **Error Handling:** Handle potential errors (e.g., missing columns, non-numeric data for numeric operations). If an error occurs during analysis (e.g., attempting a numeric operation on text), print a descriptive error message to standard output and continue if possible, or exit gracefully if not.
-7.  **Environment:** Assume a standard Python environment with pandas, matplotlib, seaborn installed.
-8.  **Correlations:** When calculating correlations (e.g., \`df.corr()\`), select numeric columns first (\`df.select_dtypes(include='number').corr()\`).
+**CRITICAL Instructions (Follow Strictly):**
+1.  **Imports:** ALWAYS import necessary libraries: \`import pandas as pd\`, \`import numpy as np\`, \`import matplotlib.pyplot as plt\`, \`import seaborn as sns\`, \`import json\`.
+2.  **Data Loading:** Load data using: \`df = pd.read_csv('/input/data.csv', encoding='utf-8')\`. Assume this is the first step inside the main try block. Handle potential bad lines if necessary within the try block. **DO NOT use the 'errors' keyword argument in read_csv.**
+3.  **Error Handling (Mandatory):**
+    *   Wrap ALL analysis code (AFTER loading data) inside a single \`try...except Exception as e:\` block.
+    *   Inside the \`except\` block, you MUST print the specific Python error using standard concatenation: \`print("Python Error: " + str(e))\`. Do NOT raise the exception again.
+4.  **Column Existence:** BEFORE using any column name from the user query or analysis plan, explicitly check if it exists in \`df.columns\`. If not, print an informative error (e.g., \`print("Error: Column 'XYZ' not found in dataset.")\`) and stop analysis for that part, or store an error message in the stats.
+5.  **Numeric Operations (Mandatory Safety):**
+    *   BEFORE performing calculations like \`.mean()\`, \`.median()\`, \`.max()\`, \`.idxmax()\`, \`.corr()\`, or plotting histograms/scatter plots on a column assumed to be numeric, you MUST attempt to convert it to numeric using \`pd.to_numeric(df['column_name'], errors='coerce')\`.
+    *   Store the result in a new temporary column (e.g., \`df['column_name_numeric']\`).
+    *   Check if the temporary numeric column contains non-NaN values (\`not df['column_name_numeric'].isnull().all()\`) before proceeding with the calculation.
+    *   If the column cannot be converted or contains only NaN after conversion, print an informative error (e.g., \`print("Warning: Column 'column_name' could not be treated as numeric.")\`) or store this info in the stats, and skip the numeric operation.
+    *   Use the temporary numeric column for the calculation (e.g., \`df['column_name_numeric'].max()\`).
+6.  **Plotting:**
+    *   Generate plots ONLY if requested or highly relevant (like for EDA).
+    *   Save EACH plot to a SEPARATE file: '/output/plot_1.png', '/output/plot_2.png', etc.
+    *   Use \`plt.figure(figsize=(10, 6))\`, create the plot, use \`plt.tight_layout()\`, then \`plt.savefig('/output/plot_X.png')\`, and ALWAYS call \`plt.close()\` immediately after saving each figure. Do NOT use \`plt.show()\`.
+7.  **Statistics / Data Output ('/output/stats.json'):**
+    *   Calculate relevant summary statistics OR find specific data points as requested.
+    *   If finding specific rows (e.g., max value row), extract the necessary information into a dictionary.
+    *   Store ALL results (stats dict, row dict, error messages if any) in a SINGLE Python dictionary named \`analysis_results\`.
+    *   **JSON Conversion:** Include and ALWAYS use the \`convert_numpy_types\` helper function (provided below) on the \`analysis_results\` dictionary BEFORE saving it to '/output/stats.json'. \`final_stats = convert_numpy_types(analysis_results)\`.
+    *   Save the converted dictionary: \`with open('/output/stats.json', 'w') as f: json.dump(final_stats, f, indent=2)\`.
+8.  **Code Output:** Output ONLY the raw Python code. No explanations, comments outside code, or markdown formatting.
 
 **Helper Function (MUST INCLUDE and USE for saving stats.json):**
 \`\`\`python
@@ -86,60 +111,7 @@ import json
 import pandas as pd # Assuming pandas is imported
 
 def convert_numpy_types(obj):
-    if isinstance(obj, (np.integer, np.int64)): # Handle numpy integers specifically
-        return int(obj)
-    elif isinstance(obj, (np.floating, np.float64)): # Handle numpy floats specifically
-        return float(obj)
-    elif isinstance(obj, np.ndarray):
-        return obj.tolist()
-    elif isinstance(obj, pd.Timestamp):
-        return obj.isoformat() # Convert timestamps to strings
-    elif isinstance(obj, (pd.Series, pd.Index)): # Convert pandas Series/Index
-        return obj.tolist()
-    elif isinstance(obj, dict):
-        return {str(k): convert_numpy_types(v) for k, v in obj.items()} # Ensure keys are strings
-    elif isinstance(obj, (list, tuple)):
-        return [convert_numpy_types(i) for i in obj]
-    # Add handling for other non-serializable types if necessary
-    elif hasattr(obj, 'isoformat'): # General date/time objects
-        return obj.isoformat()
-    try:
-        # Attempt a default serialization test; if it fails, convert to string
-        json.dumps(obj)
-        return obj
-    except TypeError:
-        return str(obj) # Fallback: convert unknown types to string
-\`\`\`
-
-**Example Snippet (Saving Multiple Plots):**
-\`\`\`python
-import matplotlib.pyplot as plt
-import pandas as pd
-# ... perform analysis ...
-
-# Plot 1
-plt.figure(figsize=(10, 6)) # Recommend setting figsize
-# ... create plot 1 ...
-plt.tight_layout() # Adjust layout
-plt.savefig('/output/plot_1.png')
-plt.close() # Essential: close figure
-
-# Plot 2
-plt.figure(figsize=(10, 6))
-# ... create plot 2 ...
-plt.tight_layout()
-plt.savefig('/output/plot_2.png')
-plt.close()
-\`\`\`
-
-**Example Snippet (Saving Stats with Conversion):**
-\`\`\`python
-import json
-import numpy as np
-import pandas as pd
-
-# --- Include the convert_numpy_types function definition here ---
-def convert_numpy_types(obj):
+    # DO NOT MODIFY THIS FUNCTION
     if isinstance(obj, (np.integer, np.int64)): return int(obj)
     elif isinstance(obj, (np.floating, np.float64)): return float(obj)
     elif isinstance(obj, np.ndarray): return obj.tolist()
@@ -150,130 +122,188 @@ def convert_numpy_types(obj):
     elif hasattr(obj, 'isoformat'): return obj.isoformat()
     try: json.dumps(obj); return obj
     except TypeError: return str(obj)
-# --- End of function definition ---
-
-# ... perform analysis ...
-raw_stats = {'mean_age': df['age'].mean(), 'counts': df['category'].value_counts()} # May contain numpy/pandas types
-
-# Convert before saving
-stats = convert_numpy_types(raw_stats)
-
-with open('/output/stats.json', 'w') as f:
-    json.dump(stats, f, indent=2) # Use indent for readability
 \`\`\`
 
-Now, generate the Python code for the user query, remembering to include and use the \`convert_numpy_types\` function when saving statistics. Ensure plots are saved as '/output/plot_1.png', '/output/plot_2.png', etc.
+**Example Structure:**
+\`\`\`python
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import json
+
+# --- Include convert_numpy_types function definition here ---
+def convert_numpy_types(obj):
+    # ... (function code as defined above) ...
+    if isinstance(obj, (np.integer, np.int64)): return int(obj)
+    # ... (rest of function) ...
+    except TypeError: return str(obj)
+# --- End of function definition ---
+
+analysis_results = {} # Initialize results dict
+
+try:
+    # Load data safely
+    df = pd.read_csv('/input/data.csv', encoding='utf-8') # Corrected example: removed errors='replace'
+
+    # Check if required column exists
+    required_col = 'SomeColumn'
+    if required_col not in df.columns:
+        analysis_results['error'] = "Error: Column '" + required_col + "' not found."
+        print("Error: Column '" + required_col + "' not found.")
+    else:
+        # Attempt numeric conversion if needed
+        df[f'{required_col}_numeric'] = pd.to_numeric(df[required_col], errors='coerce')
+
+        # Perform analysis only if conversion worked
+        if not df[f'{required_col}_numeric'].isnull().all():
+            max_val = df[f'{required_col}_numeric'].max()
+            analysis_results['max_value'] = max_val
+            # ... other analysis ...
+
+            # Example Plot
+            plt.figure(figsize=(10, 6))
+            sns.histplot(df[f'{required_col}_numeric'].dropna())
+            plt.title(f'Distribution of {required_col}')
+            plt.tight_layout()
+            plt.savefig('/output/plot_1.png')
+            plt.close()
+
+        else:
+            analysis_results['warning'] = "Warning: Column '" + required_col + "' could not be treated as numeric."
+            print("Warning: Column '" + required_col + "' could not be treated as numeric.")
+
+    # Convert the entire results dict before saving
+    final_stats = convert_numpy_types(analysis_results)
+    with open('/output/stats.json', 'w') as f:
+        json.dump(final_stats, f, indent=2)
+
+except Exception as e:
+    # MANDATORY: Print the specific error
+    print("Python Error: " + str(e))
+
+\`\`\`
+
+Generate the Python code now, adhering strictly to all instructions.
 `;
   }
 
-  /**
-   * Generates Python code using the OpenAI API.
-   * @param {string} userQuery
-   * @param {object} datasetMetadata
-   * @returns {Promise<string>} Generated Python code.
-   */
+  // generatePythonCode remains the same as before
   async generatePythonCode(userQuery, datasetMetadata) {
     console.log(`${this.serviceName} Service: Generating Python code for query: "${userQuery}" using model ${this.codeModel}`);
+    // Call the function with sanitization
     const systemPrompt = this._buildCodeGenerationPrompt(userQuery, datasetMetadata);
 
+    try {
+      console.log(`${this.serviceName} Service: Attempting API call to model ${this.codeModel}...`);
+      const completion = await this.client.chat.completions.create({
+        model: this.codeModel,
+        messages: [
+          { role: "system", content: systemPrompt },
+        ],
+        temperature: 0.2, // Keep low temp for code
+      });
 
-        try {
-          const completion = await this.client.chat.completions.create({
-            model: this.codeModel, // Use the dynamic model name stored in the instance
-            messages: [
-              { role: "system", content: systemPrompt },
-              // { role: "user", content: `Generate the Python code for my query: "${userQuery}"` } // User message might not be needed if prompt is clear
-            ], // End of messages array
-            temperature: 0.2, // Lower temperature for more deterministic code output
-          }); // End of create() call object
-
+      console.log(`${this.serviceName} Service: API call completed.`);
       const generatedCode = completion.choices[0]?.message?.content?.trim();
 
       if (!generatedCode) {
         throw new Error(`${this.serviceName} API returned an empty response for code generation.`);
       }
 
-      // Basic validation: Check if it looks like Python code (heuristic)
-      // More robust validation might involve trying to parse it, but that's complex here.
-      if (!generatedCode.includes('import ') && !generatedCode.includes('def ') && !generatedCode.includes('print(')) {
-         console.warn(`${this.serviceName} Service: Generated content doesn't obviously look like Python code:`, generatedCode.substring(0, 100) + '...');
-         // Decide whether to throw an error or return the potentially incorrect code
-         // For now, let's return it and let the execution phase handle errors.
-      }
-
       console.log(`${this.serviceName} Service: Code generation successful.`);
-      // Clean potential markdown code blocks if the LLM doesn't follow instructions
-      return generatedCode.replace(/^```python\n?/, '').replace(/\n?```$/, '');
+      // --- Post-processing: Force removal of 'errors' argument from pd.read_csv ---
+      const cleanedCode = generatedCode.replace(/(pd\.read_csv\([^)]*?)(,\s*errors\s*=\s*['"][^'"]*['"]|errors\s*=\s*['"][^'"]*['"]\s*,?)([^)]*\))/g, '$1$3');
+      console.log(`${this.serviceName} Service: Applied post-processing to remove errors= argument.`);
+      // Clean potential markdown code blocks from the already cleaned code
+      return cleanedCode.replace(/^```python\n?/, '').replace(/\n?```$/, '');
 
+    } catch (error) {
+      // Log the specific error from the API call
+      console.error(`${this.serviceName} Service: Error during code generation API call:`, error.message);
+      // Also log the prompt that might have caused the issue (optional, might be large)
+      // console.error("Prompt that potentially caused error:", systemPrompt);
+      throw new Error(`${this.serviceName} API call failed: ${error.message}`);
+    }
+  }
 
-        } catch (error) {
-          console.error(`${this.serviceName} Service: Error during code generation API call:`, error);
-          throw new Error(`${this.serviceName} API call failed: ${error.message}`);
-        }
-    } // Closing brace for generatePythonCode method
-
-  /**
-   * Constructs the prompt for text summary generation.
-   * @param {string} userQuery
-   * @param {object} statistics
-   * @returns {string} The system prompt content.
-   */
-  _buildTextSummaryPrompt(userQuery, statistics) {
+  // _buildTextSummaryPrompt remains the same
+   _buildTextSummaryPrompt(userQuery, statistics) {
     const statsString = JSON.stringify(statistics, null, 2);
     return `
 You are a data analysis assistant. Your task is to provide a concise, natural language summary based on the results of a data analysis query.
 
-**Original User Query:** "${userQuery}"
+**Original User Query:** "${userQuery}" {/* Keep original query here for context */}
 
-**Calculated Statistics:**
+**Calculated Statistics / Data Found:**
 \`\`\`json
 ${statsString}
 \`\`\`
 
 **Instructions:**
-1.  Analyze the provided statistics in the context of the original user query.
-2.  Write a brief, easy-to-understand summary (1-3 sentences) explaining the key findings based *only* on the provided statistics.
-3.  Do not invent information not present in the statistics.
-4.  Focus on the most relevant insights related to the user's query.
-5.  Output only the natural language summary text. Do not include greetings, explanations of your process, or markdown formatting.
+1.  Analyze the provided statistics/data in the context of the original user query.
+2.  Write a brief, easy-to-understand summary (1-3 sentences) explaining the key findings based *only* on the provided data.
+3.  If the data includes details about a specific row (e.g., max value details), mention the key information from that row relevant to the query.
+4.  If the data contains an 'error' or 'warning' key, state that the analysis could not be fully completed and mention the reason if provided.
+5.  Do not invent information not present in the data.
+6.  Focus on the most relevant insights related to the user's query.
+7.  Output only the natural language summary text. Do not include greetings, explanations of your process, or markdown formatting.
 
-**Example:**
-If the query was "Show average income by gender" and stats were \`{"mean_income_male": 55000, "mean_income_female": 62000}\`, a good summary would be: "The analysis shows that the average income for females ($62,000) was higher than for males ($55,000) in this dataset."
+**Example 1 (Stats):**
+Query: "Show average income by gender"
+Data: \`{"mean_income_male": 55000, "mean_income_female": 62000}\`
+Summary: "The analysis shows that the average income for females ($62,000) was higher than for males ($55,000) in this dataset."
 
-Now, generate the summary based on the provided query and statistics.
+**Example 2 (Specific Row):**
+Query: "Which user spent the most time?"
+Data: \`{"max_time_details": {"UserID": 123, "Total Time Spent": 500, "Location": "USA"}}\`
+Summary: "UserID 123 spent the most time (500 units), located in the USA."
+
+**Example 3 (Error):**
+Query: "Analyze Column Z"
+Data: \`{"error": "Error: Column 'Column Z' not found."}\`
+Summary: "The analysis could not be completed because column 'Column Z' was not found in the dataset."
+
+Now, generate the summary based on the provided query and data.
 `;
   }
 
-  /**
-   * Generates a textual summary using the OpenAI API based on calculated statistics.
-   * @param {string} userQuery The original user query.
-   * @param {object | null} statistics The statistics calculated by the Python code (from stats.json), or null if none were generated/found.
-   * @returns {Promise<string>} Generated text summary.
-   */
+  // generateTextSummary remains the same
   async generateTextSummary(userQuery, statistics) {
     console.log(`${this.serviceName} Service: Generating text summary for query: "${userQuery}" using model ${this.textModel}`);
 
+    // Also generate summary if stats contains an error message from the Python script
     if (!statistics || Object.keys(statistics).length === 0) {
-      console.log(`${this.serviceName} Service: No statistics provided, returning default message.`);
-      return "No specific statistics were calculated by the analysis code to generate a summary from.";
-    }
+       console.log(`${this.serviceName} Service: No statistics/data provided, returning default message.`);
+       return "No specific statistics or data were generated by the analysis code to summarize.";
+     }
+
+    // If stats contains an error key, prioritize summarizing that
+     if (statistics.error) {
+         console.log(`${this.serviceName} Service: Analysis results contain an error message.`);
+     } else if (statistics.warning) {
+         console.log(`${this.serviceName} Service: Analysis results contain a warning message.`);
+     }
+
 
     const systemPrompt = this._buildTextSummaryPrompt(userQuery, statistics);
 
     try {
       const completion = await this.client.chat.completions.create({
-        model: this.textModel, // Use dynamic model name
+        model: this.textModel,
         messages: [
           { role: "system", content: systemPrompt },
-          // No explicit user message needed here as the system prompt contains all context
         ],
-        temperature: 0.5, // Slightly higher temperature for more natural language
-        max_tokens: 150, // Limit summary length
+        temperature: 0.5,
+        max_tokens: 150,
       });
 
       const generatedSummary = completion.choices[0]?.message?.content?.trim();
 
       if (!generatedSummary) {
+        // If LLM fails to summarize an error/warning, provide a generic fallback
+        if (statistics.error) return `Analysis failed: ${statistics.error}`;
+        if (statistics.warning) return `Analysis completed with warning: ${statistics.warning}`;
         throw new Error(`${this.serviceName} API returned an empty response for text summary generation.`);
       }
 
@@ -282,8 +312,9 @@ Now, generate the summary based on the provided query and statistics.
 
     } catch (error) {
       console.error(`${this.serviceName} Service: Error during text summary API call:`, error);
-      // Return a fallback message instead of throwing an error to the main flow?
-      // Or rethrow? Let's rethrow for now so the main endpoint knows it failed.
+      // Provide more specific fallback if summary gen fails for error/warning stats
+      if (statistics.error) return `Analysis failed: ${statistics.error}`;
+      if (statistics.warning) return `Analysis completed with warning: ${statistics.warning}`;
       throw new Error(`${this.serviceName} API call for summary failed: ${error.message}`);
     }
   }

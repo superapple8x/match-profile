@@ -5,18 +5,22 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const fsp = require('fs').promises; // Use fs.promises
-const path = require('path'); // Added for path resolution if needed
+const path = require('path');
+const crypto = require('crypto'); // For generating unique IDs
 const Docker = require('dockerode');
-// const { promisify } = require('util'); // No longer needed with fs.promises
 const db = require('./config/db');
 const fileOperationsRoutes = require('./routes/fileOperations');
-const metadataService = require('./services/metadataService'); // Import Metadata Service
-const { getLLMServiceInstance } = require('./llm/llmFactory'); // Import LLM Factory
-const dockerExecutor = require('./services/dockerExecutor'); // Import Docker Executor Service
+const metadataService = require('./services/metadataService');
+const { getLLMServiceInstance } = require('./llm/llmFactory');
+const dockerExecutor = require('./services/dockerExecutor');
 
 const docker = new Docker();
-const readFileAsync = fsp.readFile; // Use fsp.readFile directly
-const rmAsync = fsp.rm; // Use fsp.rm directly
+const readFileAsync = fsp.readFile;
+const rmAsync = fsp.rm;
+
+// --- In-memory store for active analysis requests ---
+const activeAnalyses = {};
+// ---
 
  // --- Initialize LLM Service ---
 let llmService;
@@ -25,7 +29,7 @@ try {
   console.log(`Successfully initialized LLM Service for provider: ${process.env.LLM_PROVIDER}`);
 } catch (error) {
   console.error(`Failed to initialize LLM Service: ${error.message}`);
-  llmService = null; // Ensure llmService is null if initialization fails
+  llmService = null;
 }
 // --- ---
 
@@ -33,252 +37,239 @@ const app = express();
 const port = process.env.PORT || 3001;
 
 // Middleware
-app.use(cors()); // Enable CORS for all routes
+app.use(cors());
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
 // Log request headers
 app.use((req, res, next) => {
   console.log('Request received:', req.method, req.url);
-  // console.log('Request Headers:', req.headers); // Optional: Can be verbose
   next();
 });
 
 // Mount the file operations routes
 app.use('/api', fileOperationsRoutes);
 
- // // Data Analysis Endpoint (Old MCP/Plotly version - commented out)
- // app.post('/api/analyze', async (req, res) => {
- //   try {
- //     // 1. Receive request (user's request and data)
- //     const { request: userRequest, data } = req.body;
- //
- //     // 2. Call the analyze_data tool on the ollama-data-analysis MCP server
- //     // (This part will use the MCP SDK to call the tool)
- //     const mcpResult = await use_mcp_tool(
- //       "ollama-data-analysis",
- //       "analyze_data",
- //       {
- //         request: userRequest,
- //         data: data,
- //       }
- //     );
- //
- //
- //     // 3. Receive result (JSON string: { code: "...", analysis: "..." })
- //     const { code, analysis } = JSON.parse(mcpResult.content[0].text);
- //
- //     // 4. Execute the Python code using Docker (Placeholder)
- //     // 4. Execute the Python code using Docker
- //     const chartJson = await executePythonCode(code);
- //
- //     // 5. Return the Plotly chart JSON and LLM analysis
- //     res.json({
- //       chart: chartJson,
- //       analysis: analysis
- //     });
- //
- //   } catch (error) {
- //     console.error("Error in /api/analyze:", error);
- //     res.status(500).json({ error: "An error occurred during analysis." });
- //   }
- // });
- // async function executePythonCode(code) {
- //   const imageName = 'python-plotly-executor';
- //   const containerName = `python-plotly-executor-${Date.now()}`;
- //   const tempFileName = `temp_script_${Date.now()}.py`;
- //
- //   try {
- //     // Write the code to a temporary file
- //     await fsp.writeFile(tempFileName, code);
- //
- //     // Build the Docker image (if it doesn't exist)
- //     const images = await docker.listImages({ filters: { reference: [imageName] } });
- //     if (images.length === 0) {
- //       const buildStream = await docker.buildImage({ context: __dirname, src: ['Dockerfile'] }, { t: imageName });
- //       await new Promise((resolve, reject) => {
- //         docker.modem.followProgress(buildStream, (err, res) => err ? reject(err) : resolve(res));
- //       });
- //     }
- //
- //     // Create a container
- //     const container = await docker.createContainer({
- //       Image: imageName,
- //       Cmd: ['python', `/app/${tempFileName}`],
- //       HostConfig: {
- //         Binds: [
- //           `${__dirname}/${tempFileName}:/app/${tempFileName}`
- //         ],
- //         NetworkMode: 'none', // No network access
- //         Memory: 128 * 1024 * 1024, // 128MB memory limit
- //         CpuShares: 102,  // Limit CPU usage (relative to other containers)
- //       },
- //       Tty: false,
- //     });
- //
- //     // Start the container
- //     await container.start();
- //
- //     // Wait for the container to finish
- //     const data = await container.wait();
- //
- //      // Get the container's output
- //     const logs = await container.logs({ stdout: true, stderr: true });
- //     const output = logs.toString('utf8');
- //
- //     // Remove the container
- //     await container.remove();
- //     // Remove the temporary file
- //     await fsp.unlink(tempFileName);
- //
- //     // Attempt to parse the output as JSON (Plotly chart)
- //     try {
- //       const chartJson = JSON.parse(output);
- //       return chartJson;
- //     } catch (error) {
- //       console.error("Error parsing Plotly output:", error);
- //       console.error("Container output:", output);
- //       throw new Error("Invalid Plotly output from Python code.");
- //     }
- //
- //   } catch (error) {
- //     console.error("Error executing Python code in Docker:", error);
- //      // Attempt to remove the temporary file
- //     try {
- //       await fsp.unlink(tempFileName);
- //     } catch(unlinkError) {
- //       // ignore error
- //     }
- //     throw error;
- //   }
- // }
+// --- Helper Function to send SSE updates ---
+function sendSseUpdate(res, data) {
+  // Ensure connection is still open before writing
+  if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+  } else {
+      console.log(`[SSE] Attempted to write to closed stream for analysis ID (unknown at this point).`);
+  }
+}
+// ---
 
- // New Data Analysis Endpoint (Updated for multiple images)
- app.post('/api/analyze-data', async (req, res) => {
-   console.log('Received request for /api/analyze-data');
-   let tempDirToClean = null; // Keep track of temp dir for cleanup on error
+// --- Analysis Logic (Refactored) ---
+async function performAnalysis(res, analysisId, query, datasetId) {
+    let tempDirToClean = null;
+    let pythonLogs = ''; // Store logs specifically from python execution
+    try {
+        sendSseUpdate(res, { status: 'Fetching dataset metadata...' });
+        const metadata = await metadataService.getMetadata(datasetId);
+        console.log(`[${analysisId}] Metadata fetched`);
 
-   try {
-     const { query, datasetId } = req.body;
+        if (!llmService) {
+            throw new Error("LLM Service is not initialized.");
+        }
+        sendSseUpdate(res, { status: `Generating Python code...` });
+        const pythonCode = await llmService.generatePythonCode(query, metadata);
+        console.log(`[${analysisId}] Python code generated (first 100 chars):`, pythonCode.substring(0, 100));
+        console.log(`[${analysisId}] --- Full Generated Python Code --- \n${pythonCode}\n--- End Generated Python Code ---`); // Log the full code
+        // --- Save generated code to a temporary file for inspection ---
+        const tempCodePath = path.join(__dirname, 'generated_code.py');
+        await fsp.writeFile(tempCodePath, pythonCode, 'utf8');
+        console.log(`[${analysisId}] Saved generated code to ${tempCodePath}`);
+        // ---
 
-     if (!query || !datasetId) {
-       return res.status(400).json({ error: 'Missing query or datasetId in request body' });
-     }
+        sendSseUpdate(res, { status: 'Preparing analysis environment...' });
+        const execResult = await dockerExecutor.runPythonInSandbox(pythonCode, datasetId);
+        tempDirToClean = execResult.tempDir; // Store for potential cleanup
+        pythonLogs = execResult.logs || ''; // Capture logs
 
-     // --- Phase 1 ---
-     console.log(`Fetching metadata for dataset: ${datasetId}`);
-     const metadata = await metadataService.getMetadata(datasetId);
-     console.log('Metadata fetched');
+        console.log(`[${analysisId}] Docker execution finished.`);
+        if (pythonLogs) {
+            // Send logs immediately if available, maybe truncate if too long?
+            // For now, send all logs. Consider truncation later if needed.
+            sendSseUpdate(res, { logs: pythonLogs });
+        }
 
-     if (!llmService) {
-       throw new Error("LLM Service is not initialized. Check configuration and implementation.");
-     }
-     console.log(`Generating Python code using ${process.env.LLM_PROVIDER} for query: "${query}"`);
-     const pythonCode = await llmService.generatePythonCode(query, metadata);
-     console.log('Python code generated (first 100 chars):', pythonCode.substring(0, 100));
-     // --- ---
+        // Handle explicit errors from Docker executor
+        if (execResult.error) {
+            // Add python logs to the error context if available
+            throw new Error(`Execution failed: ${execResult.error}${pythonLogs ? `\nLogs:\n${pythonLogs}` : ''}`);
+        }
 
-     // --- Phase 3: Execute Code in Docker ---
-     console.log(`Executing Python code in Docker sandbox for dataset: ${datasetId}`);
-     const execResult = await dockerExecutor.runPythonInSandbox(pythonCode, datasetId);
-     tempDirToClean = execResult.tempDir;
+        let imageUris = [];
+        let stats = null;
 
-     console.log('Docker execution finished. Logs:', execResult.logs);
+        sendSseUpdate(res, { status: 'Processing results...' });
 
-     if (execResult.error) {
-       console.error(`Docker execution error: ${execResult.error}`);
-       return res.status(500).json({
-           error: `Error executing analysis code: ${execResult.error}`,
-           logs: execResult.logs
-       });
-     }
+        // Read images
+        if (execResult.imagePaths && execResult.imagePaths.length > 0) {
+            console.log(`[${analysisId}] Found ${execResult.imagePaths.length} plot image(s). Reading...`);
+            for (const imagePath of execResult.imagePaths) {
+                try {
+                    const imageBuffer = await readFileAsync(imagePath);
+                    const imageUri = `data:image/png;base64,${imageBuffer.toString('base64')}`;
+                    imageUris.push(imageUri);
+                    console.log(`[${analysisId}] Successfully read and encoded ${path.basename(imagePath)}`);
+                } catch (readError) {
+                    console.error(`[${analysisId}] Error reading image file ${imagePath}:`, readError);
+                }
+            }
+        } else {
+             console.log(`[${analysisId}] No plot images found.`);
+        }
 
-     let imageUris = []; // Array to hold multiple image data URIs
-     let stats = null;
+        // Read stats - CRITICAL CHECK
+        if (execResult.statsPath) {
+            try {
+                const statsBuffer = await readFileAsync(execResult.statsPath);
+                stats = JSON.parse(statsBuffer.toString('utf8'));
+                console.log(`[${analysisId}] Successfully read and parsed stats.json`);
+            } catch (readError) {
+                console.error(`[${analysisId}] Error reading/parsing stats file ${execResult.statsPath}:`, readError);
+                // Treat failure to read/parse stats as an error, including logs
+                throw new Error(`Failed to process results (stats.json): ${readError.message}${pythonLogs ? `\nLogs:\n${pythonLogs}` : ''}`);
+            }
+        } else {
+             // *** If execution succeeded BUT stats.json is missing, it's an implicit error ***
+             console.warn(`[${analysisId}] Execution succeeded (exit 0) but stats.json was not generated.`);
+             // Throw an error including the Python logs
+             throw new Error(`Analysis script ran but did not produce the expected stats output.${pythonLogs ? `\nScript Output:\n${pythonLogs}` : '\n(No script output captured)'}`);
+        }
 
-     // Read generated images if they exist
-     if (execResult.imagePaths && execResult.imagePaths.length > 0) {
-       console.log(`Found ${execResult.imagePaths.length} plot image(s). Reading...`);
-       for (const imagePath of execResult.imagePaths) {
-           try {
-             const imageBuffer = await readFileAsync(imagePath);
-             const imageUri = `data:image/png;base64,${imageBuffer.toString('base64')}`;
-             imageUris.push(imageUri);
-             console.log(`Successfully read and encoded ${path.basename(imagePath)}`);
-           } catch (readError) {
-             console.error(`Error reading generated image file ${imagePath}:`, readError);
-             // Log error but continue without this specific image
-           }
-       }
-     } else {
-        console.log('No plot images found in execution results.');
-     }
+        // Cleanup temp dir *before* summary generation
+        if (tempDirToClean) {
+            try {
+                console.log(`[${analysisId}] Cleaning up temporary directory: ${tempDirToClean}`);
+                await rmAsync(tempDirToClean, { recursive: true, force: true });
+                tempDirToClean = null;
+            } catch (rmError) {
+                console.error(`[${analysisId}] Error cleaning up temporary directory ${tempDirToClean}:`, rmError);
+            }
+        }
 
-     // Read generated stats if it exists
-     if (execResult.statsPath) {
-       try {
-         const statsBuffer = await readFileAsync(execResult.statsPath);
-         stats = JSON.parse(statsBuffer.toString('utf8'));
-         console.log('Successfully read and parsed stats.json');
-       } catch (readError) {
-         console.error(`Error reading or parsing stats file ${execResult.statsPath}:`, readError);
-         // Log error but continue without stats
-       }
-     } else {
-        console.log('No stats file found in execution results.');
-     }
+        // Generate Summary (Only if stats were successfully loaded)
+        let summary = 'Analysis complete.';
+        if (stats && llmService) { // Check if stats object exists
+            try {
+                sendSseUpdate(res, { status: `Generating summary...` });
+                summary = await llmService.generateTextSummary(query, stats); // Pass original query and loaded stats
+                console.log(`[${analysisId}] Text summary generated.`);
+            } catch (summaryError) {
+                console.error(`[${analysisId}] LLM summary generation failed: ${summaryError.message}`);
+                summary = `Analysis complete, but summary generation failed: ${summaryError.message}`;
+            }
+        } else if (!stats) {
+            summary = "Analysis complete, but no statistics were generated to summarize.";
+        } else { // llmService missing
+             console.warn(`[${analysisId}] LLM Service not initialized, skipping summary generation.`);
+             summary = "Analysis complete. LLM Service not available for summary generation.";
+        }
 
-     // Cleanup the temporary directory
-     if (tempDirToClean) {
-       try {
-         console.log(`Cleaning up temporary directory: ${tempDirToClean}`);
-         await rmAsync(tempDirToClean, { recursive: true, force: true });
-         tempDirToClean = null; // Nullify after successful removal
-       } catch (rmError) {
-         console.error(`Error cleaning up temporary directory ${tempDirToClean}:`, rmError);
-       }
-     }
-     // --- ---
+        // Send final result
+        sendSseUpdate(res, {
+            result: {
+                imageUris: imageUris,
+                summary: summary,
+                stats: stats, // Send the actual stats object
+                logs: null // Logs were sent incrementally or as part of error
+            }
+        });
 
-     // --- Phase 4: Generate Text Summary ---
-     let summary = 'Analysis complete. Summary generation skipped or failed.';
-     if (llmService) {
-       try {
-         console.log(`Generating text summary using ${process.env.LLM_PROVIDER} for query: "${query}"`);
-         summary = await llmService.generateTextSummary(query, stats);
-         console.log('Text summary generated:', summary);
-       } catch (summaryError) {
-         console.error(`LLM summary generation failed: ${summaryError.message}`);
-         summary = `Analysis complete, but summary generation failed: ${summaryError.message}`;
-       }
-     } else {
-        console.warn("LLM Service not initialized, skipping summary generation.");
-        summary = "Analysis complete. LLM Service not available for summary generation.";
-     }
-     // --- ---
+    } catch (error) {
+        console.error(`[${analysisId}] Error during analysis:`, error);
+        // Send error details, potentially including logs captured within the error message itself
+        sendSseUpdate(res, { error: error.message || "An unknown error occurred during analysis." });
+    } finally {
+        // Always clean up stored analysis data and temp dir if not already cleaned
+        delete activeAnalyses[analysisId];
+        console.log(`[${analysisId}] Removed analysis data from memory.`);
+        if (tempDirToClean) {
+            try {
+                console.log(`[${analysisId}] Cleaning up leftover temporary directory: ${tempDirToClean}`);
+                await rmAsync(tempDirToClean, { recursive: true, force: true });
+            } catch (rmError) {
+                console.error(`[${analysisId}] Error cleaning up leftover temp directory ${tempDirToClean}:`, rmError);
+            }
+        }
+        // Close the SSE connection if it wasn't already closed by an error
+        if (!res.writableEnded) {
+            res.end();
+            console.log(`[${analysisId}] SSE connection closed.`);
+        }
+    }
+}
+// ---
 
-     // Final Response (Updated)
-     res.json({
-       imageUris: imageUris, // Send array of image URIs
-       summary: summary,
-       stats: stats,
-       logs: execResult.logs
-     });
+// --- New Endpoints ---
 
-   } catch (error) {
-     console.error("Error in /api/analyze-data:", error);
-     // Attempt cleanup if tempDirToClean was set before the error
-     if (tempDirToClean) {
-       try {
-         console.error(`Cleaning up temporary directory ${tempDirToClean} due to error...`);
-         await rmAsync(tempDirToClean, { recursive: true, force: true });
-       } catch (rmError) {
-         console.error(`Error cleaning up temporary directory ${tempDirToClean} during error handling:`, rmError);
-       }
-     }
-     res.status(500).json({ error: `An error occurred during data analysis: ${error.message}` });
-   }
- });
+// 1. Start Analysis Endpoint (POST)
+app.post('/api/start-analysis', (req, res) => {
+    console.log('Received request for /api/start-analysis');
+    const { query, datasetId } = req.body;
+
+    if (!query || !datasetId) {
+        return res.status(400).json({ error: 'Missing query or datasetId' });
+    }
+
+    const analysisId = crypto.randomUUID();
+    activeAnalyses[analysisId] = { query, datasetId, startTime: Date.now() };
+
+    console.log(`[${analysisId}] Analysis started for dataset: ${datasetId}`);
+    res.json({ analysisId });
+});
+
+// 2. Analysis Stream Endpoint (GET - SSE)
+app.get('/api/analysis-stream/:analysisId', (req, res) => {
+    const { analysisId } = req.params;
+    console.log(`[${analysisId}] SSE connection requested.`);
+
+    const analysisData = activeAnalyses[analysisId];
+
+    if (!analysisData) {
+        console.error(`[${analysisId}] Invalid or expired analysis ID.`);
+        // Ensure SSE headers aren't sent if connection is immediately closed
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: 'Invalid or expired analysis ID' }));
+    }
+
+    // Set headers for SSE *only if* analysis ID is valid
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        // Optional: Add CORS headers if needed, although CORS middleware might handle it
+        'Access-Control-Allow-Origin': '*',
+    });
+
+    // Send initial confirmation
+    sendSseUpdate(res, { status: 'Connected, starting analysis...' });
+
+    // Start the analysis process asynchronously
+    performAnalysis(res, analysisId, analysisData.query, analysisData.datasetId);
+
+    // Keep connection open, but handle client disconnect
+    req.on('close', () => {
+        console.log(`[${analysisId}] SSE client disconnected.`);
+        // If analysis data still exists, it means performAnalysis hasn't finished/cleaned up
+        if (activeAnalyses[analysisId]) {
+             console.log(`[${analysisId}] Cleaning up analysis data due to client disconnect.`);
+             delete activeAnalyses[analysisId];
+             // TODO: Implement cancellation logic for dockerExecutor if possible/needed
+        }
+        // Ensure the response is ended if not already
+        if (!res.writableEnded) {
+            res.end();
+        }
+    });
+});
+
+// --- Remove old /api/analyze-data endpoint ---
+// (Code removed)
 
  // Test route
  app.get('/', (req, res) => {
@@ -327,10 +318,10 @@ process.on('exit', () => {
     logStream.end();
 });
 process.on('SIGINT', () => {
-    logStream.end();
-    process.exit();
+    console.log("SIGINT received, closing log stream...");
+    logStream.end(() => { process.exit(0); });
 });
 process.on('SIGTERM', () => {
-    logStream.end();
-    process.exit();
+    console.log("SIGTERM received, closing log stream...");
+    logStream.end(() => { process.exit(0); });
 });
