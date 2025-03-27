@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom'; // Import createPortal
 import PropTypes from 'prop-types';
 import WeightAdjustmentModal from './WeightAdjustmentModal';
+import { MagnifyingGlassIcon, AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline'; // Added icons
 
 // Note: Removed darkMode prop, relying on Tailwind's dark: variants
 function SearchBar({ importedData, onSearch }) {
@@ -39,26 +40,31 @@ function SearchBar({ importedData, onSearch }) {
         value: a,
         display: a.replace(
           new RegExp(`(${searchTerm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'i'), // Escape regex special chars
-          '<mark class="bg-yellow-200 dark:bg-yellow-600">$1</mark>' // Tailwind class for highlight
+          '<mark class="bg-yellow-200 dark:bg-yellow-600 rounded">$1</mark>' // Tailwind class for highlight + rounded
         )
       })));
     } else if (attr && val !== undefined && importedData?.length > 0) { // Suggest values only if val part exists
-      const uniqueValues = [...new Set(
-        importedData.map(item => item[attr]).filter(v => v !== null && v !== undefined) // Filter out null/undefined
-      )];
-      const searchTerm = val.toLowerCase();
-      const matches = uniqueValues
-        .filter(v => String(v).toLowerCase().includes(searchTerm))
-        .slice(0, 5);
+      // Only suggest if the attribute exists
+      if (attributes.includes(attr)) {
+          const uniqueValues = [...new Set(
+            importedData.map(item => item[attr]).filter(v => v !== null && v !== undefined) // Filter out null/undefined
+          )];
+          const searchTerm = val.toLowerCase();
+          const matches = uniqueValues
+            .filter(v => String(v).toLowerCase().includes(searchTerm))
+            .slice(0, 5);
 
-      setSuggestions(matches.map(v => ({
-        type: 'value',
-        value: v,
-        display: String(v).replace(
-          new RegExp(`(${searchTerm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'i'), // Escape regex special chars
-          '<mark class="bg-yellow-200 dark:bg-yellow-600">$1</mark>' // Tailwind class for highlight
-        )
-      })));
+          setSuggestions(matches.map(v => ({
+            type: 'value',
+            value: v,
+            display: String(v).replace(
+              new RegExp(`(${searchTerm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'i'), // Escape regex special chars
+              '<mark class="bg-yellow-200 dark:bg-yellow-600 rounded">$1</mark>' // Tailwind class for highlight + rounded
+            )
+          })));
+       } else {
+            setSuggestions([]); // Don't suggest values if attribute is invalid
+       }
     } else {
       setSuggestions([]);
     }
@@ -66,7 +72,7 @@ function SearchBar({ importedData, onSearch }) {
 
   const handleSuggestionSelect = (suggestion) => {
     if (suggestion.type === 'attribute') {
-      setInputValue(`${suggestion.value}:`);
+      setInputValue(`${suggestion.value}: `); // Add space after colon
       setSuggestions([]); // Clear suggestions after selection
       inputRef.current.focus();
     } else if (suggestion.type === 'value') {
@@ -104,7 +110,7 @@ function SearchBar({ importedData, onSearch }) {
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         setHighlightedIndex(prev =>
-          prev > 0 ? prev - 1 : 0 // Allow selecting the first item
+          prev > 0 ? prev - 1 : 0
         );
       } else if ((e.key === 'Tab' || e.key === 'Enter') && highlightedIndex >= 0) {
         e.preventDefault();
@@ -113,9 +119,9 @@ function SearchBar({ importedData, onSearch }) {
     }
     // Enter to confirm search criteria if input has format "attr:val" and no suggestion selected
     else if (e.key === 'Enter' && highlightedIndex === -1 && inputValue.includes(':')) {
-       e.preventDefault(); // Prevent form submission if any
+       e.preventDefault();
        const [attr, val] = inputValue.split(':').map(s => s.trim());
-       if (attr && val) {
+       if (attr && val && attributes.includes(attr)) { // Also check if attribute is valid
          setSelectedCriteria([...selectedCriteria, {
            attribute: attr,
            value: val,
@@ -123,6 +129,9 @@ function SearchBar({ importedData, onSearch }) {
          }]);
          setInputValue('');
          setSuggestions([]);
+       } else if (attr && val) {
+           // Maybe show an error tooltip/message if attribute is invalid? For now, just don't add.
+           console.warn(`Invalid attribute entered: ${attr}`);
        }
      }
   };
@@ -139,32 +148,31 @@ function SearchBar({ importedData, onSearch }) {
     if (inputRef.current && suggestions.length > 0) {
       const rect = inputRef.current.getBoundingClientRect();
       setDropdownStyle({
-        position: 'absolute', // Use absolute positioning relative to viewport
-        top: `${rect.bottom + window.scrollY}px`, // Position below the input
-        left: `${rect.left + window.scrollX}px`, // Align with the left of the input
-        width: `${rect.width}px`, // Match input width
+        position: 'absolute',
+        top: `${rect.bottom + window.scrollY}px`,
+        left: `${rect.left + window.scrollX}px`,
+        width: `${rect.width}px`,
       });
     }
-  }, [suggestions.length]); // Recalculate when suggestions appear/disappear
+  }, [suggestions.length]);
 
 
   // Component for the suggestions dropdown content
   const SuggestionsDropdown = (
     <div
       ref={suggestionsRef}
-      style={dropdownStyle} // Apply calculated position
-      className="w-full max-h-60 overflow-y-auto mt-1.5 bg-white/95 dark:bg-gray-700/95 backdrop-blur-md border border-gray-200/80 dark:border-gray-600/50 rounded-lg shadow-2xl z-50 animate-fade-in-fast" // Increased max-h, adjusted mt, bg, border, shadow, added animation class
+      style={dropdownStyle}
+      className="w-full max-h-60 overflow-y-auto mt-1.5 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm border border-gray-200/80 dark:border-gray-600/70 rounded-lg shadow-2xl z-50 animate-fade-in-fast" // Slightly adjusted dark border
     >
       {suggestions.map((suggestion, index) => (
         <div
-          key={`${suggestion.type}-${suggestion.value}-${index}`} // More robust key
-          className={`px-3.5 py-2.5 cursor-pointer text-gray-800 dark:text-gray-200 transition-colors duration-150 ease-in-out ${ // Adjusted padding, added transition
+          key={`${suggestion.type}-${suggestion.value}-${index}`}
+          className={`px-3.5 py-2.5 cursor-pointer text-gray-800 dark:text-gray-200 transition-colors duration-150 ease-in-out text-sm ${ // Ensure text size consistency
             index === highlightedIndex
-              ? 'bg-primary-100/90 dark:bg-primary-700/70' // Adjusted highlight opacity
-              : 'hover:bg-gray-100/80 dark:hover:bg-gray-600/60' // Adjusted hover opacity
+              ? 'bg-gray-200 dark:bg-gray-600' // Simple gray highlight
+              : 'hover:bg-gray-100 dark:hover:bg-gray-700' // Simple gray hover
           }`}
           onClick={() => handleSuggestionSelect(suggestion)}
-          // Use Tailwind class for highlighting instead of <mark> tag directly in display
           dangerouslySetInnerHTML={{ __html: suggestion.display }}
         />
       ))}
@@ -172,27 +180,34 @@ function SearchBar({ importedData, onSearch }) {
   );
 
 
+  // Define button styles based on reference
+  const baseButtonClasses = "inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800";
+  const primaryButtonStyle = "bg-gray-700 text-gray-100 hover:bg-gray-600 focus:ring-gray-500 dark:bg-gray-600 dark:text-gray-100 dark:hover:bg-gray-500 dark:focus:ring-gray-400";
+  const secondaryButtonStyle = "bg-gray-200 hover:bg-gray-300 text-gray-800 focus:ring-gray-500 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 dark:focus:ring-gray-500"; // Lighter gray for secondary
+  const disabledClasses = "disabled:opacity-50 disabled:cursor-not-allowed";
+
+
   return (
-    // Main container - Reverted to opaque background, simpler shadow/border
     <div className="flex flex-col w-full mb-6 border border-gray-200 dark:border-gray-700 rounded-xl p-5 bg-white dark:bg-gray-800 shadow-md transition-shadow duration-300 ease-in-out hover:shadow-lg">
       {/* Selected Criteria Tags */}
       {selectedCriteria.length > 0 && (
-        <div className="flex flex-wrap mb-4 gap-2"> {/* Increased margin-bottom and gap */}
+        <div className="flex flex-wrap mb-4 gap-2">
           {selectedCriteria.map((criteria, index) => (
             <span
               key={index}
-              className="inline-flex items-center bg-primary-100/80 dark:bg-primary-900/60 border border-primary-200/80 dark:border-primary-700/50 rounded-full px-2.5 py-0.5 text-xs font-medium text-primary-800 dark:text-primary-100 shadow-sm" // Adjusted opacity, border, rounded-full, padding, text size, shadow
+              // Using subtle gray-blue tags
+              className="inline-flex items-center bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-full px-2.5 py-0.5 text-xs font-medium text-gray-700 dark:text-gray-200 shadow-sm"
             >
-              {criteria.attribute}:{String(criteria.value)} {/* Ensure value is string */}
-              <button // Changed span to button for accessibility
+              {criteria.attribute}:{String(criteria.value)}
+              <button
                 type="button"
                 aria-label={`Remove ${criteria.attribute}:${criteria.value}`}
-                className="ml-1.5 -mr-0.5 flex-shrink-0 h-4 w-4 rounded-full inline-flex items-center justify-center text-red-500/80 dark:text-red-400/80 hover:bg-red-200/50 dark:hover:bg-red-800/50 hover:text-red-600 dark:hover:text-red-300 focus:outline-none focus:bg-red-500/20 focus:text-red-700 dark:focus:bg-red-700/30 dark:focus:text-red-200 transition-all duration-150 ease-in-out" // Adjusted remove button style
+                className="ml-1.5 -mr-0.5 flex-shrink-0 h-4 w-4 rounded-full inline-flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-200 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:bg-gray-500/20 focus:text-gray-700 dark:focus:bg-gray-600/30 dark:focus:text-gray-200 transition-all duration-150 ease-in-out"
                 onClick={() => setSelectedCriteria(
                   selectedCriteria.filter((_, i) => i !== index)
                 )}
               >
-                <svg className="h-2.5 w-2.5" stroke="currentColor" fill="none" viewBox="0 0 8 8"> {/* SVG for X icon */}
+                <svg className="h-2.5 w-2.5" stroke="currentColor" fill="none" viewBox="0 0 8 8">
                   <path strokeLinecap="round" strokeWidth="1.5" d="M1 1l6 6m0-6L1 7" />
                 </svg>
               </button>
@@ -201,9 +216,8 @@ function SearchBar({ importedData, onSearch }) {
         </div>
       )}
 
-      {/* Search Input - Removed relative positioning from wrapper */}
-      <div className="w-full"> {/* Removed group class as focus-within won't work with portal */}
-        {/* Input styling remains slightly transparent for depth */}
+      {/* Search Input */}
+      <div className="w-full">
         <input
           ref={inputRef}
           type="text"
@@ -211,7 +225,8 @@ function SearchBar({ importedData, onSearch }) {
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           placeholder="Enter attribute:value (e.g., Age:30)"
-          className="w-full p-3.5 border border-gray-300/60 dark:border-gray-600/40 rounded-lg text-base bg-white/80 dark:bg-gray-700/80 backdrop-blur-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-primary-500/80 focus:border-transparent outline-none transition-all duration-200 ease-in-out hover:border-gray-400/80 dark:hover:border-gray-500/60 shadow-sm focus:shadow-md" // Increased padding, adjusted border/bg opacity, added placeholder style, refined focus/hover, added shadow
+          // Subtle input style
+          className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-gray-500 focus:border-transparent outline-none transition-colors duration-200 ease-in-out shadow-sm"
         />
 
         {/* Render Suggestions Dropdown via Portal */}
@@ -219,22 +234,22 @@ function SearchBar({ importedData, onSearch }) {
       </div>
 
       {/* Action Buttons */}
-      <div className="flex mt-4 space-x-3"> {/* Increased margin-top */}
+      <div className="flex mt-4 space-x-3">
         <button
           onClick={handleSearch}
           disabled={selectedCriteria.length === 0}
-          // Updated "Search" button style - Teal Gradient
-          // Reverted "Search" button style - Solid Indigo
-          className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-gray-900 transition-colors duration-200 ease-in-out disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-indigo-400 disabled:dark:bg-indigo-800 disabled:hover:bg-indigo-400 disabled:dark:hover:bg-indigo-800"
+          // Subtle Dark Gray Style for "Search"
+          className={`${baseButtonClasses} ${primaryButtonStyle} ${disabledClasses}`}
         >
-          Search
+           <MagnifyingGlassIcon className="h-4 w-4 mr-2"/> Search
         </button>
         {selectedCriteria.length > 0 && (
           <button
             onClick={() => setShowWeightAdjuster(true)}
-            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100 font-semibold border border-gray-300 dark:border-gray-500 rounded-md shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 dark:focus:ring-offset-gray-800" // Matched App.jsx button style (secondary variant)
+             // Subtle Lighter Gray Style for "Adjust Weights"
+            className={`${baseButtonClasses} ${secondaryButtonStyle} ${disabledClasses}`}
           >
-            Adjust Weights
+             <AdjustmentsHorizontalIcon className="h-4 w-4 mr-2"/> Adjust Weights
           </button>
         )}
       </div>
@@ -244,7 +259,7 @@ function SearchBar({ importedData, onSearch }) {
         <WeightAdjustmentModal
           selectedCriteria={selectedCriteria}
           onWeightChange={(attr, weight) => setSelectedCriteria(
-            selectedCriteria.map(c => c.attribute === attr ? {...c, weight: Number(weight) || 0 } : c) // Ensure weight is number
+            selectedCriteria.map(c => c.attribute === attr ? {...c, weight: Number(weight) || 0 } : c)
           )}
           onClose={() => setShowWeightAdjuster(false)}
         />
@@ -254,13 +269,10 @@ function SearchBar({ importedData, onSearch }) {
 }
 
 SearchBar.propTypes = {
-  // Ensure importedData is an array of objects, even if empty
   importedData: PropTypes.arrayOf(PropTypes.object),
   onSearch: PropTypes.func.isRequired,
-  // darkMode prop removed
 };
 
-// Default prop for importedData if it might be null/undefined initially
 SearchBar.defaultProps = {
   importedData: [],
 };

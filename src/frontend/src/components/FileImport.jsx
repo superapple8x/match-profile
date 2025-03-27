@@ -81,17 +81,19 @@ function FileImport({ onFileImport }) {
     ${uploadSuccess ? 'border-green-400 dark:border-green-500 bg-green-50/80 dark:bg-green-900/30' : ''}
   `;
 
-  // Common button classes using solid indigo, matching toggle style format
-  const commonButtonClasses = "inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-gray-900 transition-colors duration-200 ease-in-out";
-  const disabledButtonClasses = "disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-indigo-400 disabled:dark:bg-indigo-800 disabled:hover:bg-indigo-400 disabled:dark:hover:bg-indigo-800"; // Adjusted disabled style
+  // Common button classes using the subtle dark gray style
+  const baseButtonClasses = "inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2";
+  const activeStyle = "bg-gray-700 text-gray-100 hover:bg-gray-600 focus:ring-gray-500 dark:bg-gray-600 dark:text-gray-100 dark:hover:bg-gray-500 dark:focus:ring-gray-400 dark:focus:ring-offset-gray-900"; // Primary action style
+  const disabledClasses = "disabled:opacity-50 disabled:cursor-not-allowed";
+
 
   return (
     <div className={containerClasses.trim()}>
       <div className="mb-4">
         <label
           htmlFor="file-upload"
-          // Solid Indigo Style
-          className={`${commonButtonClasses} cursor-pointer`}
+          // Subtle Gray Style for "Choose File"
+          className={`${baseButtonClasses} ${activeStyle} cursor-pointer`}
         >
           Choose File
         </label>
@@ -119,8 +121,8 @@ function FileImport({ onFileImport }) {
       <button
         onClick={handleUpload}
         disabled={!file || isUploading || uploadSuccess}
-        // Solid Indigo Style - Apply common classes + disabled classes
-        className={`${commonButtonClasses} ${disabledButtonClasses}`}
+        // Subtle Gray Style for "Upload" (can adjust color slightly if needed, e.g., teal-700/teal-600, but gray is consistent)
+        className={`${baseButtonClasses} ${activeStyle} ${disabledClasses}`} // Using same gray style
       >
         {isUploading ? (
             <>
@@ -136,6 +138,7 @@ function FileImport({ onFileImport }) {
                 Upload
             </>
         )}
+
       </button>
       {uploadSuccess && (
         <div className="mt-3 text-sm text-green-600 dark:text-green-400 flex items-center">

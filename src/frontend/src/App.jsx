@@ -126,9 +126,12 @@ function App() {
 
 
   // Common button classes using solid indigo
-  const commonButtonClasses = "w-full flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-gray-900";
-  const disabledButtonClasses = "bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed opacity-70"; // Use distinct gray for disabled
-  const activeButtonClasses = "bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-800";
+  // Base classes for the new subtle button style
+  const baseButtonClasses = "w-full flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2";
+  // Style for active primary buttons (darker gray)
+  const primaryButtonActiveClasses = "bg-gray-700 text-gray-100 hover:bg-gray-600 focus:ring-gray-500 dark:bg-gray-600 dark:text-gray-100 dark:hover:bg-gray-500 dark:focus:ring-gray-400 dark:focus:ring-offset-gray-900";
+  // Style for disabled buttons (lighter gray)
+  const primaryButtonDisabledClasses = "bg-gray-400 dark:bg-gray-700 text-gray-600 dark:text-gray-400 cursor-not-allowed opacity-70";
 
 
   return (
@@ -145,7 +148,7 @@ function App() {
              <button
                onClick={openAnalysisView}
                disabled={!datasetId}
-               className={`${commonButtonClasses} ${!datasetId ? disabledButtonClasses : activeButtonClasses}`}
+               className={`${baseButtonClasses} ${!datasetId ? primaryButtonDisabledClasses : primaryButtonActiveClasses}`}
              >
                <ChatBubbleLeftRightIcon className="h-5 w-5 mr-2" />
                LLM Analysis
