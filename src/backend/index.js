@@ -11,13 +11,16 @@ const db = require('./config/db');
 const fileOperationsRoutes = require('./routes/fileOperations');
 const metadataService = require('./services/metadataService'); // Import Metadata Service
 const { getLLMServiceInstance } = require('./llm/llmFactory'); // Import LLM Factory
+const dockerExecutor = require('./services/dockerExecutor'); // Import Docker Executor Service
 
 const docker = new Docker();
-const writeFileAsync = promisify(fs.writeFile);
+const writeFileAsync = promisify(fs.writeFile); // Note: fs.promises is generally preferred now
+const readFileAsync = promisify(fs.readFile); // Needed for reading results
 const unlinkAsync = promisify(fs.unlink);
-
-// --- Initialize LLM Service ---
-// This will throw an error until a provider is implemented and uncommented in the factory
+const rmAsync = promisify(fs.rm); // Needed for cleaning up temp dir
+ 
+ // --- Initialize LLM Service ---
+ // This will throw an error until a provider is implemented and uncommented in the factory
 let llmService;
 try {
   llmService = getLLMServiceInstance();
@@ -177,22 +180,73 @@ app.use('/api', fileOperationsRoutes);
      console.log('Python code generated (first 100 chars):', pythonCode.substring(0, 100)); // Log snippet (optional)
      // --- ---
 
-     // TODO: Phase 3 - Implement Docker Sandboxing Logic
-     // const { imagePath, statsPath } = await dockerExecutor.run(pythonCode, datasetId, metadata); // Pass metadata if needed by executor
- 
+     // --- Phase 3: Execute Code in Docker ---
+     console.log(`Executing Python code in Docker sandbox for dataset: ${datasetId}`);
+     const execResult = await dockerExecutor.runPythonInSandbox(pythonCode, datasetId);
+
+     console.log('Docker execution finished. Logs:', execResult.logs); // Log execution output
+
+     if (execResult.error) {
+       console.error(`Docker execution error: ${execResult.error}`);
+       // Optionally include logs in the error response to the client for debugging
+       return res.status(500).json({
+           error: `Error executing analysis code: ${execResult.error}`,
+           logs: execResult.logs // Be cautious about exposing detailed logs
+       });
+     }
+
+     let imageUri = null;
+     let stats = null;
+
+     // Read generated image if it exists
+     if (execResult.imagePath) {
+       try {
+         const imageBuffer = await readFileAsync(execResult.imagePath);
+         imageUri = `data:image/png;base64,${imageBuffer.toString('base64')}`;
+         console.log('Successfully read and encoded plot.png');
+       } catch (readError) {
+         console.error(`Error reading generated image file ${execResult.imagePath}:`, readError);
+         // Decide if this is a critical error - maybe just log and continue without image
+       }
+     }
+
+     // Read generated stats if it exists
+     if (execResult.statsPath) {
+       try {
+         const statsBuffer = await readFileAsync(execResult.statsPath);
+         stats = JSON.parse(statsBuffer.toString('utf8'));
+         console.log('Successfully read and parsed stats.json:', stats);
+       } catch (readError) {
+         console.error(`Error reading or parsing stats file ${execResult.statsPath}:`, readError);
+         // Decide if this is critical - maybe just log and continue without stats
+       }
+     }
+
+     // Cleanup the temporary directory now that we've read the files
+     if (execResult.tempDir) {
+       try {
+         console.log(`Cleaning up temporary directory: ${execResult.tempDir}`);
+         await rmAsync(execResult.tempDir, { recursive: true, force: true });
+       } catch (rmError) {
+         console.error(`Error cleaning up temporary directory ${execResult.tempDir}:`, rmError);
+       }
+     }
+     // --- ---
+
      // TODO: Phase 4 - Implement LLM Summary Generation (using stats)
      // const summary = await llmService.generateTextSummary(query, stats);
- 
-     // Placeholder response for Phase 1
+     const summary = `Summary generation pending (Phase 4). Stats received: ${JSON.stringify(stats)}`; // Placeholder
+
+     // Final Response (Phase 3 - without summary)
      res.json({
-       message: 'Endpoint /api/analyze-data reached successfully. Implementation pending.',
-       receivedQuery: query,
-       receivedDatasetId: datasetId,
-       // imageUri: 'data:image/png;base64,...', // Example for later phases
-       // summary: 'Analysis summary text...' // Example for later phases
+       imageUri: imageUri, // data:image/png;base64,... or null
+       summary: summary, // Placeholder text for now
+       stats: stats, // The actual stats object or null
+       logs: execResult.logs // Optionally include logs for debugging
      });
- 
+
    } catch (error) {
+     // Catch errors from metadata, LLM, or Docker execution setup
      console.error("Error in /api/analyze-data:", error);
      res.status(500).json({ error: "An error occurred during data analysis." });
    }
