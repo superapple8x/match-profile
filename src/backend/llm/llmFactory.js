@@ -28,9 +28,8 @@ function getLLMServiceInstance() {
       console.warn(`LLM provider '${provider}' is configured but the implementation is not yet uncommented in llmFactory.js.`);
       throw new Error(`LLM provider '${provider}' is configured but not yet implemented.`);
     case 'deepseek':
-      // return new DeepSeekLLMService(); // Uncomment when implemented
-      console.warn(`LLM provider '${provider}' is configured but the implementation is not yet uncommented in llmFactory.js.`);
-      throw new Error(`LLM provider '${provider}' is configured but not yet implemented.`);
+      // Use the modified OpenAILLMService which handles deepseek config internally
+      return new OpenAILLMService();
     case 'ollama':
       // return new OllamaLLMService(); // Uncomment when implemented
       console.warn(`LLM provider '${provider}' is configured but the implementation is not yet uncommented in llmFactory.js.`);

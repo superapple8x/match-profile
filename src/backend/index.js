@@ -233,11 +233,27 @@ app.use('/api', fileOperationsRoutes);
      }
      // --- ---
 
-     // TODO: Phase 4 - Implement LLM Summary Generation (using stats)
-     // const summary = await llmService.generateTextSummary(query, stats);
-     const summary = `Summary generation pending (Phase 4). Stats received: ${JSON.stringify(stats)}`; // Placeholder
+     // --- Phase 4: Generate Text Summary ---
+     let summary = 'Analysis complete. Summary generation skipped or failed.'; // Default summary
+     if (llmService) {
+       try {
+         console.log(`Generating text summary using ${process.env.LLM_PROVIDER} for query: "${query}"`);
+         // Pass the original query and the parsed stats object
+         summary = await llmService.generateTextSummary(query, stats);
+         console.log('Text summary generated:', summary);
+       } catch (summaryError) {
+         console.error(`LLM summary generation failed: ${summaryError.message}`);
+         // Keep the default summary message, but log the error
+         // Optionally, you could pass a specific error message to the frontend
+         summary = `Analysis complete, but summary generation failed: ${summaryError.message}`;
+       }
+     } else {
+        console.warn("LLM Service not initialized, skipping summary generation.");
+        summary = "Analysis complete. LLM Service not available for summary generation.";
+     }
+     // --- ---
 
-     // Final Response (Phase 3 - without summary)
+     // Final Response (Phase 4)
      res.json({
        imageUri: imageUri, // data:image/png;base64,... or null
        summary: summary, // Placeholder text for now
