@@ -80,7 +80,7 @@ ${metadataString}
 **User Query:** "${sanitizedUserQuery}" {/* Use sanitized query */}
 
 **CRITICAL Instructions (Follow Strictly):**
-1.  **Imports:** ALWAYS import necessary libraries: \`import pandas as pd\`, \`import numpy as np\`, \`import matplotlib.pyplot as plt\`, \`import seaborn as sns\`, \`import json\`.
+1.  **Imports:** ALWAYS import necessary libraries: \`import pandas as pd\`, \`import numpy as np\`, \`import matplotlib.pyplot as plt\`, \`import seaborn as sns\`, \`import json\`, \`import math\`.
 2.  **Data Loading:** Load data using: \`df = pd.read_csv('/input/data.csv', encoding='utf-8')\`. Assume this is the first step inside the main try block. Handle potential bad lines if necessary within the try block. **DO NOT use the 'errors' keyword argument in read_csv.**
 3.  **Error Handling (Mandatory):**
     *   Wrap ALL analysis code (AFTER loading data) inside a single \`try...except Exception as e:\` block.
@@ -109,19 +109,22 @@ ${metadataString}
 import numpy as np
 import json
 import pandas as pd # Assuming pandas is imported
+import math
 
 def convert_numpy_types(obj):
-    # DO NOT MODIFY THIS FUNCTION
+    # DO NOT MODIFY THIS FUNCTION (except for NaN handling)
     if isinstance(obj, (np.integer, np.int64)): return int(obj)
+    # Handle NaN -> null conversion BEFORE float conversion
+    elif isinstance(obj, (np.floating, np.float64, float)) and math.isnan(obj): return None
     elif isinstance(obj, (np.floating, np.float64)): return float(obj)
     elif isinstance(obj, np.ndarray): return obj.tolist()
     elif isinstance(obj, pd.Timestamp): return obj.isoformat()
     elif isinstance(obj, (pd.Series, pd.Index)): return obj.tolist()
     elif isinstance(obj, dict): return {str(k): convert_numpy_types(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)): return [convert_numpy_types(i) for i in obj]
-    elif hasattr(obj, 'isoformat'): return obj.isoformat()
-    try: json.dumps(obj); return obj
-    except TypeError: return str(obj)
+    elif hasattr(obj, 'isoformat'): return obj.isoformat() # Handle datetime objects
+    try: json.dumps(obj); return obj # Check if already JSON serializable
+    except TypeError: return str(obj) # Fallback to string
 \`\`\`
 
 **Example Structure:**
@@ -131,11 +134,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import json
+import math # Add math import to example too
 
 # --- Include convert_numpy_types function definition here ---
 def convert_numpy_types(obj):
     # ... (function code as defined above) ...
     if isinstance(obj, (np.integer, np.int64)): return int(obj)
+    elif isinstance(obj, (np.floating, np.float64, float)) and math.isnan(obj): return None # Add NaN check here too
     # ... (rest of function) ...
     except TypeError: return str(obj)
 # --- End of function definition ---

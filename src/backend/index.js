@@ -65,35 +65,57 @@ function sendSseUpdate(res, data) {
 async function performAnalysis(res, analysisId, query, datasetId) {
     let tempDirToClean = null;
     let pythonLogs = ''; // Store logs specifically from python execution
-    try {
-        sendSseUpdate(res, { status: 'Fetching dataset metadata...' });
-        const metadata = await metadataService.getMetadata(datasetId);
-        console.log(`[${analysisId}] Metadata fetched`);
 
-        if (!llmService) {
-            throw new Error("LLM Service is not initialized.");
-        }
-        sendSseUpdate(res, { status: `Generating Python code...` });
+    // --- Local Logger & SSE Emitter ---
+    const logAndEmit = (message, ...optionalParams) => {
+        const logMessage = `[${analysisId}] ${message}`;
+        // 1. Log to console (as before)
+        console.log(logMessage, ...optionalParams);
+        // 2. Send raw log line via SSE
+        // Avoid sending overly large objects/details via SSE log lines
+        const sseMessage = typeof optionalParams[0] === 'object' ? logMessage + ' (details in server log)' : `${logMessage}${optionalParams.length > 0 ? ' ' + optionalParams.join(' ') : ''}`;
+        sendSseUpdate(res, { rawLogLine: sseMessage });
+    };
+    const errorAndEmit = (message, ...optionalParams) => {
+        const logMessage = `[${analysisId}] ${message}`;
+        console.error(logMessage, ...optionalParams); // Log error to console
+        // Send raw log line via SSE
+         const sseMessage = typeof optionalParams[0] === 'object' ? logMessage + ' (error details in server log)' : `${logMessage}${optionalParams.length > 0 ? ' ' + optionalParams.join(' ') : ''}`;
+         sendSseUpdate(res, { rawLogLine: sseMessage }); // Send errors as log lines too
+    };
+    // ---
+
+    try {
+        logAndEmit('Fetching dataset metadata...');
+        const metadata = await metadataService.getMetadata(datasetId);
+        logAndEmit('Metadata fetched.');
+
+        if (!llmService) throw new Error("LLM Service is not initialized.");
+
+        logAndEmit(`Generating Python code using ${llmService.serviceName}...`);
         const pythonCode = await llmService.generatePythonCode(query, metadata);
         // Store the generated code to send later
-        console.log(`[${analysisId}] Python code generated (first 100 chars):`, pythonCode.substring(0, 100));
-        console.log(`[${analysisId}] --- Full Generated Python Code --- \n${pythonCode}\n--- End Generated Python Code ---`); // Log the full code
+        logAndEmit('Python code generated.'); // Don't log full code via SSE for brevity
+        console.log(`[${analysisId}] Full Generated Python Code:\n${pythonCode}`); // Log full code only to server console
+
         // --- Save generated code to a temporary file for inspection ---
         const tempCodePath = path.join(__dirname, 'generated_code.py');
         await fsp.writeFile(tempCodePath, pythonCode, 'utf8');
-        console.log(`[${analysisId}] Saved generated code to ${tempCodePath}`);
+        logAndEmit(`Saved generated code to ${tempCodePath}`);
         // ---
 
-        sendSseUpdate(res, { status: 'Preparing analysis environment...' });
+        logAndEmit('Preparing analysis environment (Docker)...');
         const execResult = await dockerExecutor.runPythonInSandbox(pythonCode, datasetId);
         tempDirToClean = execResult.tempDir; // Store for potential cleanup
         pythonLogs = execResult.logs || ''; // Capture logs
 
-        console.log(`[${analysisId}] Docker execution finished.`);
-        if (pythonLogs) {
-            // Send logs immediately if available, maybe truncate if too long?
-            // For now, send all logs. Consider truncation later if needed.
-            sendSseUpdate(res, { logs: pythonLogs });
+        logAndEmit('Docker execution finished.');
+        if (pythonLogs.trim()) {
+            logAndEmit('--- Python Script Output ---');
+            pythonLogs.split('\n').forEach(line => {
+                if (line.trim()) logAndEmit(`[Python] ${line}`); // Prefix Python logs
+            });
+            logAndEmit('--- End Python Script Output ---');
         }
 
         // Handle explicit errors from Docker executor
@@ -105,23 +127,24 @@ async function performAnalysis(res, analysisId, query, datasetId) {
         let imageUris = [];
         let stats = null;
 
-        sendSseUpdate(res, { status: 'Processing results...' });
+        logAndEmit('Processing analysis results...');
 
         // Read images
         if (execResult.imagePaths && execResult.imagePaths.length > 0) {
-            console.log(`[${analysisId}] Found ${execResult.imagePaths.length} plot image(s). Reading...`);
+            logAndEmit(`Found ${execResult.imagePaths.length} plot image(s). Reading...`);
             for (const imagePath of execResult.imagePaths) {
                 try {
                     const imageBuffer = await readFileAsync(imagePath);
                     const imageUri = `data:image/png;base64,${imageBuffer.toString('base64')}`;
                     imageUris.push(imageUri);
-                    console.log(`[${analysisId}] Successfully read and encoded ${path.basename(imagePath)}`);
+                    logAndEmit(`Successfully read and encoded ${path.basename(imagePath)}`);
                 } catch (readError) {
-                    console.error(`[${analysisId}] Error reading image file ${imagePath}:`, readError);
+                    errorAndEmit(`Error reading image file ${imagePath}: ${readError.message}`);
                 }
             }
         } else {
              console.log(`[${analysisId}] No plot images found.`);
+             logAndEmit('No plot images generated.');
         }
 
         // Read stats - CRITICAL CHECK
@@ -130,14 +153,17 @@ async function performAnalysis(res, analysisId, query, datasetId) {
                 const statsBuffer = await readFileAsync(execResult.statsPath);
                 stats = JSON.parse(statsBuffer.toString('utf8'));
                 console.log(`[${analysisId}] Successfully read and parsed stats.json`);
+                logAndEmit('Successfully processed statistics (stats.json).');
             } catch (readError) {
-                console.error(`[${analysisId}] Error reading/parsing stats file ${execResult.statsPath}:`, readError);
+                errorAndEmit(`Error reading/parsing stats file ${execResult.statsPath}: ${readError.message}`);
                 // Treat failure to read/parse stats as an error, including logs
                 throw new Error(`Failed to process results (stats.json): ${readError.message}${pythonLogs ? `\nLogs:\n${pythonLogs}` : ''}`);
             }
         } else {
              // *** If execution succeeded BUT stats.json is missing, it's an implicit error ***
-             console.warn(`[${analysisId}] Execution succeeded (exit 0) but stats.json was not generated.`);
+             const warnMsg = 'Execution succeeded (exit 0) but stats.json was not generated.';
+             console.warn(`[${analysisId}] ${warnMsg}`);
+             logAndEmit(`Warning: ${warnMsg}`); // Send warning via SSE as well
              // Throw an error including the Python logs
              throw new Error(`Analysis script ran but did not produce the expected stats output.${pythonLogs ? `\nScript Output:\n${pythonLogs}` : '\n(No script output captured)'}`);
         }
@@ -145,29 +171,30 @@ async function performAnalysis(res, analysisId, query, datasetId) {
         // Cleanup temp dir *before* summary generation
         if (tempDirToClean) {
             try {
-                console.log(`[${analysisId}] Cleaning up temporary directory: ${tempDirToClean}`);
+                logAndEmit(`Cleaning up temporary directory: ${tempDirToClean}`);
                 await rmAsync(tempDirToClean, { recursive: true, force: true });
                 tempDirToClean = null;
             } catch (rmError) {
-                console.error(`[${analysisId}] Error cleaning up temporary directory ${tempDirToClean}:`, rmError);
+                errorAndEmit(`Error cleaning up temporary directory ${tempDirToClean}: ${rmError.message}`);
             }
         }
-
         // Generate Summary (Only if stats were successfully loaded)
         let summary = 'Analysis complete.';
         if (stats && llmService) { // Check if stats object exists
             try {
-                sendSseUpdate(res, { status: `Generating summary...` });
+                logAndEmit(`Generating summary using ${llmService.serviceName}...`);
                 summary = await llmService.generateTextSummary(query, stats); // Pass original query and loaded stats
-                console.log(`[${analysisId}] Text summary generated.`);
+                logAndEmit('Summary generated.');
             } catch (summaryError) {
-                console.error(`[${analysisId}] LLM summary generation failed: ${summaryError.message}`);
+                errorAndEmit(`LLM summary generation failed: ${summaryError.message}`);
                 summary = `Analysis complete, but summary generation failed: ${summaryError.message}`;
             }
         } else if (!stats) {
             summary = "Analysis complete, but no statistics were generated to summarize.";
         } else { // llmService missing
-             console.warn(`[${analysisId}] LLM Service not initialized, skipping summary generation.`);
+            const warnMsg = 'LLM Service not initialized, skipping summary generation.';
+            console.warn(`[${analysisId}] ${warnMsg}`);
+            logAndEmit(warnMsg);
              summary = "Analysis complete. LLM Service not available for summary generation.";
         }
 
@@ -176,19 +203,20 @@ async function performAnalysis(res, analysisId, query, datasetId) {
             imageUris: imageUris,
             summary: summary,
             stats: stats, // Send the actual stats object
-            logs: null, // Logs were sent incrementally or as part of error
+            logs: null, // Logs were sent via rawLogLine
             generatedCode: pythonCode // Include the generated code
         };
-        console.log(`DEBUG_SSE_RESULT [${analysisId}] Lengths - Summary: ${summary?.length || 0}, Code: ${pythonCode?.length || 0}`);
-        console.log(`DEBUG_SSE_RESULT [${analysisId}] Full Summary:`, summary); // Log the full summary for debugging
+        // Don't log result lengths/summary via logAndEmit to avoid flooding SSE
+        console.log(`[${analysisId}] Sending final result. Summary length: ${summary?.length || 0}, Code length: ${pythonCode?.length || 0}`);
         sendSseUpdate(res, {
             result: finalResult
         });
+        logAndEmit('Analysis complete.'); // Send final completion message
 
     } catch (error) {
-        console.error(`[${analysisId}] Error during analysis:`, error);
+        errorAndEmit(`Error during analysis: ${error.message}`); // Send error via SSE
         // Send error details, potentially including logs captured within the error message itself
-        sendSseUpdate(res, { error: error.message || "An unknown error occurred during analysis." });
+        sendSseUpdate(res, { error: error.message || "An unknown error occurred during analysis." }); // Keep sending structured error too
     } finally {
         // Always clean up stored analysis data and temp dir if not already cleaned
         delete activeAnalyses[analysisId];
