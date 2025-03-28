@@ -13,32 +13,10 @@ function FileImport({ onFileImport, isCollapsed }) {
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
-  const handleFileChange = useCallback((event) => {
-    if (event.target.files && event.target.files[0]) {
-      const selectedFile = event.target.files[0];
-      setIsUploading(false);
-      if (selectedFile.size > MAX_FILE_SIZE) {
-        setFileSizeError('File size exceeds the limit (100MB).');
-        setFile(null);
-        setFileName('No file chosen');
-        setParseError(null);
-        setUploadSuccess(false);
-      } else {
-        setFile(selectedFile);
-        setFileName(selectedFile.name);
-        setParseError(null);
-        setFileSizeError(null);
-        setUploadSuccess(false);
-        // Automatically trigger upload after selecting a valid file
-        handleUpload(selectedFile); // Pass the selected file directly
-      }
-    }
-     // Reset the input value so the same file can be selected again
-     event.target.value = null;
-  }, [onFileImport]); // Added onFileImport dependency
-
+  // Define handleUpload BEFORE handleFileChange because handleFileChange depends on it
   // Modified handleUpload to accept file directly
-  const handleUpload = async (fileToUpload) => {
+  // Wrapped in useCallback to satisfy useEffect dependency linting
+  const handleUpload = useCallback(async (fileToUpload) => {
     if (fileToUpload && !isUploading) {
       console.log('Uploading file to backend:', fileToUpload.name);
       setIsUploading(true);
@@ -78,7 +56,31 @@ function FileImport({ onFileImport, isCollapsed }) {
     } else {
       console.log('No file selected or upload already in progress.');
     }
-  };
+  }, [isUploading, onFileImport]); // Added dependencies
+
+  const handleFileChange = useCallback((event) => {
+    if (event.target.files && event.target.files[0]) {
+      const selectedFile = event.target.files[0];
+      setIsUploading(false);
+      if (selectedFile.size > MAX_FILE_SIZE) {
+        setFileSizeError('File size exceeds the limit (100MB).');
+        setFile(null);
+        setFileName('No file chosen');
+        setParseError(null);
+        setUploadSuccess(false);
+      } else {
+        setFile(selectedFile);
+        setFileName(selectedFile.name);
+        setParseError(null);
+        setFileSizeError(null);
+        setUploadSuccess(false);
+        // Automatically trigger upload after selecting a valid file
+        handleUpload(selectedFile); // Pass the selected file directly
+      }
+    }
+     // Reset the input value so the same file can be selected again
+     event.target.value = null;
+  }, [onFileImport, handleUpload]); // Added handleUpload dependency
 
   const containerClasses = `
     p-4 border rounded-lg mb-6 shadow-md
@@ -99,25 +101,27 @@ function FileImport({ onFileImport, isCollapsed }) {
 
   // --- Render Collapsed View ---
   if (isCollapsed) {
+    // Render only the button-like label when collapsed
     return (
-      <div className={containerClasses.trim()}>
+      <>
         <label
           htmlFor="file-upload"
-          className={`${baseButtonClasses} ${activeStyle} cursor-pointer w-full`} // Make button full width in collapsed mode
+          // Use button classes, ensure centering, remove margin bottom from containerClasses
+          className={`${baseButtonClasses} ${activeStyle} cursor-pointer w-full flex items-center justify-center h-10`} // Use fixed height h-10, remove py
           title={`Selected: ${fileName}`} // Show filename on hover
         >
-          {/* Show status icon or default */}
+          {/* Show status icon or default - USE h-6 w-6 */}
           {isUploading ? (
-             <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+             <svg className="animate-spin h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
              </svg>
           ) : uploadSuccess ? (
-            <CheckCircleIcon className="h-5 w-5 text-green-400" />
+            <CheckCircleIcon className="h-6 w-6 text-green-400" />
           ) : fileSizeError || parseError ? (
-            <ExclamationTriangleIcon className="h-5 w-5 text-red-400" />
+            <ExclamationTriangleIcon className="h-6 w-6 text-red-400" />
           ) : (
-            <FolderOpenIcon className="h-5 w-5" />
+            <FolderOpenIcon className="h-6 w-6 text-gray-100" />
           )}
         </label>
         <input
@@ -127,7 +131,7 @@ function FileImport({ onFileImport, isCollapsed }) {
           accept=".csv,.xls,.xlsx"
           className="hidden"
         />
-      </div>
+      </>
     );
   }
 
