@@ -64,7 +64,6 @@ This document outlines a clear and detailed roadmap for developing the Profile M
 2. Implement backend logic for:
    - Correlation studies and attribute statistics.
    - Trend tracking and historical data analysis.
-   - User behavior analytics.
 3. Integrate third-party analytics libraries as needed.
 4. Optimize system performance for handling large datasets.
 

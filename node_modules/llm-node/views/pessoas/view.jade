@@ -1,0 +1,100 @@
+extends ../base.jade
+
+block content
+	h3 #{pessoa.fullName}
+		small
+	.btn-group
+		a(href="/pessoas/#{pessoa.id}/editar", class='btn btn-primary btn-sm')
+			i.glyphicon.glyphicon-edit
+			span &nbsp;Editar pessoa
+		a(href="/pessoas/#{pessoa.id}/excluir", class='btn btn-danger btn-sm')
+			i.glyphicon.glyphicon-trash
+			span &nbsp;Excluir pessoa
+	.media
+		.media-body
+			h4 Dados cadastrais
+			.row
+				.form-control-label.col-sm-4 Nome completo/Razão social completa:
+				.col-sm-8.form-control-label <strong>#{pessoa.fullName}</strong>
+			br
+			.row
+				.form-control-label.col-sm-4 Natureza da pessoa:
+				.col-sm-8.form-control-label #{pessoa.natPessoa}
+			.row
+				.col-sm-offset-4.checkbox
+					label
+						if(pessoa.eParteClienteLegado=='S' || pessoa.parteCliente==true)
+							input(type="checkbox", name="parteCliente", id="parteCliente",checked="checked")
+						else
+							input(type="checkbox", name="parteCliente", id="parteCliente")
+						| É parte cliente.
+			.form-group.row
+				.col-sm-offset-4.checkbox
+					label
+						if(pessoa.eParteContrariaLegado=='S' || pessoa.parteContraria==true)
+							input(type="checkbox", name="parteContraria", id="parteContraria",checked="checked")
+						else
+							input(type="checkbox", name="parteContraria", id="parteContraria")
+						| É parte contrária.
+			panel-group#accordion
+				.panel.panel-default
+					.panel-heading
+						a.accordion-toggle(data-toggle="collapse", data-parent="#accordion", href="#infoContato")
+							h4.panel-title Informações de contato
+							i.indicator.glyphicon.glyphicon-chevron-down.pull-right
+					.panel-collapse.collapse.in#infoContato
+						.panel.body
+							.form-group.row
+								.form-control-label.col-sm-4 Telefone
+								.form-control-label.col-sm-8#telefone #{pessoa.telefone}
+							.form-group.row
+								.form-control-label.col-sm-4 E-mail
+								.form-control-label.col-sm-8#email #{email}
+				.panel.panel-default
+					.panel-heading
+						a.accordion-toggle(data-toggle="collapse", data-parent="#accordion", href="#qualificacaoPJ")
+							h4.panel-title Dados para qualificação Pessoa Jurídica
+							i.indicator.glyphicon.glyphicon-chevron-down.pull-right
+					.panel-collapse.collapse.in#qualificacaoPJ
+						.panel.body
+							.form-group.row
+								.form-control-label.col-sm-4 Natureza da PJ
+								.form-control-label.col-sm-8#naturezaPJ #{pessoa.naturezaPJ}
+							.form-group.row
+								.form-control-label.col-sm-4 CNPJ
+								.form-control-label.col-sm-8#CNPJ #{pessoa.CNPJ}
+							.form-group.row
+								.form-control-label.col-sm-4 Representante Legal
+								.form-control-label.col-sm-8#representanteLegal #{pessoa.representanteLegal}
+				.panel.panel-default
+					.panel-heading
+						a.accordion-toggle(data-toggle="collapse", data-parent="#accordion", href="#qualificacaoPF")
+							h4.panel-title Dados para qualificação Pessoa Física
+							i.indicator.glyphicon.glyphicon-chevron-down.pull-right
+					.panel-collapse.collapse.in#qualificacaoPF
+						.panel.body
+							.form-group.row
+								.form-control-label.col-sm-4 Nacionalidade
+								.form-control-label.col-sm-8#nacionalidade #{pessoa.nacionalidade}
+							.form-group.row
+								.form-control-label.col-sm-4 Estado civil
+								.form-control-label.col-sm-8#estadoCivil #{estadoCivil}
+							.form-group.row
+								.form-control-label.col-sm-4 Profissão
+								.form-control-label.col-sm-8#profissao #{pessoa.profissao}
+							.form-group.row
+								.form-control-label.col-sm-4 RG
+								.form-control-label.col-sm-8#RG #{pessoa.RG}
+							.form-group.row
+								.form-control-label.col-sm-4 CPF
+								.form-control-label.col-sm-8#CPF #{pessoa.CPF}
+
+append footer
+	script.
+		$('#accordion').on('hidden.bs.collapse', function () {
+			//do something...
+		})
+		$('#accordion .accordion-toggle').click(function (e){
+			var chevState = $(e.target).siblings("i.indicator").toggleClass('glyphicon-chevron-down glyphicon-chevron-up');
+			$("i.indicator").not(chevState).removeClass("glyphicon-chevron-down").addClass("glyphicon-chevron-up");
+		});
