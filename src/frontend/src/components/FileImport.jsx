@@ -1,10 +1,11 @@
 import React, { useState, useCallback } from 'react';
 import Papa from 'papaparse';
-import { DocumentArrowUpIcon, CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { DocumentArrowUpIcon, CheckCircleIcon, ExclamationTriangleIcon, FolderOpenIcon } from '@heroicons/react/24/outline'; // Added FolderOpenIcon
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 
-function FileImport({ onFileImport }) {
+// Accept isCollapsed prop
+function FileImport({ onFileImport, isCollapsed }) {
   const [file, setFile] = useState(null);
   const [fileName, setFileName] = useState('No file chosen');
   const [parseError, setParseError] = useState(null);
@@ -28,18 +29,26 @@ function FileImport({ onFileImport }) {
         setParseError(null);
         setFileSizeError(null);
         setUploadSuccess(false);
+        // Automatically trigger upload after selecting a valid file
+        handleUpload(selectedFile); // Pass the selected file directly
       }
     }
-  }, []);
+     // Reset the input value so the same file can be selected again
+     event.target.value = null;
+  }, [onFileImport]); // Added onFileImport dependency
 
-  const handleUpload = async () => {
-    if (file && !isUploading) {
-      console.log('Uploading file to backend:', fileName);
+  // Modified handleUpload to accept file directly
+  const handleUpload = async (fileToUpload) => {
+    if (fileToUpload && !isUploading) {
+      console.log('Uploading file to backend:', fileToUpload.name);
       setIsUploading(true);
       setParseError(null);
       setUploadSuccess(false);
+      setFileName(fileToUpload.name); // Ensure filename state is updated
+      setFile(fileToUpload); // Ensure file state is updated
+
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', fileToUpload);
 
       try {
         const response = await fetch('/api/import', {
@@ -76,7 +85,8 @@ function FileImport({ onFileImport }) {
     bg-indigo-100/60 dark:bg-gray-700/60  /* Light: indigo-100 tint */
     border-gray-200 dark:border-gray-600/80
     transition-all duration-300 ease-in-out
-    min-h-[200px] flex flex-col items-center justify-center text-center
+    flex flex-col items-center justify-center text-center
+    ${isCollapsed ? 'min-h-[auto] py-2' : 'min-h-[200px]'} /* Adjust height when collapsed */
     ${fileSizeError || parseError ? 'border-red-400 dark:border-red-500 bg-red-50/80 dark:bg-red-900/30' : ''}
     ${uploadSuccess ? 'border-green-400 dark:border-green-500 bg-green-50/80 dark:bg-green-900/30' : ''}
   `;
@@ -87,12 +97,46 @@ function FileImport({ onFileImport }) {
   const disabledClasses = "disabled:opacity-50 disabled:cursor-not-allowed";
 
 
+  // --- Render Collapsed View ---
+  if (isCollapsed) {
+    return (
+      <div className={containerClasses.trim()}>
+        <label
+          htmlFor="file-upload"
+          className={`${baseButtonClasses} ${activeStyle} cursor-pointer w-full`} // Make button full width in collapsed mode
+          title={`Selected: ${fileName}`} // Show filename on hover
+        >
+          {/* Show status icon or default */}
+          {isUploading ? (
+             <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+             </svg>
+          ) : uploadSuccess ? (
+            <CheckCircleIcon className="h-5 w-5 text-green-400" />
+          ) : fileSizeError || parseError ? (
+            <ExclamationTriangleIcon className="h-5 w-5 text-red-400" />
+          ) : (
+            <FolderOpenIcon className="h-5 w-5" />
+          )}
+        </label>
+        <input
+          id="file-upload"
+          type="file"
+          onChange={handleFileChange}
+          accept=".csv,.xls,.xlsx"
+          className="hidden"
+        />
+      </div>
+    );
+  }
+
+  // --- Render Expanded View ---
   return (
     <div className={containerClasses.trim()}>
       <div className="mb-4">
         <label
           htmlFor="file-upload"
-          // Subtle Gray Style for "Choose File" with hover outline
           className={`${baseButtonClasses} ${activeStyle} cursor-pointer ring-2 ring-transparent hover:ring-primary-700 hover:ring-offset-2 dark:hover:ring-offset-gray-900`}
         >
           Choose File
@@ -109,40 +153,29 @@ function FileImport({ onFileImport }) {
         Selected: <span className="font-medium text-gray-800 dark:text-gray-100">{fileName}</span>
       </div>
       {fileSizeError && (
-        <div className="mb-3 text-sm text-red-600 dark:text-red-400 flex items-center">
+        <div className="mb-3 text-sm text-red-600 dark:text-red-400 flex items-center justify-center">
             <ExclamationTriangleIcon className="h-4 w-4 mr-1"/> {fileSizeError}
         </div>
       )}
       {parseError && (
-        <div className="mb-3 text-sm text-red-600 dark:text-red-400 flex items-center">
+        <div className="mb-3 text-sm text-red-600 dark:text-red-400 flex items-center justify-center">
             <ExclamationTriangleIcon className="h-4 w-4 mr-1"/> Error: {parseError}
         </div>
       )}
-      <button
-        onClick={handleUpload}
-        disabled={!file || isUploading || uploadSuccess}
-        // Subtle Gray Style for "Upload" (can adjust color slightly if needed, e.g., teal-700/teal-600, but gray is consistent)
-        className={`${baseButtonClasses} ${activeStyle} ${disabledClasses}`} // Using same gray style
-      >
-        {isUploading ? (
-            <>
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Uploading...
-            </>
-        ) : (
-            <>
-                <DocumentArrowUpIcon className="-ml-1 mr-2 h-5 w-5" />
-                Upload
-            </>
-        )}
-
-      </button>
-      {uploadSuccess && (
-        <div className="mt-3 text-sm text-green-600 dark:text-green-400 flex items-center">
-            <CheckCircleIcon className="h-4 w-4 mr-1"/> File uploaded successfully!
+      {/* Removed explicit Upload button - upload happens on file change */}
+      {/* <button ... /> */}
+      {isUploading && (
+           <div className="mt-3 text-sm text-gray-600 dark:text-gray-400 flex items-center justify-center">
+               <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+               </svg>
+               Uploading...
+           </div>
+      )}
+      {uploadSuccess && !isUploading && (
+        <div className="mt-3 text-sm text-green-600 dark:text-green-400 flex items-center justify-center">
+            <CheckCircleIcon className="h-4 w-4 mr-1"/> File uploaded!
         </div>
       )}
     </div>

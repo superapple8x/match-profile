@@ -23,52 +23,31 @@ analysis_results = {}
 try:
     df = pd.read_csv('/input/data.csv', encoding='utf-8')
 
-    # General summary statistics
-    general_stats = {}
-    
-    # Numeric columns summary
-    numeric_cols = [col for col in df.columns if df[col].dtype in ['int64', 'float64']]
-    for col in numeric_cols:
-        df[f'{col}_numeric'] = pd.to_numeric(df[col], errors='coerce')
-        if not df[f'{col}_numeric'].isnull().all():
-            general_stats[col] = {
-                'min': df[f'{col}_numeric'].min(),
-                'max': df[f'{col}_numeric'].max(),
-                'mean': df[f'{col}_numeric'].mean(),
-                'median': df[f'{col}_numeric'].median(),
-                'std': df[f'{col}_numeric'].std()
-            }
-        else:
-            general_stats[col] = "Warning: Could not be treated as numeric."
-    
-    # Categorical columns summary
-    categorical_cols = [col for col in df.columns if df[col].dtype == 'object']
-    for col in categorical_cols:
-        general_stats[col] = {
-            'unique_values': df[col].unique().tolist(),
-            'count': df[col].nunique()
-        }
-    
-    analysis_results['general_summary'] = general_stats
+    required_cols = ['Location', 'Watch Reason']
+    for col in required_cols:
+        if col not in df.columns:
+            analysis_results['error'] = f"Error: Column '{col}' not found."
+            print(f"Error: Column '{col}' not found.")
+            raise Exception(f"Column '{col}' not found.")
 
-    # Plot numeric distributions
-    for i, col in enumerate(numeric_cols):
-        if not df[f'{col}_numeric'].isnull().all():
-            plt.figure(figsize=(10, 6))
-            sns.histplot(df[f'{col}_numeric'].dropna())
-            plt.title(f'Distribution of {col}')
-            plt.tight_layout()
-            plt.savefig(f'/output/plot_{i+1}.png')
-            plt.close()
+    procrastination_df = df[df['Watch Reason'] == 'Procrastination']
+    if procrastination_df.empty:
+        analysis_results['error'] = "No data found for 'Procrastination' watch reason."
+        print("No data found for 'Procrastination' watch reason.")
+    else:
+        country_counts = procrastination_df['Location'].value_counts()
+        most_procrastinating_country = country_counts.idxmax()
+        count = country_counts.max()
+        
+        analysis_results['most_procrastinating_country'] = most_procrastinating_country
+        analysis_results['procrastination_count'] = count
 
-    # Plot categorical distributions
-    for i, col in enumerate(categorical_cols):
         plt.figure(figsize=(10, 6))
-        sns.countplot(data=df, x=col)
-        plt.title(f'Distribution of {col}')
+        sns.barplot(x=country_counts.index, y=country_counts.values)
+        plt.title('Procrastination Count by Country')
         plt.xticks(rotation=45)
         plt.tight_layout()
-        plt.savefig(f'/output/plot_{len(numeric_cols)+i+1}.png')
+        plt.savefig('/output/plot_1.png')
         plt.close()
 
     final_stats = convert_numpy_types(analysis_results)
