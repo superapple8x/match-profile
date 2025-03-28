@@ -4,8 +4,8 @@ import { DocumentArrowUpIcon, CheckCircleIcon, ExclamationTriangleIcon, FolderOp
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 
-// Accept isCollapsed prop
-function FileImport({ onFileImport, isCollapsed }) {
+// Accept isCollapsed and authToken props
+function FileImport({ onFileImport, isCollapsed, authToken }) {
   const [file, setFile] = useState(null);
   const [fileName, setFileName] = useState('No file chosen');
   const [parseError, setParseError] = useState(null);
@@ -29,8 +29,16 @@ function FileImport({ onFileImport, isCollapsed }) {
       formData.append('file', fileToUpload);
 
       try {
+        // Add Authorization header to the fetch request
+        const headers = {};
+        if (authToken) {
+            headers['Authorization'] = `Bearer ${authToken}`;
+        }
+        // Note: Don't set Content-Type for FormData, browser does it correctly with boundary
+
         const response = await fetch('/api/import', {
           method: 'POST',
+          headers: headers, // Add the headers object
           body: formData,
         });
 
