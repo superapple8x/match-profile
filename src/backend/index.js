@@ -10,6 +10,8 @@ const crypto = require('crypto'); // For generating unique IDs
 const Docker = require('dockerode');
 const db = require('./config/db');
 const fileOperationsRoutes = require('./routes/fileOperations');
+const authRoutes = require('./routes/auth'); // Import auth routes
+const sessionRoutes = require('./routes/sessions'); // Import session routes
 const metadataService = require('./services/metadataService');
 const { getLLMServiceInstance } = require('./llm/llmFactory');
 const dockerExecutor = require('./services/dockerExecutor');
@@ -49,6 +51,10 @@ app.use((req, res, next) => {
 
 // Mount the file operations routes
 app.use('/api', fileOperationsRoutes);
+// Mount the authentication routes
+app.use('/api/auth', authRoutes);
+// Mount the session routes (protected by middleware defined within sessions.js)
+app.use('/api/sessions', sessionRoutes);
 
 // --- Helper Function to send SSE updates ---
 function sendSseUpdate(res, data) {

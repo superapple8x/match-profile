@@ -32,3 +32,4 @@ src/backend/uploads/
 
 # Specific log file in backend
 src/backend/server.log
+src/backend/generated_code.py
