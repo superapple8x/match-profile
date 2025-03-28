@@ -39,8 +39,8 @@ const SaveSessionModal = ({ isOpen, onClose, onSave, sessionName, setSessionName
 };
 
 
-// Accept isCollapsed prop
-function SavedSessions({ authToken, currentAppState, onLoadSession, isCollapsed }) {
+// Accept isCollapsed and onRequestExpand props
+function SavedSessions({ authToken, currentAppState, onLoadSession, isCollapsed, onRequestExpand }) {
   const [sessions, setSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -61,7 +61,8 @@ function SavedSessions({ authToken, currentAppState, onLoadSession, isCollapsed 
     };
 
     const fetchSessions = async () => {
-      setIsLoading(true);
+      // Don't show loading indicator if collapsed, fetch in background
+      if (!isCollapsed) setIsLoading(true);
       setError('');
       try {
         const response = await fetch('/api/sessions', {
@@ -75,22 +76,48 @@ function SavedSessions({ authToken, currentAppState, onLoadSession, isCollapsed 
         setSessions(data);
       } catch (err) {
         console.error('Error fetching sessions:', err);
-        setError(err.message);
-        if (err.message.includes('401')) {
-            // Handle token expiry/invalidation - maybe trigger logout in App.jsx?
-            setError('Authentication error. Please log in again.');
+        // Check for specific token errors
+        const isTokenError = err.message.includes('401') || err.message.toLowerCase().includes('token is not valid');
+
+        if (isTokenError) {
+            // Don't show a persistent error message for invalid tokens, as user is effectively logged out (backend-wise)
+            setError(''); // Clear local error state
+            console.warn('Session fetch failed due to invalid token.');
+            // Optionally, could trigger a full logout here if handleLogout prop was passed down
+        } else if (!isCollapsed) {
+            // Show other errors only if the sidebar is expanded
+            setError(err.message);
         }
       } finally {
-        setIsLoading(false);
+        if (!isCollapsed) setIsLoading(false);
       }
     };
 
     fetchSessions();
-  }, [authToken]); // Re-fetch if auth token changes
+  }, [authToken, isCollapsed]); // Re-fetch if auth token changes or sidebar expands
 
   // --- Action Handlers ---
 
   const handleSaveClick = () => {
+    // If collapsed, request expansion first
+    if (isCollapsed && onRequestExpand) {
+        onRequestExpand();
+        // After requesting expansion, proceed to check dataset and show modal
+        // Use a small timeout to allow the sidebar animation to start,
+        // preventing potential layout shifts affecting the modal immediately.
+        setTimeout(() => {
+            if (!currentAppState || !currentAppState.datasetId) {
+                // Show alert even if sidebar was just expanded
+                alert("Please upload a dataset before saving a session.");
+                return;
+            }
+            setNewSessionName(`Session ${new Date().toLocaleString()}`); // Default name
+            setShowSaveModal(true);
+        }, 50); // Small delay (50ms)
+        return; // Don't execute the logic below if we just expanded
+    }
+
+    // If already expanded, proceed directly
     if (!currentAppState || !currentAppState.datasetId) {
         alert("Please upload a dataset before saving a session.");
         return;
@@ -130,7 +157,14 @@ function SavedSessions({ authToken, currentAppState, onLoadSession, isCollapsed 
         setNewSessionName(''); // Clear name input
     } catch (err) {
         console.error('Error saving session:', err);
-        setError(`Save failed: ${err.message}`);
+        const isTokenError = err.message.includes('401') || err.message.toLowerCase().includes('token is not valid');
+        if (isTokenError) {
+            setError(''); // Clear error if it's just an invalid token
+            console.warn('Session save failed due to invalid token.');
+            // Optionally trigger logout
+        } else {
+            setError(`Save failed: ${err.message}`); // Show other errors
+        }
     } finally {
         setActionLoading(null);
     }
@@ -191,75 +225,108 @@ function SavedSessions({ authToken, currentAppState, onLoadSession, isCollapsed 
   // Common button style (secondary/grey)
   const secondaryButtonClasses = "w-full flex items-center justify-center px-4 py-2 mb-4 border border-transparent text-sm font-medium rounded-md shadow-sm bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50 dark:disabled:opacity-70 dark:focus:ring-offset-gray-800";
 
+  // --- Render Logic ---
+
+  // Common button style (secondary/grey) - Defined once here (Line 211)
+  // Removed duplicate declaration below
+
+  // --- Render Collapsed View ---
+  if (isCollapsed) {
+    // Render only the Save button when collapsed
+    return (
+      <>
+        <button
+          onClick={handleSaveClick}
+          disabled={!authToken || actionLoading === 'save'} // Simplified disabled logic for collapsed
+          // Use secondary style (defined above), ensure centering, adjust padding
+          className={`${secondaryButtonClasses} px-2 h-10`} // Use fixed height h-10, remove py
+          title="Save Current Session"
+        >
+          <ArrowUpTrayIcon className="h-6 w-6 mx-auto" /> {/* Center icon */}
+        </button>
+        {/* Modal is rendered outside the main flow */}
+        <SaveSessionModal
+          isOpen={showSaveModal}
+          onClose={() => setShowSaveModal(false)}
+          onSave={handleSaveConfirm}
+          sessionName={newSessionName}
+          setSessionName={setNewSessionName}
+          isLoading={actionLoading === 'save'}
+        />
+      </>
+    );
+  }
+
+  // --- Render Expanded View ---
   return (
     <>
-      {/* Adjust padding and margin based on collapsed state */}
-      <div className={`border rounded-lg shadow-md bg-indigo-100/60 dark:bg-gray-700/60 border-gray-200 dark:border-gray-600/80 transition-all duration-300 ease-in-out ${isCollapsed ? 'p-2 mb-4' : 'p-4 mb-6'}`}>
-        {/* Title or Icon */}
-        <h2 className={`font-semibold mb-3 text-gray-800 dark:text-gray-100 ${isCollapsed ? 'text-center' : 'text-lg'}`} title={isCollapsed ? "Saved Sessions" : ""}>
-          {isCollapsed ? <BookmarkSquareIcon className="h-6 w-6 mx-auto" /> : 'Saved Sessions'}
+      {/* Container for expanded view */}
+      <div className="border rounded-lg shadow-md bg-indigo-100/60 dark:bg-gray-700/60 border-gray-200 dark:border-gray-600/80 p-4 mb-6 transition-all duration-300 ease-in-out">
+        {/* Title */}
+        <h2 className="font-semibold mb-3 text-gray-800 dark:text-gray-100 text-lg">
+          Saved Sessions
         </h2>
 
         {/* Save Button */}
         <button
           onClick={handleSaveClick}
           disabled={!authToken || !currentAppState?.datasetId || actionLoading === 'save'}
-          className={`${secondaryButtonClasses} ${isCollapsed ? 'px-2' : ''}`} // Use secondary style, adjust padding when collapsed
-          title={isCollapsed ? "Save Current Session" : ""}
+          className={`${secondaryButtonClasses}`} // Use secondary style
+          title="Save Current Session"
         >
-          <ArrowUpTrayIcon className={`h-5 w-5 ${!isCollapsed ? 'mr-2' : 'mx-auto'}`} /> {/* Center icon when collapsed */}
-          {!isCollapsed && (actionLoading === 'save' ? 'Saving...' : 'Save Current Session')} {/* Hide text when collapsed */}
+          <ArrowUpTrayIcon className="h-6 w-6 mr-2" />
+          {actionLoading === 'save' ? 'Saving...' : 'Save Current Session'}
         </button>
 
-        {/* Error Message - Conditionally render based on collapsed state */}
-        {!isCollapsed && error && <p className="text-red-500 text-sm mb-3">{error}</p>}
+        {/* Error Message */}
+        {error && <p className="text-red-500 text-sm mb-3">{error}</p>}
 
-        {/* Session List - Hide when collapsed */}
-        {!isCollapsed && (
-          <>
-            {isLoading ? (
-              <p className="text-sm text-gray-600 dark:text-gray-300">Loading sessions...</p>
-            ) : sessions.length === 0 ? (
-              <p className="text-sm text-gray-600 dark:text-gray-300">No saved sessions found.</p>
-            ) : (
-              <ul className="space-y-2 max-h-60 overflow-y-auto pr-1"> {/* Scrollable list */}
-                {sessions.map((session) => (
-                  <li key={session.id} className="flex justify-between items-center p-2 bg-white/50 dark:bg-gray-800/50 rounded-md shadow-sm">
-                    <div className="flex-1 min-w-0 mr-2">
-                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate" title={session.session_name}>
-                        {session.session_name}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        Dataset: {session.dataset_id || 'N/A'} | Saved: {new Date(session.updated_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <div className="flex space-x-1">
-                      <button
-                        onClick={() => handleLoadClick(session.id)}
-                        disabled={!!actionLoading}
-                        className="p-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Load Session"
-                      >
-                        {actionLoading === `load-${session.id}` ? <span className="loading loading-spinner loading-xs"></span> : <ArrowDownTrayIcon className="h-5 w-5" />}
-                      </button>
-                      <button
-                        onClick={() => handleDeleteClick(session.id)}
-                         disabled={!!actionLoading}
-                        className="p-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Delete Session"
-                      >
-                         {actionLoading === `delete-${session.id}` ? <span className="loading loading-spinner loading-xs"></span> : <TrashIcon className="h-5 w-5" />}
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </>
+        {/* Session List */}
+        {isLoading ? (
+          <p className="text-sm text-gray-600 dark:text-gray-300">Loading sessions...</p>
+        ) : sessions.length === 0 ? (
+          <p className="text-sm text-gray-600 dark:text-gray-300">No saved sessions found.</p>
+        ) : (
+          <ul className="space-y-2 max-h-60 overflow-y-auto pr-1"> {/* Scrollable list */}
+            {sessions.map((session) => (
+              // Add gap between items for better spacing
+              <li key={session.id} className="flex justify-between items-center p-2 bg-white/50 dark:bg-gray-800/50 rounded-md shadow-sm gap-2">
+                {/* Details section */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate" title={session.session_name}>
+                    {session.session_name}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {/* Shorten dataset display */}
+                    DS: {session.dataset_id?.length > 15 ? session.dataset_id.substring(0, 15) + '...' : session.dataset_id || 'N/A'} | {new Date(session.updated_at).toLocaleDateString()}
+                  </p>
+                </div>
+                {/* Action buttons section - prevent shrinking */}
+                <div className="flex flex-shrink-0 space-x-1">
+                  <button
+                    onClick={() => handleLoadClick(session.id)}
+                    disabled={!!actionLoading}
+                    className="p-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Load Session"
+                  >
+                    {actionLoading === `load-${session.id}` ? <span className="loading loading-spinner loading-xs"></span> : <ArrowDownTrayIcon className="h-5 w-5" />}
+                  </button>
+                  <button
+                    onClick={() => handleDeleteClick(session.id)}
+                     disabled={!!actionLoading}
+                    className="p-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Delete Session"
+                  >
+                     {actionLoading === `delete-${session.id}` ? <span className="loading loading-spinner loading-xs"></span> : <TrashIcon className="h-5 w-5" />}
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
 
-      {/* Save Modal - Render outside the main div if needed, or keep here */}
+      {/* Save Modal */}
       <SaveSessionModal
         isOpen={showSaveModal}
         onClose={() => setShowSaveModal(false)}

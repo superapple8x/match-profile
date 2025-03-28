@@ -3,6 +3,18 @@
 @tailwind utilities;
 
 @layer base {
+  html, body, #root {
+    @apply h-full; /* Ensure root elements fill the height */
+  }
+
+  body {
+    /* Apply base background matching the gradient edges */
+    /* Light: to-indigo-100, Dark: to-gray-950 */
+    @apply bg-indigo-100 dark:bg-gray-950;
+    /* Apply base text color (Tailwind does this, but explicit doesn't hurt) */
+    @apply text-gray-900 dark:text-gray-100;
+  }
+
   button, a, input, select, textarea {
     @apply transition-colors duration-200 ease-in-out;
   }

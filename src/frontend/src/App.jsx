@@ -36,6 +36,7 @@ function AuthView({ onLoginSuccess }) {
     const switchToRegister = () => setView('register');
     const switchToLogin = () => setView('login');
 
+    // Apply gradient to the AuthView container as well
     return (
         <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-gray-800 dark:to-gray-950">
             {view === 'login' ? (
@@ -75,22 +76,30 @@ function App() {
 
   // --- Effects ---
 
-  // Dark mode effect
+  // Dark mode effect - Only manage dark class and base text color on body
   useEffect(() => {
-    const bodyClassList = document.body.classList;
+    const body = document.body;
+    const bodyClassList = body.classList;
+
+    // Apply dark class
     if (darkMode) {
       bodyClassList.add('dark');
     } else {
       bodyClassList.remove('dark');
     }
-    document.body.style.backgroundColor = darkMode ? 'rgb(17 24 39)' : '#eef2ff';
-    document.body.style.color = darkMode ? 'rgb(243 244 246)' : 'rgb(17 24 39)';
-    document.body.style.transition = 'background-color 0.3s ease-in-out, color 0.3s ease-in-out';
+    // Apply base text color to body
+    body.style.color = darkMode ? 'rgb(243 244 246)' : 'rgb(17 24 39)'; // gray-100 : gray-900
+    // Remove direct background/height/overflow styling from body
+    body.style.backgroundColor = ''; // Let Tailwind handle body background via index.css or defaults
+    body.style.height = '';
+    body.style.overflow = '';
+    document.documentElement.style.height = '';
+    body.style.transition = 'color 0.3s ease-in-out'; // Only transition color
 
+    // Cleanup function
     return () => {
         bodyClassList.remove('dark');
-        document.body.style.backgroundColor = '';
-        document.body.style.color = '';
+        body.style.color = '';
     }
   }, [darkMode]);
 
@@ -124,6 +133,14 @@ function App() {
         // Restore a default or last known width (could store last width in state/localStorage)
         setSidebarWidth(256); // Restore default w-64
     }
+  };
+
+  // Function to ensure sidebar is expanded
+  const ensureSidebarExpanded = () => {
+      if (isSidebarCollapsed) {
+          setIsSidebarCollapsed(false);
+          setSidebarWidth(256); // Or restore previous width if saved
+      }
   };
 
   const startResizing = useCallback((mouseDownEvent) => {
@@ -347,14 +364,16 @@ function App() {
 
   return (
     <Router>
-      {/* Use relative positioning for the main container to position the handle */}
-      <div className="flex min-h-screen relative">
+      {/* Apply gradient to this container, ensure it fills viewport height */}
+      <div className="flex h-screen relative bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-gray-800 dark:to-gray-950">
         {/* Sidebar */}
         {/* Remove fixed width, apply dynamic width via style, add ref */}
+        {/* Explicitly set sidebar background, overriding the parent gradient */}
         <aside
           ref={sidebarRef}
           style={{ width: `${sidebarWidth}px` }} // Apply dynamic width
-          className={`p-4 flex flex-col bg-indigo-50/70 dark:bg-gray-800/70 backdrop-blur-sm shadow-lg h-screen sticky top-0 z-20 transition-all duration-100 ease-linear`} // Use faster transition for resize
+          // Ensure sidebar doesn't shrink and takes full height
+          className={`flex-shrink-0 p-4 flex flex-col bg-indigo-50/70 dark:bg-gray-800/70 backdrop-blur-sm shadow-lg h-full sticky top-0 z-20 transition-all duration-100 ease-linear`} // Changed h-screen to h-full
         >
            {/* Conditionally hide title or show smaller version */}
            <h1 className={`font-bold text-gray-800 dark:text-white pt-4 pb-2 px-2 mb-4 transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'text-lg text-center' : 'text-xl'}`}>
@@ -373,7 +392,8 @@ function App() {
                className={`${baseButtonClasses} ${!datasetId ? primaryButtonDisabledClasses : primaryButtonActiveClasses}`}
                title={isSidebarCollapsed ? "LLM Analysis" : ""} // Add title for collapsed view
              >
-               <ChatBubbleLeftRightIcon className={`h-5 w-5 ${!isSidebarCollapsed ? 'mr-2' : 'mx-auto'}`} /> {/* Center icon when collapsed */}
+               {/* Use consistent h-6 w-6 icon size */}
+               <ChatBubbleLeftRightIcon className={`h-6 w-6 ${!isSidebarCollapsed ? 'mr-2' : 'mx-auto'}`} /> {/* Center icon when collapsed */}
                {!isSidebarCollapsed && <span>LLM Analysis</span>} {/* Hide text when collapsed */}
              </button>
 
@@ -383,18 +403,20 @@ function App() {
                 currentAppState={currentAppState}
                 onLoadSession={handleLoadSession}
                 isCollapsed={isSidebarCollapsed} // Pass collapsed state down
+                // Pass function to expand sidebar
+                onRequestExpand={ensureSidebarExpanded}
              />
            </div>
 
            {/* Bottom Controls: Collapse Toggle, Dark Mode & Logout */}
-           <div className="mt-auto pb-4 space-y-2">
+           <div className="mt-auto pb-4 space-y-2 flex-shrink-0"> {/* Added flex-shrink-0 */}
                 {/* Sidebar Collapse Toggle Button */}
                 <button
                     onClick={toggleSidebarCollapse}
                     className={`w-full flex items-center justify-center px-4 py-2 rounded-md shadow-sm transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${secondaryButtonClasses}`}
                     aria-label={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
                 >
-                    {isSidebarCollapsed ? <ChevronDoubleRightIcon className="h-5 w-5" /> : <ChevronDoubleLeftIcon className="h-5 w-5" />}
+                    {isSidebarCollapsed ? <ChevronDoubleRightIcon className="h-6 w-6" /> : <ChevronDoubleLeftIcon className="h-6 w-6" />} {/* Changed to h-6 w-6 */}
                     {!isSidebarCollapsed && <span className="ml-2">Collapse</span>} {/* Hide text when collapsed */}
                 </button>
                  <button
@@ -402,7 +424,7 @@ function App() {
                      className={`w-full flex items-center justify-center px-4 py-2 rounded-md shadow-sm transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${secondaryButtonClasses}`}
                      aria-label={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
                  >
-                     {darkMode ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
+                     {darkMode ? <SunIcon className="h-6 w-6" /> : <MoonIcon className="h-6 w-6" />} {/* Changed to h-6 w-6 */}
                      {!isSidebarCollapsed && <span className="ml-2">{darkMode ? 'Light Mode' : 'Dark Mode'}</span>} {/* Hide text when collapsed */}
                  </button>
                  <button
@@ -410,7 +432,7 @@ function App() {
                      className={`w-full flex items-center justify-center px-4 py-2 rounded-md shadow-sm transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 bg-red-100 hover:bg-red-200 dark:bg-red-800/80 dark:hover:bg-red-700/80 text-red-700 dark:text-red-100 font-semibold`}
                      aria-label="Logout"
                  >
-                    <ArrowRightOnRectangleIcon className={`h-5 w-5 ${!isSidebarCollapsed ? 'mr-2' : 'mx-auto'}`} /> {/* Center icon when collapsed */}
+                    <ArrowRightOnRectangleIcon className={`h-6 w-6 ${!isSidebarCollapsed ? 'mr-2' : 'mx-auto'}`} /> {/* Changed to h-6 w-6 */}
                     {!isSidebarCollapsed && <span>Logout</span>} {/* Hide text when collapsed */}
                  </button>
            </div>
@@ -418,14 +440,14 @@ function App() {
 
         {/* Draggable Resize Handle */}
         <div
-            className="w-2 cursor-col-resize bg-gray-300/50 dark:bg-gray-600/50 hover:bg-indigo-500 dark:hover:bg-indigo-400 transition-colors duration-150 h-screen sticky top-0 z-20"
+            className="flex-shrink-0 w-2 cursor-col-resize bg-gray-300/50 dark:bg-gray-600/50 hover:bg-indigo-500 dark:hover:bg-indigo-400 transition-colors duration-150 h-full sticky top-0 z-20" // Changed h-screen to h-full
             onMouseDown={startResizing}
             title="Resize Sidebar"
         />
 
         {/* Main Content Area */}
-        {/* Added min-h-0 to help with flex overflow calculation */}
-        <main className="flex-1 p-6 overflow-y-auto max-h-screen min-h-0 bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-gray-800 dark:to-gray-950 relative">
+        {/* Let this area scroll internally, remove background */}
+        <main className="flex-1 p-6 overflow-y-auto relative bg-transparent"> {/* Removed gradient/bg, h-screen */}
 
           {/* Welcome View */}
           <div className={`absolute inset-6 transition-opacity duration-300 ease-in-out ${currentView === 'welcome' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
