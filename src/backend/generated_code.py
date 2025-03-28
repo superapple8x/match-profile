@@ -23,32 +23,25 @@ analysis_results = {}
 try:
     df = pd.read_csv('/input/data.csv', encoding='utf-8')
 
-    required_cols = ['Location', 'Watch Reason']
+    required_cols = ['Location', 'Addiction Level', 'Self Control', 'Satisfaction']
     for col in required_cols:
         if col not in df.columns:
             analysis_results['error'] = f"Error: Column '{col}' not found."
             print(f"Error: Column '{col}' not found.")
             raise Exception(f"Column '{col}' not found.")
 
-    procrastination_df = df[df['Watch Reason'] == 'Procrastination']
-    if procrastination_df.empty:
-        analysis_results['error'] = "No data found for 'Procrastination' watch reason."
-        print("No data found for 'Procrastination' watch reason.")
-    else:
-        country_counts = procrastination_df['Location'].value_counts()
-        most_procrastinating_country = country_counts.idxmax()
-        count = country_counts.max()
-        
-        analysis_results['most_procrastinating_country'] = most_procrastinating_country
-        analysis_results['procrastination_count'] = count
+    df['Addiction_Level_numeric'] = pd.to_numeric(df['Addiction Level'], errors='coerce')
+    df['Self_Control_numeric'] = pd.to_numeric(df['Self Control'], errors='coerce')
+    df['Satisfaction_numeric'] = pd.to_numeric(df['Satisfaction'], errors='coerce')
 
-        plt.figure(figsize=(10, 6))
-        sns.barplot(x=country_counts.index, y=country_counts.values)
-        plt.title('Procrastination Count by Country')
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        plt.savefig('/output/plot_1.png')
-        plt.close()
+    if df['Addiction_Level_numeric'].isnull().all() or df['Self_Control_numeric'].isnull().all() or df['Satisfaction_numeric'].isnull().all():
+        analysis_results['warning'] = "Warning: One or more health-related columns could not be treated as numeric."
+        print("Warning: One or more health-related columns could not be treated as numeric.")
+    else:
+        df['Health_Score'] = (df['Self_Control_numeric'] + df['Satisfaction_numeric'] - df['Addiction_Level_numeric']) / 3
+        healthiest_by_country = df.loc[df.groupby('Location')['Health_Score'].idxmax()]
+        healthiest_by_country = healthiest_by_country[['Location', 'UserID', 'Age', 'Gender', 'Health_Score']]
+        analysis_results['healthiest_by_country'] = healthiest_by_country.to_dict('records')
 
     final_stats = convert_numpy_types(analysis_results)
     with open('/output/stats.json', 'w') as f:

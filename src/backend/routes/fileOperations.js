@@ -7,9 +7,10 @@ const MatchingEngine = require('../matchingEngine');
 const cors = require('cors');
 const fs = require('fs').promises; // Use fs.promises
 const path = require('path'); // Need path module
+const authMiddleware = require('../middleware/authMiddleware'); // Import auth middleware
 
-// Define the upload directory path
-const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
+// Define the base upload directory path
+const BASE_UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 
 // Multer setup for file uploads
 const upload = multer({
@@ -19,39 +20,54 @@ const upload = multer({
   }
 });
 
-// File import endpoint
-router.post('/import', upload.single('file'), async (req, res) => {
+// File import endpoint - Apply authMiddleware first
+router.post('/import', authMiddleware, upload.single('file'), async (req, res) => {
   console.log('--- /api/import request received ---');
   try {
+    // User ID should be available from authMiddleware
+    const userId = req.user?.id;
+    if (!userId) {
+        // This shouldn't happen if authMiddleware is working, but good to check
+        console.error('User ID missing after authMiddleware in /import');
+        return res.status(401).json({ error: 'Authentication required but user ID not found.' });
+    }
+    console.log(`Authenticated user ID: ${userId}`);
+
     console.log('req.file received:', req.file ? `Name: ${req.file.originalname}, Size: ${req.file.size}` : 'No file object');
-    // console.log('req.file object:', req.file); // Uncomment for more detail if needed
-    // console.log('req.file.originalname type:', typeof req.file?.originalname); // Use optional chaining
-        console.log('req.file.buffer:', typeof req.file.buffer);
-        if (!req.file) {
+    if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
     const fileBuffer = req.file.buffer;
-    // Sanitize filename to prevent path traversal and invalid characters
+    // Sanitize filename
     const originalFileName = req.file.originalname;
     const safeFileName = path.basename(originalFileName).replace(/[^a-zA-Z0-9._-]/g, '_');
-    const filePath = path.join(UPLOAD_DIR, safeFileName);
 
-    // Ensure upload directory exists
+    // Create user-specific directory path
+    const userUploadDir = path.join(BASE_UPLOAD_DIR, `user_${userId}`);
+    const filePath = path.join(userUploadDir, safeFileName);
+
+    // Ensure user-specific upload directory exists
     try {
-      await fs.mkdir(UPLOAD_DIR, { recursive: true });
-      console.log(`Upload directory ensured: ${UPLOAD_DIR}`);
+      console.log(`[Import] Attempting to create directory: ${userUploadDir}`); // Added log
+      await fs.mkdir(userUploadDir, { recursive: true });
+      console.log(`[Import] User upload directory ensured: ${userUploadDir}`); // Added log
     } catch (dirError) {
-      console.error(`Error creating upload directory ${UPLOAD_DIR}:`, dirError);
-      throw new Error(`Failed to ensure upload directory exists: ${dirError.message}`);
+      console.error(`[Import] Error creating user upload directory ${userUploadDir}:`, dirError); // Added log marker
+      // Log the specific error code if available
+      console.error(`[Import] Directory creation failed with code: ${dirError.code}`);
+      throw new Error(`Failed to ensure user upload directory exists: ${dirError.message}`);
     }
 
-    // Save the file to disk
+    // Save the file to disk in the user's directory
     try {
+      console.log(`[Import] Attempting to write file to: ${filePath}`); // Added log
       await fs.writeFile(filePath, fileBuffer);
-      console.log(`File saved successfully to: ${filePath}`);
+      console.log(`[Import] File saved successfully to: ${filePath}`); // Added log
     } catch (writeError) {
-      console.error(`Error writing file to ${filePath}:`, writeError);
+      console.error(`[Import] Error writing file to ${filePath}:`, writeError); // Added log marker
+      // Log the specific error code if available
+      console.error(`[Import] File writing failed with code: ${writeError.code}`);
       throw new Error(`Failed to save uploaded file: ${writeError.message}`);
     }
 
@@ -166,4 +182,69 @@ router.post('/match', cors(), (req, res) => {
     res.status(500).json({ error: 'Failed to process matching request', details: error.message });
   }
 });
+
+// --- Get Dataset Content Route ---
+router.get('/datasets/:filename', authMiddleware, async (req, res) => {
+  console.log('--- /api/datasets/:filename request received ---');
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required.' });
+    }
+
+    const requestedFilename = req.params.filename;
+    // Basic validation/sanitization on filename from URL param
+    const safeRequestedFilename = path.basename(requestedFilename).replace(/[^a-zA-Z0-9._-]/g, '_');
+    if (!safeRequestedFilename) {
+        return res.status(400).json({ error: 'Invalid filename provided.' });
+    }
+
+    console.log(`User ${userId} requesting dataset: ${safeRequestedFilename}`);
+
+    const userUploadDir = path.join(BASE_UPLOAD_DIR, `user_${userId}`);
+    const filePath = path.join(userUploadDir, safeRequestedFilename);
+
+    // Check if file exists
+    try {
+      await fs.access(filePath); // Check accessibility
+      console.log(`File found at: ${filePath}`);
+    } catch (accessError) {
+      console.warn(`File not found or inaccessible for user ${userId}: ${filePath}`);
+      return res.status(404).json({ error: 'Dataset file not found.' });
+    }
+
+    // Read the file content
+    const fileBuffer = await fs.readFile(filePath);
+    console.log(`File read successfully: ${safeRequestedFilename}`);
+
+    // Parse the file content (similar logic to /import)
+    let parsedData = [];
+    if (safeRequestedFilename.endsWith('.csv')) {
+      console.log(`Parsing retrieved CSV: ${safeRequestedFilename}`);
+      await new Promise((resolve, reject) => {
+        require('stream').Readable.from(fileBuffer)
+          .pipe(csv())
+          .on('data', (row) => parsedData.push(row))
+          .on('end', resolve)
+          .on('error', reject);
+      });
+    } else if (safeRequestedFilename.endsWith('.xlsx') || safeRequestedFilename.endsWith('.xls')) {
+      console.log(`Parsing retrieved Excel: ${safeRequestedFilename}`);
+      const workbook = xlsx.read(fileBuffer);
+      const sheetName = workbook.SheetNames[0];
+      parsedData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+    } else {
+      // Should not happen if saved correctly, but good practice
+      throw new Error('Unsupported file type encountered during retrieval.');
+    }
+
+    console.log(`Successfully parsed retrieved file ${safeRequestedFilename}. Records: ${parsedData.length}`);
+    res.status(200).json({ data: parsedData, fileName: safeRequestedFilename });
+
+  } catch (error) {
+    console.error("--- Error retrieving dataset content ---:", error);
+    res.status(500).json({ error: 'Failed to retrieve dataset content', details: error.message });
+  }
+});
+
 module.exports = router;

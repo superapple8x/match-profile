@@ -300,40 +300,84 @@ function App() {
   // ---
 
   // --- Session Load Handler ---
-  const handleLoadSession = (sessionData) => {
+  // Wrap in useCallback as it might be passed down if refactored
+  const handleLoadSession = useCallback(async (sessionData) => {
       console.log("App: Loading session data", sessionData);
+      // Add a loading state? For now, just proceed.
 
-      // TODO: Handle loading the actual dataset file content based on dataset_id
-      // This might require fetching the file content or assuming it's already available
-      // For now, just set the ID and clear current data if it doesn't match
-      if (datasetId !== sessionData.dataset_id) {
-          setImportedData(null); // Clear potentially mismatched data
-          // Ideally, trigger a fetch/load of the correct dataset here
-          console.warn(`Dataset ID mismatch. Loaded session requires '${sessionData.dataset_id}', current is '${datasetId}'. Data may be incorrect until file is re-uploaded/fetched.`);
+      const newDatasetId = sessionData.dataset_id;
+      let needsDataFetch = false;
+
+      // Check if dataset ID exists and if it's different from current or if data is missing
+      if (newDatasetId && (datasetId !== newDatasetId || !importedData)) {
+          console.log(`Need to fetch dataset: ${newDatasetId}`);
+          setImportedData(null); // Clear potentially mismatched data while fetching
+          needsDataFetch = true;
+      } else if (!newDatasetId) {
+          // If the session has no dataset ID, clear current data
+          setImportedData(null);
       }
-      setDatasetId(sessionData.dataset_id);
 
+      // Always update the datasetId state
+      setDatasetId(newDatasetId);
+
+      // Update other states from session
       setSearchCriteria(sessionData.search_criteria || null);
       setAnalysisMessages(sessionData.analysis_messages || []);
-      setAnalysisQuery(sessionData.analysis_query || ''); // Load analysis query
+      setAnalysisQuery(sessionData.analysis_query || '');
 
-      // Reset search results as they aren't saved in the session
+      // Reset search results
       setSearchResults(null);
       setIsSearching(false);
 
-      // Decide which view to show based on loaded data
-      if (sessionData.analysis_messages && sessionData.analysis_messages.length > 0) {
-          setIsAnalysisViewOpen(true); // Open analysis view if there's history
-      } else if (sessionData.dataset_id) {
-          setIsAnalysisViewOpen(false); // Ensure analysis is closed if no history
-          setCurrentView('dashboard'); // Go to dashboard if only dataset/search criteria loaded
-      } else {
-          setIsAnalysisViewOpen(false);
-          setCurrentView('welcome'); // Fallback to welcome
+      // Fetch dataset content if needed
+      if (needsDataFetch) {
+          try {
+              console.log(`Fetching /api/datasets/${encodeURIComponent(newDatasetId)}`);
+              const response = await fetch(`/api/datasets/${encodeURIComponent(newDatasetId)}`, {
+                  headers: {
+                      'Authorization': `Bearer ${authToken}`, // Use current authToken state
+                  },
+              });
+
+              if (!response.ok) {
+                  const errorData = await response.json().catch(() => ({})); // Try to get error details
+                  throw new Error(errorData.error || `Failed to fetch dataset. Status: ${response.status}`);
+              }
+
+              const result = await response.json();
+              console.log(`Dataset ${result.fileName} fetched successfully. Records: ${result.data?.length}`);
+              setImportedData(result.data || []); // Update importedData state
+
+          } catch (error) {
+              console.error('Failed to load dataset content:', error);
+              setImportedData(null); // Ensure data is null on error
+              // Show error to user? For now, just log.
+              alert(`Error loading dataset "${newDatasetId}": ${error.message}. You may need to re-upload the file.`);
+              // Fallback to welcome view if dataset load fails?
+              setCurrentView('welcome');
+              setIsAnalysisViewOpen(false);
+              return; // Stop further view logic if dataset failed
+          }
       }
 
-      alert(`Session "${sessionData.session_name}" loaded.`); // Simple feedback
-  };
+      // Decide which view to show based on loaded data (AFTER potential data fetch)
+      if (sessionData.analysis_messages && sessionData.analysis_messages.length > 0) {
+          setIsAnalysisViewOpen(true);
+      } else if (newDatasetId) { // Check newDatasetId which is now set
+          setIsAnalysisViewOpen(false);
+          setCurrentView('dashboard');
+      } else {
+          setIsAnalysisViewOpen(false);
+          setCurrentView('welcome');
+      }
+
+      // Only show success alert if dataset load didn't fail
+      if (!needsDataFetch || (needsDataFetch && importedData)) { // Check if data fetch was needed and successful
+          alert(`Session "${sessionData.session_name}" loaded.`);
+      }
+
+  }, [datasetId, importedData, authToken]); // Add dependencies for useCallback
   // ---
 
   // --- State object for saving session ---
@@ -382,8 +426,8 @@ function App() {
            {/* Make this middle section scrollable and allow it to grow/shrink */}
            {/* Add padding adjustment when collapsed */}
            <div className={`flex-grow space-y-4 overflow-y-auto mb-4 transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'overflow-x-hidden px-0' : 'pr-1'}`}>
-             {/* Pass isCollapsed prop down */}
-             <FileImport onFileImport={handleFileImport} isCollapsed={isSidebarCollapsed} />
+             {/* Pass isCollapsed and authToken props down */}
+             <FileImport onFileImport={handleFileImport} isCollapsed={isSidebarCollapsed} authToken={authToken} />
 
              {/* LLM Analysis Button - Moved Up */}
              <button

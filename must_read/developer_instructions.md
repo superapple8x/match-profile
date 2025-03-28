@@ -52,3 +52,7 @@ This file provides guidelines for future developers working on the Profile Match
 
 ## 7. Conclusion
 Adhering to these instructions will ensure that the project remains maintainable, secure, and scalable. Thorough documentation and a consistent activity log are critical for future development and troubleshooting.
+
+## 8. Notes:
+
+- When testing file storage, make sure to change directories on fileOperations.js
