@@ -23,28 +23,26 @@ analysis_results = {}
 try:
     df = pd.read_csv('/input/data.csv', encoding='utf-8')
 
-    required_col = 'Income'
-    location_col = 'Location'
-
-    if required_col not in df.columns:
-        analysis_results['error'] = f"Error: Column '{required_col}' not found."
-        print(f"Error: Column '{required_col}' not found.")
-    elif location_col not in df.columns:
-        analysis_results['error'] = f"Error: Column '{location_col}' not found."
-        print(f"Error: Column '{location_col}' not found.")
+    required_cols = ['Gender', 'Medical Condition']
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    
+    if missing_cols:
+        analysis_results['error'] = f"Error: Columns {missing_cols} not found in dataset."
+        for col in missing_cols:
+            print(f"Error: Column '{col}' not found in dataset.")
     else:
-        df[f'{required_col}_numeric'] = pd.to_numeric(df[required_col], errors='coerce')
+        cancer_patients = df[df['Medical Condition'] == 'Cancer']
+        gender_counts = cancer_patients['Gender'].value_counts().to_dict()
+        
+        analysis_results['gender_counts'] = gender_counts
+        analysis_results['most_sufferers'] = max(gender_counts, key=gender_counts.get)
 
-        if not df[f'{required_col}_numeric'].isnull().all():
-            max_income_idx = df[f'{required_col}_numeric'].idxmax()
-            max_income_country = df.loc[max_income_idx, location_col]
-            max_income_value = df.loc[max_income_idx, f'{required_col}_numeric']
-
-            analysis_results['highest_salary_country'] = max_income_country
-            analysis_results['highest_salary_value'] = max_income_value
-        else:
-            analysis_results['warning'] = f"Warning: Column '{required_col}' could not be treated as numeric."
-            print(f"Warning: Column '{required_col}' could not be treated as numeric.")
+        plt.figure(figsize=(10, 6))
+        sns.countplot(data=cancer_patients, x='Gender')
+        plt.title('Cancer Patients by Gender')
+        plt.tight_layout()
+        plt.savefig('/output/plot_1.png')
+        plt.close()
 
     final_stats = convert_numpy_types(analysis_results)
     with open('/output/stats.json', 'w') as f:

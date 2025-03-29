@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
-import { ChevronDownIcon, ChevronUpIcon, TableCellsIcon, ChartBarIcon, InformationCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import {
+  ChevronDownIcon, ChevronUpIcon, TableCellsIcon, ChartBarIcon, InformationCircleIcon, ExclamationTriangleIcon,
+  DocumentTextIcon, // For string/text
+  HashtagIcon,      // For numerical
+  CalendarDaysIcon, // For date (if applicable)
+  QuestionMarkCircleIcon, // Default/unknown
+  ArrowPathIcon // For loading spinner
+} from '@heroicons/react/24/outline';
 import { Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -33,7 +40,8 @@ const TABS = {
 function DataOverview({ datasetId, datasetName, datasetAttributes, authToken, darkMode, handleLogout }) { // Added darkMode and handleLogout
   const [isExpanded, setIsExpanded] = useState(false);
   const [statsData, setStatsData] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // For content area loading message
+  const [isHeaderLoading, setIsHeaderLoading] = useState(false); // For header loading indicator
   const [error, setError] = useState(null);
   // Default to Attributes tab if available, otherwise Categorical
   const [activeTab, setActiveTab] = useState(
@@ -58,7 +66,8 @@ function DataOverview({ datasetId, datasetName, datasetAttributes, authToken, da
         setIsLoading(false);
         return;
       }
-      setIsLoading(true);
+      setIsLoading(true); // Keep this for the content area message
+      setIsHeaderLoading(true); // Start header loading indicator
       setError(null);
       setStatsData(null);
       console.log(`[DataOverview] Fetching stats for dataset ID: ${datasetId}`);
@@ -97,7 +106,8 @@ function DataOverview({ datasetId, datasetName, datasetAttributes, authToken, da
             if (handleLogout) handleLogout();
         }
       } finally {
-        setIsLoading(false);
+        setIsLoading(false); // Stop content area loading message
+        setIsHeaderLoading(false); // Stop header loading indicator
       }
     };
 
@@ -242,9 +252,23 @@ function DataOverview({ datasetId, datasetName, datasetAttributes, authToken, da
   const missingChartOptions = { ...chartOptions, scales: { ...chartOptions.scales, y: { ...chartOptions.scales.y, max: 100 } } }; // Set max Y to 100 for percentage
 
 
-  // --- Tab Rendering ---
+   // --- Helper to get type icon ---
+   const getTypeIcon = (type) => {
+       const lowerType = type?.toLowerCase() || '';
+       if (lowerType.includes('string') || lowerType.includes('text') || lowerType.includes('varchar')) {
+           return <DocumentTextIcon className="h-4 w-4 mr-1.5 text-gray-400 dark:text-gray-500 inline-block align-middle" aria-hidden="true" />;
+       } else if (lowerType.includes('int') || lowerType.includes('num') || lowerType.includes('float') || lowerType.includes('double') || lowerType.includes('decimal')) {
+           return <HashtagIcon className="h-4 w-4 mr-1.5 text-blue-400 dark:text-blue-500 inline-block align-middle" aria-hidden="true" />;
+       } else if (lowerType.includes('date') || lowerType.includes('time')) {
+           return <CalendarDaysIcon className="h-4 w-4 mr-1.5 text-purple-400 dark:text-purple-500 inline-block align-middle" aria-hidden="true" />;
+       } else {
+           return <QuestionMarkCircleIcon className="h-4 w-4 mr-1.5 text-gray-400 dark:text-gray-500 inline-block align-middle" aria-hidden="true" />;
+       }
+   };
 
-  const renderTabContent = () => {
+   // --- Tab Rendering ---
+
+   const renderTabContent = () => {
     // Use slightly larger text for loading/error/no data messages
     if (isLoading) return <p className="text-sm text-gray-500 dark:text-gray-400 animate-pulse p-6">Loading statistics...</p>;
     if (error) return <p className="text-sm text-red-600 dark:text-red-400 p-6">{error}</p>;
@@ -255,14 +279,34 @@ function DataOverview({ datasetId, datasetName, datasetAttributes, authToken, da
         if (!datasetAttributes || datasetAttributes.length === 0) return <p className="text-sm text-gray-500 dark:text-gray-400 p-6">No attribute information available.</p>;
         return (
             <div className="p-6"> {/* Outer padding */}
-                <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-white dark:bg-gray-700/50 shadow-sm">
+                {/* Increased padding from p-4 to p-5 */}
+                <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-5 bg-white dark:bg-gray-700/50 shadow-sm">
                     <h4 className="text-base font-semibold text-gray-700 dark:text-gray-300 mb-3">Attributes ({datasetAttributes.length}):</h4>
                     <ul className="list-disc list-inside space-y-1 text-sm text-gray-600 dark:text-gray-400">
-                    {datasetAttributes.map((attr, index) => (
-                        <li key={index} className="truncate" title={attr.originalName}>
-                        {attr.originalName} <span className="text-gray-400 dark:text-gray-500">({attr.type})</span>
-                        </li>
-                    ))}
+                    {datasetAttributes.map((attr, index) => {
+                        // Calculate missing percentage if statsData is available
+                        const details = statsData?.columnDetails?.[attr.originalName];
+                        const totalRows = statsData?.totalRows;
+                        let missingPercentText = '';
+                        if (details && totalRows > 0) {
+                            const missingPercent = ((details.nullCount ?? 0) / totalRows * 100);
+                            missingPercentText = `(${missingPercent.toFixed(1)}% missing)`;
+                        } else if (statsData && !details) {
+                            // Handle case where column might not be in stats (e.g., added later)
+                            missingPercentText = '(stats N/A)';
+                        }
+
+                        return (
+                            <li key={index} className="truncate flex items-center justify-between" title={`${attr.originalName} (${attr.type})`}> {/* Added justify-between */}
+                                <div className="flex items-center overflow-hidden"> {/* Wrap icon and name */}
+                                    {getTypeIcon(attr.type)} {/* Call helper function */}
+                                    <span className="flex-1 truncate mr-2">{attr.originalName}</span> {/* Allow name to truncate */}
+                                </div>
+                                {/* Display missing percentage */}
+                                {missingPercentText && <span className="text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">{missingPercentText}</span>}
+                            </li>
+                        );
+                    })}
                     </ul>
                 </div>
             </div>
@@ -276,9 +320,11 @@ function DataOverview({ datasetId, datasetName, datasetAttributes, authToken, da
               const chartData = getCategoricalChartData(attr);
               if (!chartData) return null;
               return (
-                <div key={attr} className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-white dark:bg-gray-700/50 shadow-sm">
+                // Increased padding from p-4 to p-5
+                <div key={attr} className="border border-gray-200 dark:border-gray-600 rounded-lg p-5 bg-white dark:bg-gray-700/50 shadow-sm">
                   <h5 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{attr} (Top 5 Values)</h5> {/* Added mb-2 */}
-                  <div className="h-48">
+                  {/* Increased height from h-48 to h-56 */}
+                  <div className="h-56">
                      <Bar options={chartOptions} data={chartData} />
                   </div>
                 </div>
@@ -299,37 +345,38 @@ function DataOverview({ datasetId, datasetName, datasetAttributes, authToken, da
               const missingPercent = ((details?.nullCount ?? 0) / statsData.totalRows * 100).toFixed(1);
 
               return (
-                <div key={attr} className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-white dark:bg-gray-700/50 shadow-sm">
+                // Increased padding from p-4 to p-5
+                <div key={attr} className="border border-gray-200 dark:border-gray-600 rounded-lg p-5 bg-white dark:bg-gray-700/50 shadow-sm">
                   { !chartData ? (
-                      // Fallback text rendering (use slightly larger font)
-                      <div className="text-sm text-gray-600 dark:text-gray-400">
-                          <strong>{attr}:</strong>
-                          <ul className="list-disc list-inside pl-4">
-                              <li>Min: {numStats?.min?.toFixed(2) ?? 'N/A'}</li>
-                              <li>Max: {numStats?.max?.toFixed(2) ?? 'N/A'}</li>
-                              <li>Average: {numStats?.average?.toFixed(2) ?? 'N/A'}</li>
-                              <li>Std Dev: {numStats?.standardDeviation?.toFixed(2) ?? 'N/A'}</li>
-                              <li>Median: {numStats?.median?.toFixed(2) ?? 'N/A'}</li>
-                              <li>P25: {numStats?.p25?.toFixed(2) ?? 'N/A'}</li>
-                              <li>P75: {numStats?.p75?.toFixed(2) ?? 'N/A'}</li>
-                              <li>Missing: {details?.nullCount ?? 'N/A'} ({missingPercent}%)</li>
-                              <li className="italic text-gray-500 dark:text-gray-500">Histogram data unavailable.</li>
-                          </ul>
+                      // Fallback text rendering using definition list
+                      <div>
+                          <h5 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">{attr} (Summary)</h5>
+                          <dl className="text-xs text-gray-500 dark:text-gray-400 mb-2 space-y-0.5">
+                              <div className="flex justify-between"> <dt className="font-medium text-gray-600 dark:text-gray-300">Avg:</dt> <dd className="text-right">{numStats?.average?.toFixed(2) ?? 'N/A'}</dd> </div>
+                              <div className="flex justify-between"> <dt className="font-medium text-gray-600 dark:text-gray-300">Median:</dt> <dd className="text-right">{numStats?.median?.toFixed(2) ?? 'N/A'}</dd> </div>
+                              <div className="flex justify-between"> <dt className="font-medium text-gray-600 dark:text-gray-300">StdDev:</dt> <dd className="text-right">{numStats?.standardDeviation?.toFixed(2) ?? 'N/A'}</dd> </div>
+                              <div className="flex justify-between"> <dt className="font-medium text-gray-600 dark:text-gray-300">IQR:</dt> <dd className="text-right">{(numStats?.p75 - numStats?.p25)?.toFixed(2) ?? 'N/A'}</dd> </div>
+                              <div className="flex justify-between"> <dt className="font-medium text-gray-600 dark:text-gray-300">Range:</dt> <dd className="text-right">{numStats?.min?.toFixed(2) ?? 'N/A'} - {numStats?.max?.toFixed(2) ?? 'N/A'}</dd> </div>
+                              <div className="flex justify-between"> <dt className="font-medium text-gray-600 dark:text-gray-300">Missing:</dt> <dd className="text-right">{details?.nullCount ?? 'N/A'} ({missingPercent}%)</dd> </div>
+                          </dl>
+                          <p className="text-xs italic text-gray-500 dark:text-gray-500">Histogram data unavailable.</p>
                       </div>
                     ) : (
                       // Chart rendering
                       <>
                         <h5 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">{attr} (Distribution)</h5>
-                        {/* Display additional stats */}
-                        <div className="text-xs text-gray-500 dark:text-gray-500 mb-2 grid grid-cols-2 gap-x-2"> {/* Use grid for better layout */}
-                           <span>Avg: {numStats?.average?.toFixed(2) ?? 'N/A'}</span>
-                           <span>Median: {numStats?.median?.toFixed(2) ?? 'N/A'}</span>
-                           <span>StdDev: {numStats?.standardDeviation?.toFixed(2) ?? 'N/A'}</span>
-                           <span>IQR: {(numStats?.p75 - numStats?.p25)?.toFixed(2) ?? 'N/A'} (P25: {numStats?.p25?.toFixed(2) ?? 'N/A'}, P75: {numStats?.p75?.toFixed(2) ?? 'N/A'})</span>
-                           <span>Missing: {details?.nullCount ?? 'N/A'} ({missingPercent}%)</span>
-                        </div>
+                        {/* Display additional stats using a definition list style */}
+                        <dl className="text-xs text-gray-500 dark:text-gray-400 mb-2 space-y-0.5">
+                            <div className="flex justify-between"> <dt className="font-medium text-gray-600 dark:text-gray-300">Avg:</dt> <dd className="text-right">{numStats?.average?.toFixed(2) ?? 'N/A'}</dd> </div>
+                            <div className="flex justify-between"> <dt className="font-medium text-gray-600 dark:text-gray-300">Median:</dt> <dd className="text-right">{numStats?.median?.toFixed(2) ?? 'N/A'}</dd> </div>
+                            <div className="flex justify-between"> <dt className="font-medium text-gray-600 dark:text-gray-300">StdDev:</dt> <dd className="text-right">{numStats?.standardDeviation?.toFixed(2) ?? 'N/A'}</dd> </div>
+                            <div className="flex justify-between"> <dt className="font-medium text-gray-600 dark:text-gray-300">IQR:</dt> <dd className="text-right">{(numStats?.p75 - numStats?.p25)?.toFixed(2) ?? 'N/A'}</dd> </div>
+                            <div className="flex justify-between"> <dt className="font-medium text-gray-600 dark:text-gray-300">Range:</dt> <dd className="text-right">{numStats?.min?.toFixed(2) ?? 'N/A'} - {numStats?.max?.toFixed(2) ?? 'N/A'}</dd> </div>
+                            <div className="flex justify-between"> <dt className="font-medium text-gray-600 dark:text-gray-300">Missing:</dt> <dd className="text-right">{details?.nullCount ?? 'N/A'} ({missingPercent}%)</dd> </div>
+                        </dl>
                         {/* Removed stray closing p tag */}
-                        <div className="h-48">
+                        {/* Increased height from h-48 to h-56 */}
+                        <div className="h-56">
                            <Bar options={chartOptions} data={chartData} />
                         </div>
                       </>
@@ -346,7 +393,8 @@ function DataOverview({ datasetId, datasetName, datasetAttributes, authToken, da
         if (!missingChartData) return <p className="text-sm text-gray-500 dark:text-gray-400 p-6">Could not generate missing values data.</p>;
         return (
           <div className="p-6"> {/* Outer padding */}
-            <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-white dark:bg-gray-700/50 shadow-sm">
+            {/* Increased padding from p-4 to p-5 */}
+            <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-5 bg-white dark:bg-gray-700/50 shadow-sm">
                 <h5 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Percentage of Missing Values per Attribute</h5>
                 <div className="h-64">
                    <Bar options={missingChartOptions} data={missingChartData} />
@@ -365,10 +413,10 @@ function DataOverview({ datasetId, datasetName, datasetAttributes, authToken, da
       <button
         key={tabName}
         onClick={() => setActiveTab(tabName)}
-        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors duration-150 ease-in-out focus:outline-none focus:ring-1 focus:ring-primary-500 ${
+        className={`px-3 py-1.5 text-sm rounded-md transition-colors duration-150 ease-in-out focus:outline-none focus:ring-1 focus:ring-primary-500 ${
           isActive
-            ? 'bg-primary-600 text-white shadow-sm'
-            : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+            ? 'bg-primary-600 text-white shadow-sm font-semibold' // Added font-semibold
+            : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 font-medium' // Lighter inactive text, keep font-medium
         }`}
       >
         {tabName}
@@ -391,7 +439,14 @@ function DataOverview({ datasetId, datasetName, datasetAttributes, authToken, da
            <span className="text-xl font-semibold text-gray-800 dark:text-white truncate" title={datasetName}> {/* Increased text-xl */}
              Dataset: {datasetName || 'Unnamed Dataset'}
            </span>
-           {statsData && <span className="text-sm text-gray-500 dark:text-gray-400">({statsData.totalRows?.toLocaleString()} Profiles)</span>}
+           {/* Loading spinner icon */}
+           {isHeaderLoading && <ArrowPathIcon className="h-5 w-5 text-gray-400 dark:text-gray-500 animate-spin ml-2" aria-hidden="true" />}
+           {/* Row count capsule (only show if NOT loading and statsData exists) */}
+           {!isHeaderLoading && statsData && (
+               <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300">
+                   {statsData.totalRows?.toLocaleString()} Profiles
+               </span>
+           )}
         </div>
         {isExpanded ? (
           <ChevronUpIcon className="h-6 w-6 text-gray-600 dark:text-gray-400" />
