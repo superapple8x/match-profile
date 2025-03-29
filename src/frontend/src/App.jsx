@@ -564,6 +564,7 @@ function App() {
                 <ResultsDashboard
                   searchResults={searchResults} // Contains matches AND pagination data
                   searchCriteria={searchCriteria}
+                  searchWeights={searchWeights} // Pass the weights map
                   datasetAttributes={datasetAttributes} // Pass full attribute objects
                   isSearching={isSearching}
                   // Sorting Props

@@ -21,6 +21,7 @@ function ResultsDashboard({
   pageSize, // Keep pageSize if needed for display, though often managed by parent
   paginationData, // Contains totalItems, totalPages etc.
   onPageChange,
+  searchWeights, // Added: Receive the attribute weights map
 }) {
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [totalMatches, setTotalMatches] = useState(0);
@@ -219,7 +220,8 @@ function ResultsDashboard({
           <ul className="flex flex-wrap gap-1.5">
             {searchCriteria.map((criteria, index) => (
               <li key={index} className="inline-flex items-center bg-indigo-100 dark:bg-gray-600 border border-indigo-200 dark:border-gray-500 rounded-full px-2.5 py-0.5 text-xs font-medium text-indigo-800 dark:text-gray-100 shadow-sm">
-                {criteria.attribute} <strong className="mx-1">{criteria.operator}</strong> {String(criteria.value)} (W: {criteria.weight})
+                {/* Look up weight from the searchWeights map using the attribute name */}
+                {criteria.attribute} <strong className="mx-1">{criteria.operator}</strong> {String(criteria.value)} (W: {searchWeights?.[criteria.attribute] ?? 'N/A'})
               </li>
             ))}
           </ul>
@@ -297,6 +299,7 @@ ResultsDashboard.propTypes = {
     totalPages: PropTypes.number,
   }),
   onPageChange: PropTypes.func.isRequired, // Required handler
+  searchWeights: PropTypes.object, // Added: PropType for weights map
 };
 
 ResultsDashboard.defaultProps = {
@@ -307,6 +310,7 @@ ResultsDashboard.defaultProps = {
   sortDirection: 'desc', // Default direction
   // currentPage, pageSize, onSortChange, onPageChange are required, no defaults
   paginationData: null,
+  searchWeights: {}, // Added: Default prop for weights
 };
 
 
