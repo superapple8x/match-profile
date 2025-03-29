@@ -59,20 +59,27 @@ class MatchingEngine {
     return value1 && value2 ? this.config.optionalMatchWeight : 0;
   }
 
-  calculateMatchScore(searchCriteria, profile, matchingRules = this.defaultMatchingRules) {
+  // Add originalToSanitizedMap parameter
+  calculateMatchScore(searchCriteria, profile, originalToSanitizedMap, matchingRules = this.defaultMatchingRules) {
     let totalScore = 0;
     let maxPossibleScore = 0;
-    console.log('Calculating match score for profile:', profile);
+    // console.log('Calculating match score for profile:', profile); // Can be very verbose with DB data
     console.log('Using search criteria:', searchCriteria);
     console.log('Using matching rules:', matchingRules);
 
     for (const attribute in searchCriteria) {
-      if (matchingRules.hasOwnProperty(attribute)) {
+      // Check if the original attribute name exists in the map and rules
+      if (originalToSanitizedMap.hasOwnProperty(attribute) && matchingRules.hasOwnProperty(attribute)) {
         const rule = matchingRules[attribute];
         const searchValue = searchCriteria[attribute];
-        const profileValue = profile[attribute] || '';
+        const sanitizedAttribute = originalToSanitizedMap[attribute]; // Get the DB column name
 
-        console.log(`Evaluating attribute: ${attribute}`);
+        // Access profile data using the sanitized name
+        const profileValue = profile[sanitizedAttribute] !== undefined && profile[sanitizedAttribute] !== null
+                             ? profile[sanitizedAttribute]
+                             : ''; // Use empty string if property doesn't exist or is null/undefined
+
+        console.log(`Evaluating attribute: ${attribute} (DB column: ${sanitizedAttribute})`);
         console.log(`Search value: "${searchValue}" (${typeof searchValue})`);
         console.log(`Profile value: "${profileValue}" (${typeof profileValue})`);
 

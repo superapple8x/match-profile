@@ -52,11 +52,13 @@ function AuthView({ onLoginSuccess }) {
 function App() {
   const prefersDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   const [darkMode, setDarkMode] = useState(prefersDarkMode);
-  const [importedData, setImportedData] = useState(null); // Note: This might need reloading based on datasetId when loading session
+  // const [importedData, setImportedData] = useState(null); // Removed: Full data no longer stored in App state
   const [searchResults, setSearchResults] = useState(null);
   const [searchCriteria, setSearchCriteria] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
-  const [datasetId, setDatasetId] = useState(null);
+  const [datasetId, setDatasetId] = useState(null); // Keep: Stores the ID of the current dataset in the DB
+  const [datasetAttributes, setDatasetAttributes] = useState([]); // Added: Stores column metadata { originalName, sanitizedName, type }
+  const [currentDatasetName, setCurrentDatasetName] = useState(''); // Added: Stores the original filename for display
   const [isAnalysisViewOpen, setIsAnalysisViewOpen] = useState(false);
   const [analysisMessages, setAnalysisMessages] = useState([]);
   const [analysisQuery, setAnalysisQuery] = useState(''); // Add state for the analysis query itself
@@ -181,11 +183,17 @@ function App() {
   }, [resize, stopResizing]);
   // ---
 
-  const handleFileImport = (data, fileName) => {
-    console.log(`App: File imported - ${fileName}`, data);
-    setImportedData(data); // Keep imported data for current session use
-    setDatasetId(fileName);
-    // Reset other states when a new file is imported
+  // Updated handleFileImport to accept the metadata object
+  const handleFileImport = (metadata) => {
+    console.log(`App: File processed by backend. Metadata received:`, metadata);
+    // metadata = { datasetId, columnsMetadata, originalFileName }
+
+    setDatasetId(metadata.datasetId);
+    setDatasetAttributes(metadata.columnsMetadata || []); // Store the array of { originalName, sanitizedName, type }
+    setCurrentDatasetName(metadata.originalFileName || ''); // Store the original filename
+    // setImportedData(null); // Ensure old full data state is cleared if it existed
+
+    // Reset other states when a new file is imported/processed
     setSearchResults(null);
     setSearchCriteria(null);
     setIsAnalysisViewOpen(false);
@@ -200,21 +208,34 @@ function App() {
     setSearchResults(null);
     setIsAnalysisViewOpen(false); // Close analysis view when starting a new search
 
-    const baseProfile = { id: 'searchCriteria' };
+    // Removed unused baseProfile variable
     const weights = {};
     const matchingRules = {};
 
     criteria.forEach(criterion => {
-      baseProfile[criterion.attribute] = criterion.value;
       weights[criterion.attribute] = criterion.weight || 5;
+
+      // Define matchingRules based on attribute name (corrected logic)
       if (criterion.attribute === 'Age') {
         matchingRules[criterion.attribute] = { type: 'range', tolerance: 5 };
-      } else if (['Gender', 'Platform'].includes(criterion.attribute)) {
+      } else if (['Gender', 'Platform', 'Video Category'].includes(criterion.attribute)) { // Use the list with Video Category
         matchingRules[criterion.attribute] = { type: 'exact' };
       } else {
+        // Defaulting others to partial might not be ideal for all cases (e.g., numeric IDs)
+        // Consider adding more specific rules or making it configurable
         matchingRules[criterion.attribute] = { type: 'partial' };
       }
-    });
+    }); // Correctly closed forEach loop
+
+    // Ensure datasetId is available
+    if (!datasetId) {
+        console.error('Search attempted without a dataset loaded.');
+        setIsSearching(false);
+        // Optionally show an error message to the user
+        alert('Please import a dataset before searching.');
+        return;
+    }
+
 
     const headers = {
         'Content-Type': 'application/json',
@@ -224,14 +245,16 @@ function App() {
     }
 
     // TODO: Decide if /api/match needs authentication or if it operates only on provided data
+    // Call the updated /api/match endpoint
     fetch('/api/match', {
       method: 'POST',
       headers: headers,
       body: JSON.stringify({
-        baseProfile,
-        compareProfiles: importedData.map((profile, index) => ({ id: `profile-${index}`, ...profile })),
-        matchingRules,
-        weights,
+        datasetId: datasetId, // Pass the dataset ID
+        searchCriteria: criteria, // Pass the criteria array directly
+        matchingRules, // Pass the generated rules
+        weights, // Pass the weights
+        // Removed baseProfile and compareProfiles
       }),
     })
     .then(response => {
@@ -308,15 +331,25 @@ function App() {
       const newDatasetId = sessionData.dataset_id;
       let needsDataFetch = false;
 
-      // Check if dataset ID exists and if it's different from current or if data is missing
-      if (newDatasetId && (datasetId !== newDatasetId || !importedData)) {
-          console.log(`Need to fetch dataset: ${newDatasetId}`);
-          setImportedData(null); // Clear potentially mismatched data while fetching
-          needsDataFetch = true;
-      } else if (!newDatasetId) {
-          // If the session has no dataset ID, clear current data
-          setImportedData(null);
-      }
+    // Check if dataset ID exists and if it's different from current
+    // No longer need to check for !importedData as we don't store it here
+    if (newDatasetId && datasetId !== newDatasetId) {
+        console.log(`Need to fetch dataset metadata/attributes for: ${newDatasetId}`);
+        // We might need a way to fetch *just* the metadata if loading a session
+        // For now, assume loading session implies we have metadata or will fetch it.
+        // If loading a session *without* metadata, we might need an endpoint to get it.
+        // Let's simplify for now: loading a session *requires* dataset_id in sessionData.
+        // The fetch logic below is for fetching the *content* if needed, not metadata.
+        // setImportedData(null); // Removed
+        needsDataFetch = true; // Still might need to fetch content for some views? Or maybe not? Revisit this.
+                               // For now, let's assume we *don't* need to fetch full data on session load.
+                               needsDataFetch = false; // Let's disable fetching full data for now.
+    } else if (!newDatasetId) {
+        // If the session has no dataset ID, clear current dataset state
+        // setImportedData(null); // Removed
+        setDatasetAttributes([]);
+        setCurrentDatasetName('');
+    }
 
       // Always update the datasetId state
       setDatasetId(newDatasetId);
@@ -346,14 +379,17 @@ function App() {
               }
 
               const result = await response.json();
-              console.log(`Dataset ${result.fileName} fetched successfully. Records: ${result.data?.length}`);
-              setImportedData(result.data || []); // Update importedData state
+              // We are not fetching full data anymore in this flow.
+              // If we needed metadata, we'd fetch that instead.
+              // console.log(`Dataset ${result.fileName} fetched successfully. Records: ${result.data?.length}`);
+              // setImportedData(result.data || []); // Removed
 
           } catch (error) {
-              console.error('Failed to load dataset content:', error);
-              setImportedData(null); // Ensure data is null on error
-              // Show error to user? For now, just log.
-              alert(`Error loading dataset "${newDatasetId}": ${error.message}. You may need to re-upload the file.`);
+              console.error('Failed to load dataset content (or metadata if implemented):', error);
+              // setImportedData(null); // Removed
+              setDatasetAttributes([]); // Clear attributes on error
+              setCurrentDatasetName('');
+              alert(`Error loading dataset associated with session "${newDatasetId}": ${error.message}. The dataset might be missing or inaccessible.`);
               // Fallback to welcome view if dataset load fails?
               setCurrentView('welcome');
               setIsAnalysisViewOpen(false);
@@ -373,11 +409,13 @@ function App() {
       }
 
       // Only show success alert if dataset load didn't fail
-      if (!needsDataFetch || (needsDataFetch && importedData)) { // Check if data fetch was needed and successful
-          alert(`Session "${sessionData.session_name}" loaded.`);
-      }
+      // Simplified check: just confirm session load
+      alert(`Session "${sessionData.session_name}" loaded.`);
+      // if (!needsDataFetch || (needsDataFetch && importedData)) { // Removed check for importedData
+      //     alert(`Session "${sessionData.session_name}" loaded.`);
+      // }
 
-  }, [datasetId, importedData, authToken]); // Add dependencies for useCallback
+  }, [datasetId, authToken]); // Removed importedData from dependencies
   // ---
 
   // --- State object for saving session ---
@@ -502,18 +540,31 @@ function App() {
           <div className={`transition-opacity duration-300 ease-in-out ${currentView === 'dashboard' ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
             {currentView === 'dashboard' && datasetId && ( // Ensure datasetId exists
               <>
-                {/* Pass searchCriteria to DataOverview if needed */}
-                <DataOverview importedData={importedData} searchCriteria={searchCriteria} />
+                {/* Pass datasetAttributes (column names) and currentDatasetName */}
+                {/* DataOverview might need rework if it relied on full importedData */}
+                <DataOverview
+                    datasetAttributes={datasetAttributes}
+                    datasetName={currentDatasetName}
+                    searchCriteria={searchCriteria}
+                    datasetId={datasetId} // Pass datasetId if needed for fetching overview stats
+                    authToken={authToken} // Pass token if needed
+                />
                 <SearchBuilder
-                  importedData={importedData}
+                  // Pass datasetAttributes, datasetId, and authToken
+                  datasetAttributes={datasetAttributes.map(attr => attr.originalName)}
                   onSearch={handleSearch}
-                  initialCriteria={searchCriteria} // Pass loaded criteria to SearchBuilder
+                  initialCriteria={searchCriteria}
+                  datasetId={datasetId} // Pass datasetId
+                  authToken={authToken} // Pass authToken
                 />
                 <div className="mt-6" />
+                {/* ResultsDashboard will get profileData within searchResults, doesn't need importedData */}
+                {/* Pass datasetAttributes AND originalToSanitizedMap to ResultsDashboard */}
+                {/* Create the map here */}
                 <ResultsDashboard
-                  searchResults={searchResults}
+                  searchResults={searchResults} // Contains matches with profileData (sanitized keys)
                   searchCriteria={searchCriteria}
-                  importedData={importedData}
+                  datasetAttributes={datasetAttributes} // Contains { originalName, sanitizedName, type }
                   isSearching={isSearching}
                 />
               </>

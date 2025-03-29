@@ -5,12 +5,10 @@ import ResultsSummary from './ResultsDashboard/ResultsSummary';
 import ResultsTable from './ResultsDashboard/ResultsTable.tsx';
 import MatchBreakdown from './ResultsDashboard/MatchBreakdown';
 import ProgressBar from './ProgressBar';
-// Removed: import DataAnalysisPage from './ResultsDashboard/DataAnalysisPage'; // No longer rendered here
 
-// Removed datasetId prop as it's not used here anymore for analysis toggle
-function ResultsDashboard({ searchResults, searchCriteria, importedData, isSearching }) {
+// Accept datasetAttributes, remove importedData
+function ResultsDashboard({ searchResults, searchCriteria, datasetAttributes, isSearching }) {
   const [selectedMatch, setSelectedMatch] = useState(null);
-  // Removed: const [showAnalysisPage, setShowAnalysisPage] = useState(false);
   const [totalMatches, setTotalMatches] = useState(0);
   const [averageMatchPercentage, setAverageMatchPercentage] = useState(0);
   const [highestMatch, setHighestMatch] = useState(0);
@@ -90,11 +88,12 @@ function ResultsDashboard({ searchResults, searchCriteria, importedData, isSearc
           averageMatchPercentage={averageMatchPercentage}
           highestMatch={highestMatch}
         />
+        {/* Pass datasetAttributes down to ResultsTable */}
         <ResultsTable
-          results={resultsData}
+          results={resultsData} // Contains profileData with sanitized keys
+          datasetAttributes={datasetAttributes} // Pass the metadata
           onMatchClick={handleMatchClick}
         />
-        {/* Removed LLM Analysis Button and conditional rendering block */}
       </div>
     );
   } else {
@@ -139,7 +138,12 @@ function ResultsDashboard({ searchResults, searchCriteria, importedData, isSearc
             className="bg-indigo-50/80 dark:bg-gray-800/80 backdrop-blur-md p-6 rounded-xl shadow-2xl w-11/12 max-w-2xl max-h-[90vh] overflow-y-auto transition-all duration-300 ease-out border dark:border-gray-700/50" // Added glass effect + border
             onClick={(e) => e.stopPropagation()}
           >
-            <MatchBreakdown match={selectedMatch} fullData={importedData} />
+            {/* Pass datasetAttributes down to MatchBreakdown */}
+            <MatchBreakdown
+                match={selectedMatch} // Contains profileData with sanitized keys
+                datasetAttributes={datasetAttributes} // Pass the metadata
+                // Removed fullData={importedData}
+            />
             <div className="flex justify-end mt-4">
               <button
                 onClick={handleCloseBreakdown}

@@ -9,57 +9,56 @@ import {
   // Removed: getCoreRowModel, getSortedRowModel, useReactTable, SortingState
 } from '@tanstack/react-table';
 
+// Define the structure of the dataset attributes metadata
+type DatasetAttribute = {
+  originalName: string;
+  sanitizedName: string;
+  type: string;
+};
+
+// Update ResultData type to include profileData
 type ResultData = {
   matchPercentage?: number;
-  profile?: Record<string, any>;
-  [key: string]: any; // Includes uniqueKey added later
+  profileData: Record<string, any>; // Contains data with sanitized keys + DB id
+  uniqueKey?: string; // Keep uniqueKey for the table
 };
 
 const columnHelper = createColumnHelper<ResultData>();
 
+// Update props: accept datasetAttributes, remove filteredData
 interface ResultsTableProps {
   results?: ResultData[];
-  filteredData?: ResultData[];
+  datasetAttributes: DatasetAttribute[]; // Add datasetAttributes prop
   onMatchClick?: (data: ResultData) => void;
 }
 
-function ResultsTable({ results, filteredData, onMatchClick }: ResultsTableProps) {
-  // Removed: sorting state
+// Update function signature
+function ResultsTable({ results, datasetAttributes, onMatchClick }: ResultsTableProps) {
   const [data, setData] = useState<ResultData[]>([]);
-  // Removed navigate variable
 
-  // Define columns - This logic remains the same
+  // Define columns based on datasetAttributes
   const columns = useMemo(() => {
-    const cols: ColumnDef<ResultData, any>[] = []; // Explicitly type value as any
-    const showMatchPercentage = results && results.length > 0 && results[0]?.matchPercentage !== undefined;
-    const firstItem = data[0] || {};
+    const cols: ColumnDef<ResultData, any>[] = [];
 
-    if (showMatchPercentage) {
-      cols.push(columnHelper.accessor(row => row.matchPercentage, {
-        id: 'matchPercentage',
-        header: 'Match %',
-        cell: info => info.getValue() !== undefined ? `${info.getValue()?.toFixed(1)}%` : '-',
-        enableSorting: true,
-        meta: { className: 'w-24 text-center font-semibold' } // Changed to text-center, removed pr-4
-      }));
-    }
+    // 1. Add Match Percentage column
+    cols.push(columnHelper.accessor('matchPercentage', {
+      id: 'matchPercentage',
+      header: 'Match %',
+      cell: info => info.getValue() !== undefined ? `${info.getValue()?.toFixed(1)}%` : '-',
+      enableSorting: true,
+      meta: { className: 'w-24 text-center font-semibold' } // Keep width for consistency
+    }));
 
-    const dataKeys = firstItem.profile ? Object.keys(firstItem.profile) : Object.keys(firstItem);
-    const dataAccessor = (row: ResultData, key: string) => firstItem.profile ? row.profile?.[key] : row[key];
-
-    dataKeys.forEach(key => {
-      if ((key === 'matchPercentage' && showMatchPercentage) || key === 'uniqueKey') {
-        return;
-      }
-      cols.push(columnHelper.accessor(row => dataAccessor(row, key), {
-        id: key,
-        header: key.charAt(0).toUpperCase() + key.slice(1),
+    // 2. Add Profile ID column (using original_row_index)
+    cols.push(columnHelper.accessor(row => row.profileData['original_row_index'], {
+        id: 'profileId',
+        header: 'Profile ID', // Correct Header
         cell: info => String(info.getValue() ?? '-'),
         enableSorting: true,
-        meta: { className: 'whitespace-nowrap px-3 py-2 text-center' } // Changed to text-center
-      }));
-    });
+        meta: { className: 'w-24 text-center' } // Give it consistent width
+    }));
 
+    // 3. Add Actions column
     if (onMatchClick) {
        cols.push(columnHelper.display({
          id: 'actions',
@@ -73,22 +72,24 @@ function ResultsTable({ results, filteredData, onMatchClick }: ResultsTableProps
              Details
            </button>
          ),
-         meta: { className: 'w-20 text-center' } // Styling handled in Table.tsx
+         meta: { className: 'w-20 text-center' } // Removed sticky
        }));
      }
 
     return cols;
-  }, [data, results, onMatchClick]);
+  // Update dependencies: datasetAttributes is now needed
+  }, [results, datasetAttributes, onMatchClick]);
 
-  // Process input data - This logic remains the same
+  // Process input data - Update uniqueKey generation
   useEffect(() => {
-    const sourceData = results || filteredData || [];
-    const processedData = sourceData.map((item, index) => ({
+    const sourceData = results || []; // Use results directly, filteredData removed
+    const processedData = sourceData.map((item) => ({
       ...item,
-      uniqueKey: item.id || `${index}-${JSON.stringify(item)}` // Add uniqueKey here
+      // Use the database ID from profileData if available, otherwise fallback
+      uniqueKey: String(item.profileData?.id ?? `fallback-${Math.random()}`)
     }));
     setData(processedData);
-  }, [results, filteredData]);
+  }, [results]); // Update dependency
 
   // Removed handleViewChart function
 
@@ -99,13 +100,14 @@ function ResultsTable({ results, filteredData, onMatchClick }: ResultsTableProps
   }
 
   return (
-    <div className="overflow-x-auto">
-      {/* Removed the "View Attribute Distribution" button and its container div */}
+    // Apply min-w-full to the wrapping div
+    <div className="overflow-x-auto min-w-full">
       {/* Pass data and columns directly to the Table component */}
       <Table<ResultData> // Specify the type for the generic Table
         data={data}
         columns={columns}
-        // Add other props Table might need, e.g., enable sorting/resizing if needed
+        // Removed className prop from Table
+        // Add other props Table might need
         // enableRowSelection={false} // Example: if row selection isn't needed here
       />
     </div>

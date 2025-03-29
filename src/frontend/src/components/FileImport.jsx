@@ -50,8 +50,20 @@ function FileImport({ onFileImport, isCollapsed, authToken }) {
         }
 
         console.log('Backend upload success:', result);
-        onFileImport(result.data, result.fileName);
-        setUploadSuccess(true);
+        // Pass the new metadata structure to the parent component
+        // The backend now returns { datasetId, columnsMetadata }
+        if (result.datasetId && result.columnsMetadata) {
+            onFileImport({
+                datasetId: result.datasetId,
+                columnsMetadata: result.columnsMetadata,
+                originalFileName: fileToUpload.name // Pass the original name for display/reference
+            });
+            setUploadSuccess(true);
+        } else {
+            // Handle cases where the expected metadata is missing in the response
+            console.error('Backend response missing expected metadata:', result);
+            throw new Error('Invalid response received from server after upload.');
+        }
 
       } catch (error) {
         console.error('Upload/Parsing error:', error.message);

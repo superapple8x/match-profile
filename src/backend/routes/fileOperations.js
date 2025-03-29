@@ -8,9 +8,49 @@ const cors = require('cors');
 const fs = require('fs').promises; // Use fs.promises
 const path = require('path'); // Need path module
 const authMiddleware = require('../middleware/authMiddleware'); // Import auth middleware
+const { query, pool: dbPool } = require('../config/db'); // Import query function and the instantiated pool
 
-// Define the base upload directory path
-const BASE_UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
+// --- Helper Functions ---
+
+// Sanitize identifiers for database (table names, column names)
+function sanitizeDbIdentifier(name) {
+  if (!name) return '_unnamed';
+  // Convert to lowercase, replace non-alphanumeric with underscore, trim underscores, handle leading numbers
+  let sanitized = name
+    .toString() // Ensure it's a string
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '_') // Replace invalid chars with underscore
+    .replace(/^_+|_+$/g, ''); // Trim leading/trailing underscores
+
+  // Add prefix if starts with a number or is empty after sanitization
+  if (/^\d/.test(sanitized) || sanitized.length === 0) {
+    sanitized = '_' + sanitized;
+  }
+  // Truncate if too long (PostgreSQL limit is typically 63 chars)
+  return sanitized.substring(0, 63);
+}
+
+// Infer basic SQL type from sample value
+function inferColumnType(value) {
+  if (value === null || value === undefined || value === '') return 'TEXT'; // Default to TEXT
+  // Check specifically for boolean strings
+  if (typeof value === 'string') {
+      const lowerVal = value.trim().toLowerCase();
+      if (lowerVal === 'true' || lowerVal === 'false') return 'BOOLEAN';
+  }
+  // Check for numbers (handles integers and decimals)
+  if (!isNaN(parseFloat(value)) && isFinite(value)) return 'NUMERIC';
+  // Check for potential date/timestamp formats (basic check, might need refinement)
+  if (typeof value === 'string' && !isNaN(Date.parse(value))) return 'TIMESTAMP WITH TIME ZONE';
+
+  return 'TEXT'; // Default to TEXT
+}
+
+// --- End Helper Functions ---
+
+
+// Define the base upload directory path (No longer used for saving uploads)
+// const BASE_UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 
 // Multer setup for file uploads
 const upload = multer({
@@ -41,35 +81,11 @@ router.post('/import', authMiddleware, upload.single('file'), async (req, res) =
     const fileBuffer = req.file.buffer;
     // Sanitize filename
     const originalFileName = req.file.originalname;
+    // Keep safeFileName for potential use in table naming, but don't create paths
     const safeFileName = path.basename(originalFileName).replace(/[^a-zA-Z0-9._-]/g, '_');
+    console.log(`[Import] Processing file: ${originalFileName} (Sanitized: ${safeFileName})`);
 
-    // Create user-specific directory path
-    const userUploadDir = path.join(BASE_UPLOAD_DIR, `user_${userId}`);
-    const filePath = path.join(userUploadDir, safeFileName);
-
-    // Ensure user-specific upload directory exists
-    try {
-      console.log(`[Import] Attempting to create directory: ${userUploadDir}`); // Added log
-      await fs.mkdir(userUploadDir, { recursive: true });
-      console.log(`[Import] User upload directory ensured: ${userUploadDir}`); // Added log
-    } catch (dirError) {
-      console.error(`[Import] Error creating user upload directory ${userUploadDir}:`, dirError); // Added log marker
-      // Log the specific error code if available
-      console.error(`[Import] Directory creation failed with code: ${dirError.code}`);
-      throw new Error(`Failed to ensure user upload directory exists: ${dirError.message}`);
-    }
-
-    // Save the file to disk in the user's directory
-    try {
-      console.log(`[Import] Attempting to write file to: ${filePath}`); // Added log
-      await fs.writeFile(filePath, fileBuffer);
-      console.log(`[Import] File saved successfully to: ${filePath}`); // Added log
-    } catch (writeError) {
-      console.error(`[Import] Error writing file to ${filePath}:`, writeError); // Added log marker
-      // Log the specific error code if available
-      console.error(`[Import] File writing failed with code: ${writeError.code}`);
-      throw new Error(`Failed to save uploaded file: ${writeError.message}`);
-    }
+    // --- Filesystem saving removed ---
 
     let parsedData = [];
 
@@ -116,12 +132,179 @@ router.post('/import', authMiddleware, upload.single('file'), async (req, res) =
       throw new Error('Unsupported file type');
     }
 
-    // Return the potentially sanitized filename used for saving
-    console.log(`Sending success response for ${safeFileName}. Parsed data length: ${parsedData.length}`);
-    res.status(200).json({ message: 'File uploaded, saved, and parsed successfully', data: parsedData, fileName: safeFileName });
+    // --- Database Interaction Logic ---
+    if (!parsedData || parsedData.length === 0) {
+      console.log('[Import] Parsed data is empty, skipping database operations.');
+      return res.status(400).json({ error: 'No data found in the uploaded file.' });
+    }
+
+    console.log(`[Import] Parsed ${parsedData.length} rows. Starting database processing.`);
+
+    // 1. Determine Columns and Types & Sanitize
+    const originalColumns = Object.keys(parsedData[0]);
+    const columnsMetadata = originalColumns.map(originalName => {
+      const sanitizedName = sanitizeDbIdentifier(originalName);
+      // Infer type based on the first few rows (e.g., first 10 or 100) for better accuracy
+      let sampleValue = null;
+      for(let i = 0; i < Math.min(parsedData.length, 10); i++) {
+          if (parsedData[i][originalName] !== null && parsedData[i][originalName] !== undefined && parsedData[i][originalName] !== '') {
+              sampleValue = parsedData[i][originalName];
+              break;
+          }
+      }
+      const type = inferColumnType(sampleValue);
+      console.log(`[Import] Column: "${originalName}" -> Sanitized: "${sanitizedName}", Type: ${type}`);
+      return { originalName, sanitizedName, type };
+    });
+
+    // Check for duplicate sanitized names (though sanitizeDbIdentifier tries to avoid this)
+    const sanitizedNames = columnsMetadata.map(c => c.sanitizedName);
+    if (new Set(sanitizedNames).size !== sanitizedNames.length) {
+        console.error('[Import] Duplicate sanitized column names detected after sanitization:', sanitizedNames);
+        throw new Error('Failed to generate unique column names for the database table.');
+    }
+
+    // 2. Generate Unique Table Name
+    const timestamp = Date.now();
+    const dbTableName = sanitizeDbIdentifier(`dataset_user_${userId}_${timestamp}_${safeFileName}`);
+    console.log(`[Import] Generated DB Table Name: ${dbTableName}`);
+
+    // --- Overwrite Logic: Check for and clean up existing dataset with the same identifier ---
+    const checkExistingSql = `
+      SELECT id, db_table_name FROM dataset_metadata
+      WHERE user_id = $1 AND dataset_identifier = $2;
+    `;
+    try {
+        const existingResult = await query(checkExistingSql, [userId, originalFileName]);
+        if (existingResult.rows.length > 0) {
+            const oldMetadataId = existingResult.rows[0].id;
+            const oldDbTableName = existingResult.rows[0].db_table_name;
+            console.log(`[Import] Found existing dataset metadata (ID: ${oldMetadataId}) for "${originalFileName}" and user ${userId}. Table: "${oldDbTableName}". Proceeding with overwrite.`);
+
+            // Delete old metadata
+            const deleteMetadataSql = `DELETE FROM dataset_metadata WHERE id = $1;`;
+            await query(deleteMetadataSql, [oldMetadataId]);
+            console.log(`[Import] Deleted old metadata record (ID: ${oldMetadataId}).`);
+
+            // Drop old table
+            const dropTableSql = `DROP TABLE IF EXISTS "${oldDbTableName}";`; // Ensure table name is quoted
+            await query(dropTableSql);
+            console.log(`[Import] Dropped old database table "${oldDbTableName}".`);
+        }
+    } catch (cleanupError) {
+        console.error('[Import] Error during cleanup of existing dataset:', cleanupError);
+        // Decide if this error should prevent the import. For now, we'll let it proceed,
+        // but it might leave orphaned tables if dropping fails.
+        // Consider throwing an error here if cleanup is critical:
+        // throw new Error(`Failed to clean up existing dataset: ${cleanupError.message}`);
+    }
+    // --- End Overwrite Logic ---
+
+
+    // Use a database client from the imported pool for transaction control
+    const dbClient = await dbPool.connect(); // Get client from the actual pool
+
+    try {
+      await dbClient.query('BEGIN'); // Start transaction
+
+      // 3. Create Table Dynamically (Add original_row_index)
+      const createTableColumns = columnsMetadata
+        .map(col => `"${col.sanitizedName}" ${col.type}`)
+        .join(', ');
+      // Add the new column definition
+      const createTableSql = `CREATE TABLE "${dbTableName}" (id SERIAL PRIMARY KEY, original_row_index INTEGER, ${createTableColumns});`;
+      console.log(`[Import] Executing CREATE TABLE: ${createTableSql}`);
+      await dbClient.query(createTableSql);
+      console.log(`[Import] Table "${dbTableName}" created successfully.`);
+
+      // 4. Insert Data (Include original_row_index)
+      console.log(`[Import] Preparing to insert ${parsedData.length} rows into "${dbTableName}"...`);
+      // Add original_row_index to columns and placeholders
+      const insertColumns = `"original_row_index", ${columnsMetadata.map(col => `"${col.sanitizedName}"`).join(', ')}`;
+      const valuePlaceholders = columnsMetadata.map((_, index) => `$${index + 2}`).join(', '); // Start from $2
+      const insertSql = `INSERT INTO "${dbTableName}" (${insertColumns}) VALUES ($1, ${valuePlaceholders})`; // $1 is for index
+
+      // Execute inserts row by row, including the index
+      for (let i = 0; i < parsedData.length; i++) {
+        const row = parsedData[i];
+        const originalIndex = i + 1; // Use 1-based index for user display
+
+        const values = columnsMetadata.map(col => {
+            let val = row[col.originalName];
+            // Basic type coercion (keep existing logic)
+            if (col.type === 'NUMERIC') {
+                val = (val === null || val === undefined || val === '') ? null : parseFloat(val);
+                if (isNaN(val)) val = null; // Handle parsing errors
+            } else if (col.type === 'BOOLEAN') {
+                if (typeof val === 'string') {
+                    const lowerVal = val.trim().toLowerCase();
+                    val = lowerVal === 'true' ? true : (lowerVal === 'false' ? false : null);
+                } else if (typeof val !== 'boolean') {
+                    val = null; // Or handle other types appropriately
+                }
+            } else if (col.type === 'TIMESTAMP WITH TIME ZONE') {
+                 val = (val === null || val === undefined || val === '') ? null : new Date(val);
+                 if (isNaN(val.getTime())) val = null; // Handle invalid dates
+            }
+            // Ensure TEXT values are strings
+            else if (col.type === 'TEXT' && val !== null && val !== undefined) {
+                 val = String(val);
+            }
+            return val;
+        });
+
+        // Prepend the original index to the values array
+        const finalValues = [originalIndex, ...values];
+        // console.log(`[Import] Inserting values:`, finalValues); // DEBUG log
+        await dbClient.query(insertSql, finalValues);
+      }
+      console.log(`[Import] Successfully inserted ${parsedData.length} rows.`);
+
+      // 5. Store Metadata (Add original_row_index to metadata if needed for reference, though maybe not necessary)
+      // For now, we don't strictly need to add it to columns_metadata JSON,
+      // as the column exists in the table itself.
+      const metadataSql = `
+        INSERT INTO dataset_metadata (user_id, dataset_identifier, db_table_name, columns_metadata)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id;
+      `;
+      const metadataValues = [userId, originalFileName, dbTableName, JSON.stringify(columnsMetadata)];
+      console.log('[Import] Storing metadata:', { userId, originalFileName, dbTableName });
+      const metadataResult = await dbClient.query(metadataSql, metadataValues);
+      const datasetId = metadataResult.rows[0].id;
+      console.log(`[Import] Metadata stored successfully. Dataset ID: ${datasetId}`);
+
+      await dbClient.query('COMMIT'); // Commit transaction
+      console.log('[Import] Transaction committed.');
+
+      // 6. Update API Response
+      console.log(`[Import] Sending success response for dataset ID: ${datasetId}`);
+      res.status(200).json({
+        message: 'File processed and data stored successfully.',
+        datasetId: datasetId,
+        columnsMetadata: columnsMetadata // Send the mapping info to the frontend
+      });
+
+    } catch (dbError) {
+      await dbClient.query('ROLLBACK'); // Rollback transaction on error
+      console.error('[Import] Database error during import, transaction rolled back:', dbError);
+      // Attempt to drop the table if creation succeeded but insertion/metadata failed
+      try {
+          console.log(`[Import] Attempting to drop potentially created table "${dbTableName}" due to error.`);
+          await query(`DROP TABLE IF EXISTS "${dbTableName}";`); // Use original query function for cleanup
+          console.log(`[Import] Cleanup successful for table "${dbTableName}".`);
+      } catch (cleanupError) {
+          console.error(`[Import] Error during table cleanup for "${dbTableName}":`, cleanupError);
+      }
+      throw new Error(`Database operation failed: ${dbError.message}`); // Re-throw to be caught by outer handler
+    } finally {
+      dbClient.release(); // Release the client back to the pool
+      console.log('[Import] Database client released.');
+    }
+
   } catch (error) {
     console.error("--- Error during file import ---:", error); // Add marker for easier log searching
-    // Ensure a JSON error response is always sent
+    // Ensure a JSON error response is always sent, even if dbClient wasn't defined
     res.status(500).json({ error: 'Failed to process file', details: error.message });
   }
 });
@@ -146,39 +329,153 @@ router.get('/export/csv', (req, res) => {
   }
 });
 
-// Match profiles endpoint
-router.post('/match', cors(), (req, res) => {
-  console.log('Inside /match route handler');
-  console.log('Request headers:', req.headers);
-  console.log('Request body:', req.body);
-  if (!req.body) {
-    console.error('No request body received');
-    return res.status(400).json({ error: 'No request body received' });
-  }
+// Match profiles endpoint - Modified for DB querying
+router.post('/match', authMiddleware, async (req, res) => { // Added authMiddleware, made async
+  console.log('--- /api/match request received ---');
   try {
-    const { baseProfile, compareProfiles, matchingRules, weights } = req.body;
-    const engine = new MatchingEngine();
-    engine.setWeights(weights);
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required.' });
+    }
 
-    const results = compareProfiles.map(profile => {
-      const mappedProfile = {};
-      for (const key in baseProfile) {
-        mappedProfile[key] = profile[key] || ''; // Use empty string if property doesn't exist
+    // 1. Get data from request body
+    const { datasetId, searchCriteria, weights, matchingRules } = req.body;
+    console.log('[Match] Received:', { datasetId, searchCriteria, weights, matchingRules });
+
+    if (!datasetId || !searchCriteria || !Array.isArray(searchCriteria) || searchCriteria.length === 0) {
+      return res.status(400).json({ error: 'Missing or invalid datasetId or searchCriteria.' });
+    }
+
+    // 2. Fetch dataset metadata
+    const metadataSql = `
+      SELECT db_table_name, columns_metadata FROM dataset_metadata
+      WHERE id = $1 AND user_id = $2;
+    `;
+    const metadataResult = await query(metadataSql, [datasetId, userId]);
+
+    if (metadataResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Dataset metadata not found or access denied.' });
+    }
+
+    const { db_table_name: dbTableName, columns_metadata: columnsMetadata } = metadataResult.rows[0];
+    console.log(`[Match] Found metadata. DB Table: ${dbTableName}`);
+
+    // 3. Create originalToSanitizedMap and validate criteria attributes
+    const originalToSanitizedMap = {};
+    const validDbColumns = {}; // Store { sanitizedName: type }
+    columnsMetadata.forEach(col => {
+        originalToSanitizedMap[col.originalName] = col.sanitizedName;
+        validDbColumns[col.sanitizedName] = col.type;
+    });
+
+    // Validate that attributes in searchCriteria exist in the dataset
+    for (const criterion of searchCriteria) {
+        if (!originalToSanitizedMap.hasOwnProperty(criterion.attribute)) {
+            return res.status(400).json({ error: `Invalid search attribute "${criterion.attribute}" for this dataset.` });
+        }
+    }
+
+    // 4. Build Parameterized SQL Query
+    let whereClause = 'WHERE 1 = 1'; // Start with a clause that's always true
+    const queryParams = [];
+    let paramIndex = 1;
+
+    searchCriteria.forEach(criterion => {
+      const sanitizedColName = originalToSanitizedMap[criterion.attribute];
+      const colType = validDbColumns[sanitizedColName]; // Get the DB type
+      let value = criterion.value;
+
+      // Basic type coercion/validation for query parameters based on DB type
+      if (colType === 'NUMERIC') {
+          value = parseFloat(value);
+          if (isNaN(value)) {
+              console.warn(`[Match] Invalid numeric value for ${criterion.attribute}: ${criterion.value}. Skipping criterion.`);
+              return; // Skip this criterion if value is not a valid number
+          }
+      } else if (colType === 'BOOLEAN') {
+          if (typeof value === 'string') {
+              const lowerVal = value.trim().toLowerCase();
+              value = lowerVal === 'true' ? true : (lowerVal === 'false' ? false : null);
+          } else if (typeof value !== 'boolean') {
+              value = null;
+          }
+          if (value === null) {
+               console.warn(`[Match] Invalid boolean value for ${criterion.attribute}: ${criterion.value}. Skipping criterion.`);
+               return; // Skip if not a valid boolean representation
+          }
+      } else if (colType === 'TIMESTAMP WITH TIME ZONE') {
+          value = new Date(value);
+          if (isNaN(value.getTime())) {
+              console.warn(`[Match] Invalid date/timestamp value for ${criterion.attribute}: ${criterion.value}. Skipping criterion.`);
+              return; // Skip invalid dates
+          }
+      } else { // TEXT or other types
+          value = String(value); // Ensure it's a string for LIKE etc.
       }
+
+
+      // Add condition based on operator (defaulting to exact/partial based on rule)
+      const rule = matchingRules?.[criterion.attribute] || {};
+      const operator = rule.type === 'exact' ? '=' :
+                       rule.type === 'range' ? '=' : // Range handled by engine, filter might be broader initially
+                       'ILIKE'; // Default to case-insensitive partial match for filtering
+
+      whereClause += ` AND "${sanitizedColName}" ${operator} $${paramIndex++}`;
+
+      // Adjust value for ILIKE
+      queryParams.push(operator === 'ILIKE' ? `%${value}%` : value);
+    });
+
+    const selectSql = `SELECT * FROM "${dbTableName}" ${whereClause};`;
+    console.log(`[Match] Executing SQL: ${selectSql}`);
+    console.log('[Match] Query Params:', queryParams);
+
+    const dbResult = await query(selectSql, queryParams);
+    const filteredProfiles = dbResult.rows;
+    console.log(`[Match] Found ${filteredProfiles.length} profiles matching filter criteria.`);
+
+    if (filteredProfiles.length === 0) {
+        return res.status(200).json({ matches: [] }); // Return empty if DB query yields nothing
+    }
+
+    // 5. Instantiate Matching Engine and Set Weights
+    const engine = new MatchingEngine();
+    if (weights) {
+        engine.setWeights(weights);
+        console.log('[Match] Applied custom weights:', weights);
+    }
+
+    // 6. Calculate Scores using the Map
+    // Convert searchCriteria array back to an object for the engine
+    const searchCriteriaObject = searchCriteria.reduce((obj, item) => {
+        obj[item.attribute] = item.value;
+        return obj;
+    }, {});
+
+    const results = filteredProfiles.map(profile => {
+      // The 'profile' object here has keys matching the sanitized DB column names
+      const matchPercentage = engine.calculateMatchScore(
+        searchCriteriaObject,
+        profile, // Pass the profile object with sanitized keys
+        originalToSanitizedMap, // Pass the map
+        matchingRules // Pass the rules
+      );
       return {
-        profileId: profile.id,
-        matchPercentage: engine.calculateMatchScore(baseProfile, mappedProfile, matchingRules)
+        // profileId: profile.id, // Use the auto-generated DB ID
+        matchPercentage: matchPercentage,
+        profileData: profile // Include the full row data (with sanitized keys)
       };
     });
-    console.log('Matching results:', results);
+
+    // 7. Format and Send Response
     const responseData = {
-      baseProfileId: baseProfile.id,
       matches: results.sort((a, b) => b.matchPercentage - a.matchPercentage)
     };
-    console.log('Response data:', responseData);
+    console.log(`[Match] Sending ${responseData.matches.length} results.`);
     res.status(200).json(responseData);
+
   } catch (error) {
-    console.error("Matching error:", error);
+    console.error("--- Matching error ---:", error);
     res.status(500).json({ error: 'Failed to process matching request', details: error.message });
   }
 });
@@ -246,5 +543,72 @@ router.get('/datasets/:filename', authMiddleware, async (req, res) => {
     res.status(500).json({ error: 'Failed to retrieve dataset content', details: error.message });
   }
 });
+
+
+// --- Value Suggestions Endpoint ---
+router.get('/suggest/values', authMiddleware, async (req, res) => {
+  console.log('--- /api/suggest/values request received ---');
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required.' });
+    }
+
+    const { datasetId, attributeName, searchTerm } = req.query;
+    console.log('[Suggest] Params:', { datasetId, attributeName, searchTerm });
+
+    if (!datasetId || !attributeName || searchTerm === undefined) {
+      return res.status(400).json({ error: 'Missing required query parameters: datasetId, attributeName, searchTerm.' });
+    }
+
+    // 1. Fetch dataset metadata to get table name and sanitized column name
+    const metadataSql = `
+      SELECT db_table_name, columns_metadata FROM dataset_metadata
+      WHERE id = $1 AND user_id = $2;
+    `;
+    const metadataResult = await query(metadataSql, [datasetId, userId]);
+
+    if (metadataResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Dataset metadata not found or access denied.' });
+    }
+
+    const { db_table_name: dbTableName, columns_metadata: columnsMetadata } = metadataResult.rows[0];
+
+    // Find the sanitized name for the requested attribute
+    const attributeMeta = columnsMetadata.find(col => col.originalName === attributeName);
+    if (!attributeMeta) {
+      return res.status(400).json({ error: `Attribute "${attributeName}" not found in this dataset.` });
+    }
+    const sanitizedColName = attributeMeta.sanitizedName;
+    const colType = attributeMeta.type; // Get type for potential casting
+
+    // 2. Query for distinct values matching the searchTerm
+    // Ensure column name is quoted to handle special characters/keywords
+    // Cast to TEXT for consistent ILIKE comparison, especially for numeric/date types
+    const suggestSql = `
+      SELECT DISTINCT "${sanitizedColName}"
+      FROM "${dbTableName}"
+      WHERE "${sanitizedColName}"::TEXT ILIKE $1
+      LIMIT 10;
+    `;
+    const queryParams = [`%${searchTerm}%`]; // Add wildcards for ILIKE
+
+    console.log(`[Suggest] SQL: ${suggestSql}`);
+    console.log('[Suggest] Params:', queryParams);
+
+    const suggestionsResult = await query(suggestSql, queryParams);
+
+    // Extract the values
+    const suggestedValues = suggestionsResult.rows.map(row => row[sanitizedColName]);
+    console.log('[Suggest] Found values:', suggestedValues);
+
+    res.status(200).json({ suggestions: suggestedValues });
+
+  } catch (error) {
+    console.error("--- Value suggestion error ---:", error);
+    res.status(500).json({ error: 'Failed to fetch value suggestions', details: error.message });
+  }
+});
+
 
 module.exports = router;

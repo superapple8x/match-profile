@@ -39,6 +39,18 @@ BEGIN
     END IF;
 END $$;
 
+-- Dataset Metadata table to track dynamically created dataset tables
+CREATE TABLE IF NOT EXISTS dataset_metadata (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    dataset_identifier VARCHAR(255) NOT NULL, -- User-facing identifier (e.g., original filename)
+    db_table_name VARCHAR(255) NOT NULL UNIQUE, -- Actual name of the table in the database
+    columns_metadata JSONB, -- Store column names and inferred types (e.g., {"col1": "text", "col2": "numeric"})
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    -- Add a unique constraint for user_id and dataset_identifier to prevent duplicates per user
+    UNIQUE (user_id, dataset_identifier)
+);
+
 
 -- Example for associating uploaded files with users (if needed):
 /*

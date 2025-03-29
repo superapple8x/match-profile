@@ -1,41 +1,28 @@
 import React, { useState } from 'react';
-import { ChevronDownIcon, ChevronUpIcon, ChartBarIcon } from '@heroicons/react/24/outline'; // Use outline for subtle icon
-import DatasetInsightsChart from './DatasetInsightsChart';
+import PropTypes from 'prop-types';
+import { ChevronDownIcon, ChevronUpIcon, TableCellsIcon } from '@heroicons/react/24/outline'; // Changed icon
 
-// Define tab constants
-const TABS = {
-  CATEGORICAL: 'categorical',
-  NUMERICAL: 'numerical',
-  MISSING: 'missing',
-};
+// Removed DatasetInsightsChart import as it's no longer used here
+// import DatasetInsightsChart from './DatasetInsightsChart';
 
-function DataOverview({ importedData }) {
+// Removed TABS constants
+
+// Accept new props: datasetId, datasetName, datasetAttributes
+function DataOverview({ datasetId, datasetName, datasetAttributes }) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState(TABS.CATEGORICAL);
+  // Removed activeTab state
 
-  if (!importedData || importedData.length === 0) {
+  // Render based on datasetId presence
+  if (!datasetId) {
     return null;
   }
-  const recordCount = importedData.length; // Get record count
+  // Removed recordCount calculation
 
   const toggleExpansion = () => {
     setIsExpanded(!isExpanded);
-    // setActiveTab(TABS.CATEGORICAL); // Reset to default if desired
   };
 
-  const renderTabButton = (tabKey, label) => (
-    <button
-      key={tabKey}
-      onClick={() => setActiveTab(tabKey)}
-      className={`px-4 py-2 text-sm font-medium rounded-md transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 dark:focus:ring-offset-gray-800 ${
-        activeTab === tabKey
-          ? 'bg-primary-500 text-white shadow-sm' // Active tab uses primary color
-          : 'text-gray-600 dark:text-gray-300 hover:bg-indigo-100/80 dark:hover:bg-gray-700' // Light hover: indigo-100
-      }`}
-    >
-      {label}
-    </button>
-  );
+  // Removed renderTabButton function
 
   return (
     <div className="mb-6 bg-indigo-100/60 dark:bg-gray-800/70 backdrop-blur-sm shadow-md rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden"> {/* Light: indigo-100 tint */}
@@ -46,18 +33,16 @@ function DataOverview({ importedData }) {
         aria-expanded={isExpanded}
         aria-controls="dataset-insights-content"
       >
-        {/* Left side: Icon, Title, Record Count */}
+        {/* Left side: Icon, Title (using datasetName) */}
         <div className="flex items-center space-x-3">
-           <ChartBarIcon className="h-6 w-6 text-primary-600 dark:text-primary-400 group-hover:text-primary-700 dark:group-hover:text-primary-300 transition-colors duration-150 ease-in-out" /> {/* Added Icon */}
-           <span className="text-lg font-semibold text-gray-800 dark:text-white">
-             Dataset Overview & Insights
+           <TableCellsIcon className="h-6 w-6 text-primary-600 dark:text-primary-400 group-hover:text-primary-700 dark:group-hover:text-primary-300 transition-colors duration-150 ease-in-out" /> {/* Changed Icon */}
+           <span className="text-lg font-semibold text-gray-800 dark:text-white truncate" title={datasetName}>
+             Dataset: {datasetName || 'Unnamed Dataset'} {/* Display datasetName */}
            </span>
-           <span className="text-xs font-medium text-gray-600 dark:text-gray-400 bg-indigo-200/70 dark:bg-gray-700 px-2 py-0.5 rounded-full"> {/* Light: indigo-200 tint */}
-             {recordCount} Records {/* Display Record Count */}
-           </span>
+           {/* Removed Record Count */}
         </div>
 
-        {/* Right side: Chevron */}
+        {/* Right side: Chevron (Expand/Collapse Attributes List) */}
         {isExpanded ? (
           <ChevronUpIcon className="h-6 w-6 text-gray-600 dark:text-gray-400" />
         ) : (
@@ -65,36 +50,56 @@ function DataOverview({ importedData }) {
         )}
       </button>
 
-      {/* Expandable Content Area */}
+      {/* Expandable Content Area - Now shows attribute list */}
       <div
-        id="dataset-insights-content"
+        id="dataset-attributes-content" // Changed ID
         className={`transition-all duration-500 ease-in-out ${
-          isExpanded ? 'max-h-[650px] opacity-100' : 'max-h-0 opacity-0'
+          isExpanded ? 'max-h-[300px] opacity-100' : 'max-h-0 opacity-0' // Adjusted max-h
         }`}
       >
-        {/* Tab Buttons */}
-        {isExpanded && (
-          <div className="px-4 pt-2 pb-3 border-t border-b border-gray-200 dark:border-gray-600 flex space-x-2"> {/* Added border-t */}
-            {renderTabButton(TABS.CATEGORICAL, 'Categorical Charts')}
-            {renderTabButton(TABS.NUMERICAL, 'Numerical Analysis')}
-            {renderTabButton(TABS.MISSING, 'Missing Values')}
-          </div>
-        )}
+        {/* Removed Tab Buttons */}
 
-        {/* Scrollable Content Area */}
+        {/* Scrollable Content Area for Attributes */}
         <div
-          className={`transition-opacity duration-300 ease-in-out ${
-            isExpanded ? 'opacity-100 overflow-y-auto max-h-[550px]' : 'opacity-0 overflow-hidden max-h-0'
+          className={`transition-opacity duration-300 ease-in-out p-4 border-t border-gray-200 dark:border-gray-600 ${ // Added padding and border
+            isExpanded ? 'opacity-100 overflow-y-auto max-h-[280px]' : 'opacity-0 overflow-hidden max-h-0' // Adjusted max-h
           }`}
            style={{ scrollbarWidth: 'thin' }}
         >
           {isExpanded && (
-            <DatasetInsightsChart data={importedData} activeTab={activeTab} />
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Attributes ({datasetAttributes.length}):</h4>
+              <ul className="list-disc list-inside space-y-1 text-xs text-gray-600 dark:text-gray-400">
+                {datasetAttributes.map((attr, index) => (
+                  <li key={index} className="truncate" title={attr.originalName}>
+                    {attr.originalName} <span className="text-gray-400 dark:text-gray-500">({attr.type})</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
+          {/* Removed DatasetInsightsChart */}
         </div>
       </div>
     </div>
   );
 }
+
+// Update PropTypes
+DataOverview.propTypes = {
+  datasetId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]), // Can be string or number from DB ID
+  datasetName: PropTypes.string,
+  datasetAttributes: PropTypes.arrayOf(PropTypes.shape({
+      originalName: PropTypes.string.isRequired,
+      sanitizedName: PropTypes.string.isRequired,
+      type: PropTypes.string.isRequired,
+  })),
+};
+
+DataOverview.defaultProps = {
+  datasetId: null,
+  datasetName: '',
+  datasetAttributes: [],
+};
 
 export default DataOverview;

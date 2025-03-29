@@ -2,13 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom'; // Import createPortal
 import PropTypes from 'prop-types';
 import WeightAdjustmentModal from './WeightAdjustmentModal';
-import { MagnifyingGlassIcon, AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline'; // Added icons
+import { MagnifyingGlassIcon, AdjustmentsHorizontalIcon, XCircleIcon } from '@heroicons/react/24/outline'; // Added icons
+import { debounce } from 'lodash-es'; // Import debounce
 
-// Note: Removed darkMode prop, relying on Tailwind's dark: variants
-function SearchBar({ importedData, onSearch }) {
+// Accept datasetAttributes (array of strings), initialCriteria, datasetId, and authToken
+function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, authToken }) {
   const [inputValue, setInputValue] = useState('');
   const [suggestions, setSuggestions] = useState([]);
-  const [selectedCriteria, setSelectedCriteria] = useState([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false); // Add loading state
+  // Initialize selectedCriteria from initialCriteria prop if provided
+  const [selectedCriteria, setSelectedCriteria] = useState(initialCriteria || []);
   const [showWeightAdjuster, setShowWeightAdjuster] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const inputRef = useRef(null);
@@ -17,55 +20,86 @@ function SearchBar({ importedData, onSearch }) {
   // Get the portal target element
   const portalRoot = document.getElementById('suggestions-portal');
 
-  // Extract all available attributes from the dataset
-  const attributes = importedData?.length > 0
-    ? Object.keys(importedData[0])
-    : [];
+  // Use datasetAttributes directly (passed as prop)
+  const attributes = datasetAttributes || [];
+
+  // Effect to update selectedCriteria when initialCriteria changes (e.g., loading a session)
+  useEffect(() => {
+    setSelectedCriteria(initialCriteria || []);
+  }, [initialCriteria]);
+
+  // --- Debounced Fetch for Value Suggestions ---
+  const fetchValueSuggestions = useRef(
+    debounce(async (attributeName, searchTerm) => {
+      if (!datasetId || !attributeName || !searchTerm) {
+        setSuggestions([]);
+        setIsLoadingSuggestions(false);
+        return;
+      }
+      setIsLoadingSuggestions(true);
+      try {
+        const headers = { 'Authorization': `Bearer ${authToken}` };
+        const response = await fetch(`/api/suggest/values?datasetId=${encodeURIComponent(datasetId)}&attributeName=${encodeURIComponent(attributeName)}&searchTerm=${encodeURIComponent(searchTerm)}`, { headers });
+        if (!response.ok) {
+          throw new Error('Failed to fetch suggestions');
+        }
+        const data = await response.json();
+        // Format suggestions for display
+        setSuggestions(data.suggestions.map(val => ({
+            type: 'value',
+            value: val,
+            display: String(val).replace( // Highlight match
+                 new RegExp(`(${searchTerm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'i'),
+                 '<mark class="bg-yellow-200 dark:bg-yellow-600 rounded">$1</mark>'
+            )
+        })));
+      } catch (error) {
+        console.error("Error fetching value suggestions:", error);
+        setSuggestions([]); // Clear suggestions on error
+      } finally {
+        setIsLoadingSuggestions(false);
+      }
+    }, 300) // 300ms debounce delay
+  ).current;
+  // ---
 
   const handleInputChange = (e) => {
     const value = e.target.value;
     setInputValue(value);
     setHighlightedIndex(-1); // Reset highlight on input change
 
-    const [attr, val] = value.split(':').map(s => s.trim());
+    const parts = value.split(':');
+    const attrPart = parts[0].trim();
+    const valPart = parts.length > 1 ? parts[1] : undefined; // Don't trim value part yet
 
-    if (!val && attr) { // Suggest attributes only if attr part is being typed
-      const searchTerm = attr.toLowerCase();
-      const matches = attributes
+    // Suggest attributes ONLY if there's no colon OR nothing substantial after the colon
+    if (value.includes(':') && valPart !== undefined) {
+        // User is typing the value part - Fetch value suggestions (debounced)
+        const currentAttribute = attrPart; // The attribute typed before the colon
+        const currentSearchTerm = valPart.trim(); // Trim now for search term
+        if (attributes.includes(currentAttribute)) { // Only fetch if attribute is valid
+             fetchValueSuggestions(currentAttribute, currentSearchTerm);
+        } else {
+             setSuggestions([]); // Clear if attribute is invalid
+        }
+    } else if (attrPart) {
+        // User is typing the attribute part - Show attribute suggestions
+        setIsLoadingSuggestions(false); // Not loading value suggestions here
+        const searchTerm = attrPart.toLowerCase();
+        const matches = attributes
         .filter(a => a.toLowerCase().includes(searchTerm))
-        .slice(0, 5);
+        .slice(0, 10); // Show more attribute suggestions if needed
 
       setSuggestions(matches.map(a => ({
-        type: 'attribute',
+        type: 'attribute', // Only type 'attribute' suggestions now
         value: a,
         display: a.replace(
           new RegExp(`(${searchTerm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'i'), // Escape regex special chars
           '<mark class="bg-yellow-200 dark:bg-yellow-600 rounded">$1</mark>' // Tailwind class for highlight + rounded
         )
       })));
-    } else if (attr && val !== undefined && importedData?.length > 0) { // Suggest values only if val part exists
-      // Only suggest if the attribute exists
-      if (attributes.includes(attr)) {
-          const uniqueValues = [...new Set(
-            importedData.map(item => item[attr]).filter(v => v !== null && v !== undefined) // Filter out null/undefined
-          )];
-          const searchTerm = val.toLowerCase();
-          const matches = uniqueValues
-            .filter(v => String(v).toLowerCase().includes(searchTerm))
-            .slice(0, 5);
-
-          setSuggestions(matches.map(v => ({
-            type: 'value',
-            value: v,
-            display: String(v).replace(
-              new RegExp(`(${searchTerm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'i'), // Escape regex special chars
-              '<mark class="bg-yellow-200 dark:bg-yellow-600 rounded">$1</mark>' // Tailwind class for highlight + rounded
-            )
-          })));
-       } else {
-            setSuggestions([]); // Don't suggest values if attribute is invalid
-       }
     } else {
+      // Clear suggestions if input is empty or doesn't match attribute pattern start
       setSuggestions([]);
     }
   };
@@ -73,18 +107,18 @@ function SearchBar({ importedData, onSearch }) {
   const handleSuggestionSelect = (suggestion) => {
     if (suggestion.type === 'attribute') {
       setInputValue(`${suggestion.value}: `); // Add space after colon
-      setSuggestions([]); // Clear suggestions after selection
+      setSuggestions([]);
       inputRef.current.focus();
     } else if (suggestion.type === 'value') {
+      // Add criterion when a value suggestion is selected
       const [attr] = inputValue.split(':');
-      // Add the selected criterion directly
       setSelectedCriteria([...selectedCriteria, {
         attribute: attr.trim(),
-        value: suggestion.value,
+        value: suggestion.value, // Use the selected value
         weight: 5 // Default weight
       }]);
-      setInputValue(''); // Clear input after adding
-      setSuggestions([]); // Clear suggestions
+      setInputValue(''); // Clear input
+      setSuggestions([]);
       inputRef.current.focus();
     }
     setHighlightedIndex(-1);
@@ -121,10 +155,11 @@ function SearchBar({ importedData, onSearch }) {
     else if (e.key === 'Enter' && highlightedIndex === -1 && inputValue.includes(':')) {
        e.preventDefault();
        const [attr, val] = inputValue.split(':').map(s => s.trim());
-       if (attr && val && attributes.includes(attr)) { // Also check if attribute is valid
+       // Check if attribute is valid before adding
+       if (attr && val !== undefined && val !== '' && attributes.includes(attr)) {
          setSelectedCriteria([...selectedCriteria, {
            attribute: attr,
-           value: val,
+           value: val, // Keep value as entered
            weight: 5
          }]);
          setInputValue('');
@@ -268,13 +303,26 @@ function SearchBar({ importedData, onSearch }) {
   );
 }
 
+// Corrected PropTypes definition
 SearchBar.propTypes = {
-  importedData: PropTypes.arrayOf(PropTypes.object),
+  datasetAttributes: PropTypes.arrayOf(PropTypes.string),
   onSearch: PropTypes.func.isRequired,
+  initialCriteria: PropTypes.arrayOf(PropTypes.shape({
+      attribute: PropTypes.string,
+      value: PropTypes.any,
+      weight: PropTypes.number,
+      operator: PropTypes.string
+  })),
+  datasetId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]), // Add datasetId
+  authToken: PropTypes.string, // Add authToken
 };
 
+// Corrected defaultProps definition
 SearchBar.defaultProps = {
-  importedData: [],
+  datasetAttributes: [],
+  initialCriteria: [],
+  datasetId: null,
+  authToken: null,
 };
 
 
