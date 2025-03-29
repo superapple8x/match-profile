@@ -54,7 +54,8 @@ function App() {
   const prefersDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   const [darkMode, setDarkMode] = useState(prefersDarkMode);
   const [searchResults, setSearchResults] = useState(null); // Will contain { matches: [], pagination: {}, error: null }
-  const [searchCriteria, setSearchCriteria] = useState(null);
+  const [searchCriteria, setSearchCriteria] = useState(null); // Array of criteria objects
+  const [searchWeights, setSearchWeights] = useState({}); // Object for per-attribute weights
   const [isSearching, setIsSearching] = useState(false);
   const [datasetId, setDatasetId] = useState(null);
   const [datasetAttributes, setDatasetAttributes] = useState([]);
@@ -138,10 +139,11 @@ function App() {
   }, []); // No dependencies needed if it only uses setters
 
 
-  // --- Search Trigger Function ---
-  const triggerSearch = useCallback(async (criteria, page, size, sortCol, sortDir) => {
+  // --- Search Trigger Function --- (Updated to accept weights)
+  const triggerSearch = useCallback(async (criteria, weights, page, size, sortCol, sortDir) => {
+    // Use the criteria passed directly, don't rely on state here as it might not be updated yet
     if (!datasetId || !criteria || criteria.length === 0) {
-        console.log("Search trigger skipped: No dataset ID or criteria.");
+        console.log("Search trigger skipped: No dataset ID or criteria provided to function.");
         setIsSearching(false); // Ensure searching state is off
         // Clear results if criteria are cleared but dataset exists
         if (datasetId && (!criteria || criteria.length === 0)) {
@@ -158,16 +160,17 @@ function App() {
     // setSearchResults(prev => ({ ...prev, matches: [], error: null })); // Clear matches/error, keep pagination? Maybe clear all. Let's clear all for now.
     setSearchResults(null); // Clear previous results entirely
 
-    const weights = {};
-    const matchingRules = {};
+    // Remove redundant weights calculation - weights are now passed in
+    // const weights = {};
+    const matchingRules = {}; // Keep matchingRules calculation for now, could be externalized later
     criteria.forEach(criterion => {
-      // Use originalName for matching rules and weights if available, otherwise fallback to attribute
+      // Use originalName for matching rules if available, otherwise fallback to attribute
       const attributeName = datasetAttributes.find(a => a.originalName === criterion.attribute)?.originalName || criterion.attribute;
-      weights[attributeName] = criterion.weight || 5;
+      // weights[attributeName] = criterion.weight || 5; // Removed - use passed-in weights
       // Define matchingRules (same logic as before, using attributeName)
       if (attributeName === 'Age') {
         matchingRules[attributeName] = { type: 'range', tolerance: 5 };
-      } else if (['Gender', 'Platform', 'Video Category'].includes(attributeName)) {
+      } else if (['Gender', 'Platform', 'Video Category', 'Debt', 'Owns Property'].includes(attributeName)) { // Added boolean fields
         matchingRules[attributeName] = { type: 'exact' };
       } else {
         // Defaulting others to partial might not be ideal for all cases (e.g., numeric IDs)
@@ -202,9 +205,9 @@ function App() {
             headers: headers,
             body: JSON.stringify({
                 datasetId: datasetId,
-                searchCriteria: criteria, // Send criteria with original names
-                matchingRules, // Rules based on original names
-                weights, // Weights based on original names
+                criteria: criteria, // Send the criteria array
+                matchingRules, // Rules based on original names (can be refined later)
+                weights: weights, // Send the weights object received as parameter
             }),
         });
 
@@ -239,7 +242,8 @@ function App() {
         return;
     }
     // Trigger search only if criteria exist and it's not the initial search call
-    triggerSearch(searchCriteria, currentPage, pageSize, sortBy, sortDirection);
+    // Pass the current searchWeights state here
+    triggerSearch(searchCriteria, searchWeights, currentPage, pageSize, sortBy, sortDirection);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, pageSize, sortBy, sortDirection]); // Exclude searchCriteria, triggerSearch to avoid loops on criteria/function identity change
@@ -304,16 +308,19 @@ function App() {
     setAnalysisQuery('');
   };
 
-  // Initial Search Handler (from SearchBar)
-  const handleSearch = (criteria) => {
-    console.log('Initial search triggered with criteria:', criteria);
+  // Initial Search Handler (from SearchBar) - Updated to accept { criteria, weights }
+  const handleSearch = (searchData) => {
+    const { criteria, weights } = searchData; // Destructure the incoming object
+    console.log('Initial search triggered with:', { criteria, weights });
     isInitialSearchTrigger.current = true; // Set flag to prevent effect trigger
     setCurrentPage(1); // Reset to page 1 for new search
+    setSearchCriteria(criteria); // Set the criteria array state
+    setSearchWeights(weights); // Set the weights object state
     // Optionally reset sort on new search, or keep existing sort? Let's reset.
     // setSortBy('');
     // setSortDirection('desc');
-    // Trigger the search (pass current sort state, which might be empty or previous)
-    triggerSearch(criteria, 1, pageSize, sortBy, sortDirection);
+    // Trigger the search, passing the criteria and weights from the searchData object
+    triggerSearch(criteria, weights, 1, pageSize, sortBy, sortDirection);
   };
 
   // Sort Change Handler
@@ -416,7 +423,8 @@ function App() {
           if (sessionData.search_criteria && sessionData.search_criteria.length > 0) {
               console.log("Triggering search after session load with criteria.");
               isInitialSearchTrigger.current = true; // Prevent effect loop
-              triggerSearch(sessionData.search_criteria, 1, pageSize, '', 'desc');
+              // Pass empty weights object as saved sessions don't store weights yet
+              triggerSearch(sessionData.search_criteria, {}, 1, pageSize, '', 'desc');
           }
       } else {
           setIsAnalysisViewOpen(false);

@@ -8,33 +8,62 @@ import { debounce } from 'lodash-es';
 // Define supported operators
 const SUPPORTED_OPERATORS = ['=', '!=', '>', '<', '>=', '<=', 'contains', 'startsWith', 'endsWith'];
 
-// Helper function to parse input: "attribute operator value"
+// Helper function to parse input: "attribute operator value" (Revised for robustness)
 const parseInput = (input, attributes) => {
     const trimmedInput = input.trim();
-    // Try to find the last valid operator preceded by a space
-    let operatorIndex = -1;
-    let operator = null;
-    for (const op of SUPPORTED_OPERATORS.slice().sort((a, b) => b.length - a.length)) { // Check longer operators first
-        const index = trimmedInput.lastIndexOf(` ${op} `);
-        if (index > 0) { // Ensure operator is not at the beginning
-            operatorIndex = index + 1; // Index of the operator itself
-            operator = op;
-            break;
+    let bestMatch = null;
+
+    // 1. Find the longest matching attribute from the start
+    let matchedAttribute = null;
+    let attributeEndIndex = -1;
+
+    // Sort attributes by length descending to match longest first (e.g., "Video Category" before "Video")
+    const sortedAttributes = [...attributes].sort((a, b) => b.length - a.length);
+
+    for (const attr of sortedAttributes) {
+        if (trimmedInput.startsWith(attr)) {
+            matchedAttribute = attr;
+            attributeEndIndex = attr.length;
+            break; // Found the longest matching attribute
         }
     }
 
-    if (operatorIndex > 0 && operator) {
-        const attribute = trimmedInput.substring(0, operatorIndex - 1).trim(); // -1 for the space before operator
-        const value = trimmedInput.substring(operatorIndex + operator.length + 1).trim(); // +1 for the space after operator
+    if (!matchedAttribute) {
+        return null; // No valid attribute found at the beginning
+    }
 
-        // Validate attribute
-        if (attributes.includes(attribute) && value) {
-            return { attribute, operator, value };
+    // 2. Find the longest matching operator after the attribute
+    let remainingInput = trimmedInput.substring(attributeEndIndex).trimStart(); // Text after attribute
+    let matchedOperator = null;
+    let operatorEndIndex = -1;
+
+    // Sort operators by length descending
+    const sortedOperators = [...SUPPORTED_OPERATORS].sort((a, b) => b.length - a.length);
+
+    for (const op of sortedOperators) {
+        if (remainingInput.startsWith(op)) {
+            // Check if the character after the operator is a space or end of string
+            // This prevents matching "contains" within "containsMoreText"
+            if (remainingInput.length === op.length || remainingInput[op.length] === ' ') {
+                matchedOperator = op;
+                operatorEndIndex = op.length;
+                break; // Found the longest matching operator
+            }
         }
     }
 
-    // Fallback or invalid format
-    return null;
+    if (!matchedOperator) {
+        return null; // No valid operator found after attribute
+    }
+
+    // 3. The rest is the value
+    const value = remainingInput.substring(operatorEndIndex).trim();
+
+    if (value) { // Ensure value is not empty
+        bestMatch = { attribute: matchedAttribute, operator: matchedOperator, value };
+    }
+
+    return bestMatch;
 };
 
 
@@ -48,6 +77,8 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
   const [inputState, setInputState] = useState('attribute'); // 'attribute', 'operator', 'value'
   const [currentAttribute, setCurrentAttribute] = useState(''); // Store selected attribute
   const [currentOperator, setCurrentOperator] = useState(''); // Store selected operator
+  const [attributeWeights, setAttributeWeights] = useState({}); // State for per-attribute weights
+  const [inputError, setInputError] = useState(false); // State for input parsing error
 
   const inputRef = useRef(null);
   const suggestionsRef = useRef(null);
@@ -106,6 +137,7 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
     const value = e.target.value;
     setInputValue(value);
     setHighlightedIndex(-1); // Reset highlight
+    setInputError(false); // Clear error on input change
 
     const trimmedValue = value.trimStart(); // Keep trailing space if user adds one intentionally
     const lastSpaceIndex = trimmedValue.lastIndexOf(' ');
@@ -241,8 +273,8 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
         setSelectedCriteria([...selectedCriteria, {
           attribute: currentAttribute,
           operator: currentOperator,
-          value: suggestion.value,
-          weight: 5 // Default weight
+          value: suggestion.value
+          // Removed weight: 5 - Weights are now per-attribute
         }]);
         setInputValue(''); // Clear input
         setSuggestions([]);
@@ -306,24 +338,26 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
          setSelectedCriteria([...selectedCriteria, {
            attribute: parsed.attribute,
            operator: parsed.operator,
-           value: parsed.value,
-           weight: 5
+           value: parsed.value
+           // Removed weight: 5 - Weights are now per-attribute
          }]);
          setInputValue('');
          setSuggestions([]);
          setInputState('attribute');
          setCurrentAttribute('');
          setCurrentOperator('');
+         setInputError(false); // Clear error on successful parse
        } else {
            console.warn(`Invalid input format: "${inputValue}". Use "Attribute Operator Value".`);
-           // Optionally provide user feedback here (e.g., flash input border red)
+           setInputError(true); // Set error state
        }
      }
   };
 
   const handleSearch = () => {
     if (selectedCriteria.length > 0) {
-      onSearch(selectedCriteria);
+      // Pass both criteria and the attribute weights map
+      onSearch({ criteria: selectedCriteria, weights: attributeWeights });
     }
   };
 
@@ -420,7 +454,11 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           placeholder="Attribute Operator Value (e.g., Age >= 30)" // Updated placeholder
-          className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-colors duration-200 ease-in-out shadow-sm" // Indigo focus ring
+          className={`w-full p-3 border rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:border-transparent outline-none transition-colors duration-200 ease-in-out shadow-sm ${
+            inputError
+              ? 'border-red-500 dark:border-red-400 focus:ring-red-500' // Error state
+              : 'border-gray-300 dark:border-gray-600 focus:ring-indigo-500' // Normal state
+          }`}
         />
 
         {/* Render Suggestions Dropdown via Portal if portalRoot exists */}
@@ -451,14 +489,9 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
       {/* Weight Adjustment Modal */}
       {showWeightAdjuster && (
         <WeightAdjustmentModal
-          selectedCriteria={selectedCriteria}
-          onWeightChange={(attr, op, val, weight) => setSelectedCriteria( // Adjust key based on how criteria are uniquely identified if needed
-             selectedCriteria.map(c =>
-                c.attribute === attr && c.operator === op && c.value === val
-                ? { ...c, weight: Number(weight) || 0 }
-                : c
-             )
-          )}
+          selectedCriteria={selectedCriteria} // Still needed to derive unique attributes in modal
+          initialAttributeWeights={attributeWeights} // Pass current attribute weights
+          onWeightsChange={setAttributeWeights} // Update the attributeWeights state directly
           onClose={() => setShowWeightAdjuster(false)}
         />
       )}

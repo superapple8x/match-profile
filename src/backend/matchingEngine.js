@@ -1,28 +1,17 @@
+const Fuse = require('fuse.js'); // Import Fuse.js
+const matchingConfig = require('./config/matchingConfig'); // Import external config
+
 class MatchingEngine {
   constructor() {
     this.weights = {};
+    // Use imported configuration
     this.config = {
-      exactMatchWeight: 1.0,
-      rangeMatchWeight: 0.8,
-      partialMatchWeight: 0.6,
-      optionalMatchWeight: 0.4
+        exactMatchWeight: matchingConfig.exactMatchWeight,
+        rangeMatchWeight: matchingConfig.rangeMatchWeight,
+        partialMatchWeight: matchingConfig.partialMatchWeight,
+        optionalMatchWeight: matchingConfig.optionalMatchWeight
     };
-    this.defaultMatchingRules = {
-      Age: { type: 'range', tolerance: 5 },
-      Gender: { type: 'exact' },
-      Location: { type: 'partial' },
-      Profession: { type: 'partial' },
-      Platform: { type: 'exact' },
-      'Video Category': { type: 'exact' },
-      'Watch Reason': { type: 'partial' },
-      DeviceType: { type: 'partial' },
-      OS: { type: 'partial' },
-      name: { type: 'exact' },
-      email: { type: 'exact' },
-      // Added rules for boolean columns from the dataset sample
-      Debt: { type: 'exact' },
-      'Owns Property': { type: 'exact' }
-    };
+    this.defaultMatchingRules = matchingConfig.defaultMatchingRules;
   }
 
   setWeights(weights) {
@@ -46,16 +35,51 @@ class MatchingEngine {
     return Math.abs(num1 - num2) <= tolerance ? this.config.rangeMatchWeight : 0;
   }
 
-  partialTextMatch(text1, text2) {
-    if (typeof text1 !== 'string' || typeof text2 !== 'string') return 0;
-    
-    // Normalize strings to handle encoding issues
-    const normalizedText1 = text1.normalize('NFC').trim().toLowerCase();
-    const normalizedText2 = text2.normalize('NFC').trim().toLowerCase();
-    
-    return normalizedText1.includes(normalizedText2) || 
-           normalizedText2.includes(normalizedText1) 
-            ? this.config.partialMatchWeight : 0;
+  partialTextMatch(profileText, criterionText) {
+    if (typeof profileText !== 'string' || typeof criterionText !== 'string') return 0;
+
+    // Normalize strings
+    const normalizedProfileText = profileText.normalize('NFC').trim().toLowerCase();
+    const normalizedCriterionText = criterionText.normalize('NFC').trim().toLowerCase();
+
+    if (!normalizedProfileText || !normalizedCriterionText) return 0; // Cannot match empty strings
+
+    // Use Fuse.js for fuzzy matching
+    // We search for the criterionText within the profileText.
+    // Since Fuse expects a list, we wrap profileText in an array.
+    // We'll use a simple configuration for now.
+    const fuseOptions = {
+      includeScore: true, // Ensure score is included in results
+      // isCaseSensitive: false, // Already handled by toLowerCase
+      shouldSort: true, // Sort results by score (best match first)
+      threshold: 0.6, // Adjust threshold (0=perfect match, 1=match anything)
+      // location: 0, // Start search at beginning
+      // distance: 100, // How far to search
+      // minMatchCharLength: 1, // Minimum characters to match
+      // keys: ["value"] // If searching objects in array
+    };
+
+    // Create a Fuse instance with the text to search within (profileText)
+    // Since we are comparing two strings, we can search for criterionText in a list containing just profileText
+    const fuse = new Fuse([normalizedProfileText], fuseOptions);
+
+    // Search for the criterionText
+    const results = fuse.search(normalizedCriterionText);
+
+    // Check if any result is found within the threshold
+    // Fuse.js returns a score between 0 (perfect match) and 1.
+    // We want a high score for a good match, so invert the Fuse score.
+    // Let's return a score based on the best match found.
+    if (results.length > 0) {
+        // Assuming the first result is the best match (Fuse sorts by score)
+        const fuseScore = results[0].score;
+        // Invert and scale the score: (1 - fuseScore) * baseWeight
+        // A lower fuseScore (better match) results in a higher final score.
+        const matchQuality = 1 - fuseScore; // 0 to 1, where 1 is perfect match
+        return matchQuality * this.config.partialMatchWeight; // Scale by the configured weight
+    }
+
+    return 0; // No match found within threshold
   }
 
   optionalMatch(value1, value2) {
@@ -64,64 +88,88 @@ class MatchingEngine {
 
   // Modify to accept the full searchCriteria array (with operators)
   // Logic changed: Assume rows passed DB filter fully satisfy the criteria used.
-  // Score is based on the weights of the attributes included in the search.
-  calculateMatchScore(searchCriteriaArray, profile, originalToSanitizedMap, matchingRules = this.defaultMatchingRules) {
+  // Logic updated for granular scoring based on specific match functions and criteria
+  calculateMatchScore(searchCriteriaArray, profile, originalToSanitizedMap, rules = this.defaultMatchingRules) {
     let totalScore = 0;
     let maxPossibleScore = 0;
 
-    // Create a Set of attributes that were actually used in the search criteria for quick lookup
-    const searchedAttributes = new Set(searchCriteriaArray.map(c => c.attribute));
-
-    console.log('[Score] Calculating score based on searched attributes:', searchedAttributes);
+    console.log('[Score] Calculating granular score for profile ID:', profile.id); // Assuming profile has an ID
     // console.log('[Score] Profile data (sanitized keys):', profile);
+    // console.log('[Score] Search Criteria:', searchCriteriaArray);
+    // console.log('[Score] Weights:', this.weights);
+    // console.log('[Score] Rules:', rules);
 
-    // Iterate through all attributes that *could* have a weight or were searched
-    // Combine keys from weights and searchedAttributes to cover all relevant attributes
-    const relevantAttributes = new Set([...Object.keys(this.weights), ...searchedAttributes]);
+    // Iterate through each criterion provided in the search
+    searchCriteriaArray.forEach(criterion => {
+      const attribute = criterion.attribute;
+      const criterionValue = criterion.value;
+      // Operator might be used in future enhancements (e.g., different scoring for '>' vs '=')
+      // const operator = criterion.operator;
 
-    relevantAttributes.forEach(attribute => {
-        // Check if the attribute exists in the profile's metadata map
-        if (originalToSanitizedMap.hasOwnProperty(attribute)) {
-            const weight = this.weights[attribute] || 1; // Get weight or default to 1
-            const maxAttributeScore = this.config.exactMatchWeight * weight; // Max potential score for this attribute
+      // Check if the attribute exists in the profile's metadata map and rules
+      if (originalToSanitizedMap.hasOwnProperty(attribute)) {
+        const sanitizedAttributeName = originalToSanitizedMap[attribute];
+        const profileValue = profile[sanitizedAttributeName];
+        const rule = rules[attribute] || { type: 'exact' }; // Default to exact match if no rule
+        const weight = this.weights[attribute] || 1; // Get weight or default to 1
 
-            // Add to the maximum possible score regardless of whether it was searched
-            maxPossibleScore += maxAttributeScore;
+        let criterionMatchScore = 0;
+        let maxCriterionScore = 0;
 
-            // If this attribute was part of the search criteria that the profile passed...
-            if (searchedAttributes.has(attribute)) {
-                // ...grant the full score for this attribute.
-                // The database already did the filtering (>, =, IN, LIKE etc.)
-                totalScore += maxAttributeScore;
-                console.log(`[Score] Attribute "${attribute}" was searched. Adding full score: ${maxAttributeScore}`);
-            } else {
-                 console.log(`[Score] Attribute "${attribute}" was not searched. Max score contribution: ${maxAttributeScore}, Added score: 0`);
-            }
-        } else {
-            console.warn(`[Score] Attribute "${attribute}" from weights/criteria not found in dataset metadata map. Skipping.`);
+        // Determine match type and calculate score
+        switch (rule.type) {
+          case 'exact':
+            criterionMatchScore = this.exactMatch(profileValue, criterionValue);
+            maxCriterionScore = this.config.exactMatchWeight;
+            break;
+          case 'range':
+            // Ensure tolerance is provided in the rule, default if necessary
+            const tolerance = rule.tolerance || 0;
+            criterionMatchScore = this.rangeMatch(profileValue, criterionValue, tolerance);
+            maxCriterionScore = this.config.rangeMatchWeight;
+            break;
+          case 'partial':
+            criterionMatchScore = this.partialTextMatch(profileValue, criterionValue);
+            maxCriterionScore = this.config.partialMatchWeight;
+            break;
+          case 'optional': // Assuming optionalMatch is still relevant for some use case
+            criterionMatchScore = this.optionalMatch(profileValue, criterionValue);
+            maxCriterionScore = this.config.optionalMatchWeight;
+            break;
+          default:
+            console.warn(`[Score] Unknown match type "${rule.type}" for attribute "${attribute}". Defaulting to exact match.`);
+            criterionMatchScore = this.exactMatch(profileValue, criterionValue);
+            maxCriterionScore = this.config.exactMatchWeight;
         }
+
+        // Apply weight to the scores
+        const weightedScore = criterionMatchScore * weight;
+        const weightedMaxScore = maxCriterionScore * weight;
+
+        totalScore += weightedScore;
+        maxPossibleScore += weightedMaxScore; // Add this criterion's max possible weighted score
+
+        console.log(`[Score] Attribute: "${attribute}", Type: ${rule.type}, Weight: ${weight}, ProfileVal: "${profileValue}", CriterionVal: "${criterionValue}", Match: ${criterionMatchScore.toFixed(2)}, WeightedScore: ${weightedScore.toFixed(2)}, MaxPossible: ${weightedMaxScore.toFixed(2)}`);
+
+      } else {
+        console.warn(`[Score] Attribute "${attribute}" from criteria not found in dataset metadata map. Skipping criterion.`);
+      }
     });
 
-
-    // Handle the case where no relevant weighted/searched attributes were found
-    if (maxPossibleScore === 0 && searchedAttributes.size > 0) {
-        // If criteria were provided but none had weights or matched metadata,
-        // assign a baseline score or handle as needed. For now, let it be 0.
-         console.warn("[Score] Search criteria were provided, but no relevant attributes found in metadata/weights. Score might be 0.");
-         // Or, alternatively, if *any* match means 100% if no weights apply:
-         // return 100;
+    // Handle cases where no criteria were applicable or max score is zero
+    if (maxPossibleScore === 0) {
+        if (searchCriteriaArray.length > 0) {
+            console.warn("[Score] No applicable criteria found or max possible score is zero. Returning 0.");
+        } else {
+            console.log("[Score] No search criteria provided. Score is 0.");
+        }
+        return 0;
     }
-     else if (maxPossibleScore === 0 && searchedAttributes.size === 0) {
-         // If no criteria were provided (e.g., just browsing/sorting), score is irrelevant or could be 100?
-         // Let's return 0 for consistency, as no matching criteria were evaluated.
-         console.log("[Score] No search criteria provided. Score is 0.");
-         return 0;
-     }
 
-
-    const finalScore = maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 100 : 0;
-    console.log(`[Score] Final Score: ${totalScore} / ${maxPossibleScore} = ${finalScore.toFixed(2)}%`);
-    return finalScore;
+    const finalScore = (totalScore / maxPossibleScore) * 100;
+    console.log(`[Score] Final Score: ${totalScore.toFixed(2)} / ${maxPossibleScore.toFixed(2)} = ${finalScore.toFixed(2)}%`);
+    // Ensure score is within 0-100 range (might happen with unusual weights/configs)
+    return Math.max(0, Math.min(100, finalScore));
   }
 }
 

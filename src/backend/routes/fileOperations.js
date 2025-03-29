@@ -141,7 +141,8 @@ router.post('/import', authMiddleware, upload.single('file'), async (req, res) =
     console.log(`[Import] Parsed ${parsedData.length} rows. Starting database processing.`);
 
     // 1. Determine Columns and Types & Sanitize
-    const originalColumns = Object.keys(parsedData[0]);
+    // Trim original column names before processing
+    const originalColumns = Object.keys(parsedData[0]).map(key => key.trim());
     const columnsMetadata = originalColumns.map(originalName => {
       const sanitizedName = sanitizeDbIdentifier(originalName);
       // Infer type based on the first few rows (e.g., first 10 or 100) for better accuracy
@@ -246,9 +247,9 @@ router.post('/import', authMiddleware, upload.single('file'), async (req, res) =
                  val = (val === null || val === undefined || val === '') ? null : new Date(val);
                  if (isNaN(val.getTime())) val = null; // Handle invalid dates
             }
-            // Ensure TEXT values are strings
+            // Ensure TEXT values are strings and trim whitespace
             else if (col.type === 'TEXT' && val !== null && val !== undefined) {
-                 val = String(val);
+                 val = String(val).trim(); // Trim whitespace here
             }
             return val;
         });
@@ -338,10 +339,10 @@ router.post('/match', authMiddleware, async (req, res) => { // Added authMiddlew
       return res.status(401).json({ error: 'Authentication required.' });
     }
 
-    // 1. Get data from request body
+    // 1. Get data from request body (Updated: Expect 'criteria' instead of 'searchCriteria')
     const {
         datasetId,
-        searchCriteria,
+        criteria, // Renamed from searchCriteria to match frontend payload
         weights,
         matchingRules,
         page = 1, // Default to page 1
@@ -350,11 +351,11 @@ router.post('/match', authMiddleware, async (req, res) => { // Added authMiddlew
         sortDirection = 'ASC' // Default sort direction
     } = req.body;
 
-    console.log('[Match] Received:', { datasetId, searchCriteria, weights, matchingRules, page, pageSize, sortBy, sortDirection });
+    console.log('[Match] Received:', { datasetId, criteria, weights, matchingRules, page, pageSize, sortBy, sortDirection }); // Updated log
 
-    // Validate required fields
-    if (!datasetId || !searchCriteria || !Array.isArray(searchCriteria)) { // Allow empty searchCriteria for browsing/sorting all data
-        return res.status(400).json({ error: 'Missing or invalid datasetId or searchCriteria.' });
+    // Validate required fields (using 'criteria')
+    if (!datasetId || !criteria || !Array.isArray(criteria)) { // Allow empty criteria for browsing/sorting all data
+        return res.status(400).json({ error: 'Missing or invalid datasetId or criteria.' }); // Updated error message
     }
 
     // Validate pagination parameters
@@ -393,8 +394,8 @@ router.post('/match', authMiddleware, async (req, res) => { // Added authMiddlew
         validDbColumns[col.sanitizedName] = col.type;
     });
 
-    // Validate that attributes in searchCriteria exist in the dataset
-    for (const criterion of searchCriteria) {
+    // Validate that attributes in criteria exist in the dataset (using 'criteria')
+    for (const criterion of criteria) {
         if (!originalToSanitizedMap.hasOwnProperty(criterion.attribute)) {
             return res.status(400).json({ error: `Invalid search attribute "${criterion.attribute}" for this dataset.` });
         }
@@ -408,18 +409,23 @@ router.post('/match', authMiddleware, async (req, res) => { // Added authMiddlew
     // Define allowed operators
     const allowedOperators = ['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'ILIKE', 'NOT LIKE', 'NOT ILIKE', 'IN', 'NOT IN', 'IS NULL', 'IS NOT NULL'];
 
-    searchCriteria.forEach(criterion => {
+    criteria.forEach(criterion => { // Updated to iterate over 'criteria'
       const { attribute, operator: rawOperator, value: rawValue } = criterion; // Expect operator and value
       const sanitizedColName = originalToSanitizedMap[attribute];
       const colType = validDbColumns[sanitizedColName]; // Get the DB type
+      const rule = matchingRules?.[attribute] || {}; // Get the rule for this attribute, default to empty object
 
-      // Validate operator
-      const operator = rawOperator && allowedOperators.includes(rawOperator.toUpperCase())
+      // Validate operator, BUT override for partial matching rule
+      let operator = rawOperator && allowedOperators.includes(rawOperator.toUpperCase())
                        ? rawOperator.toUpperCase()
                        : (colType === 'TEXT' ? 'ILIKE' : '='); // Default based on type if invalid/missing
 
       let value = rawValue;
       let queryFragment = '';
+
+      // --- Removed specific override for partial text match ---
+      // Let the standard logic below handle operator and value based on input criteria
+
 
       // Handle operators that don't need a value
       if (operator === 'IS NULL' || operator === 'IS NOT NULL') {
@@ -428,44 +434,44 @@ router.post('/match', authMiddleware, async (req, res) => { // Added authMiddlew
          // Skip criteria if value is missing for operators that require it
          console.warn(`[Match] Missing value for attribute "${attribute}" with operator "${operator}". Skipping criterion.`);
          return;
-      } else {
+      }
+      // Standard handling for operators requiring a value
+      else {
         // Handle type coercion/validation based on column type AND operator
         try {
           if (operator === 'IN' || operator === 'NOT IN') {
-            if (!Array.isArray(value)) {
-              throw new Error(`Value for IN/NOT IN must be an array.`);
-            }
-            if (value.length === 0) {
-                 console.warn(`[Match] Empty array provided for IN/NOT IN for attribute "${attribute}". Skipping criterion.`);
-                 return; // Skip if array is empty
-            }
-            // Coerce array elements based on column type
-            value = value.map(item => {
-              if (colType === 'NUMERIC') return parseFloat(item);
-              if (colType === 'BOOLEAN') {
-                  if (typeof item === 'string') {
-                      const lower = item.trim().toLowerCase();
-                      return lower === 'true' ? true : (lower === 'false' ? false : null);
-                  }
-                  return typeof item === 'boolean' ? item : null;
-              }
-              // Timestamps in IN might be tricky, often better handled with BETWEEN or >= / <=
-              // For now, treat as text for IN/NOT IN unless specifically needed
-              return String(item);
-            }).filter(item => item !== null && !isNaN(item) || colType === 'TEXT'); // Filter out invalid coerced values except for text
+            // Use rawValue for array check
+             if (!Array.isArray(rawValue)) {
+               throw new Error(`Value for IN/NOT IN must be an array.`);
+             }
+             if (rawValue.length === 0) {
+                  console.warn(`[Match] Empty array provided for IN/NOT IN for attribute "${attribute}". Skipping criterion.`);
+                  return; // Skip if array is empty
+             }
+             // Coerce array elements based on column type from rawValue
+             value = rawValue.map(item => {
+               if (colType === 'NUMERIC') return parseFloat(item);
+               if (colType === 'BOOLEAN') {
+                   if (typeof item === 'string') {
+                       const lower = item.trim().toLowerCase();
+                       return lower === 'true' ? true : (lower === 'false' ? false : null);
+                   }
+                   return typeof item === 'boolean' ? item : null;
+               }
+               return String(item);
+             }).filter(item => item !== null && (typeof item === 'boolean' || !isNaN(item) || colType === 'TEXT')); // Simplified filter
 
-            if (value.length === 0) {
-                 console.warn(`[Match] Array became empty after type coercion for IN/NOT IN for attribute "${attribute}". Skipping criterion.`);
-                 return; // Skip if array is empty after coercion
-            }
-
-            // Build placeholder string like ($2, $3, $4)
-            const placeholders = value.map(() => `$${paramIndex++}`).join(', ');
-            queryFragment = `"${sanitizedColName}" ${operator} (${placeholders})`;
-            queryParams.push(...value); // Add all values to queryParams
+             if (value.length === 0) {
+                  console.warn(`[Match] Array became empty after type coercion for IN/NOT IN for attribute "${attribute}". Skipping criterion.`);
+                  return; // Skip if array is empty after coercion
+             }
+             const placeholders = value.map(() => `$${paramIndex++}`).join(', ');
+             queryFragment = `"${sanitizedColName}" ${operator} (${placeholders})`;
+             queryParams.push(...value); // Add coerced values
 
           } else {
-            // Handle single value operators
+            // Handle single value operators (use rawValue for coercion)
+            value = rawValue; // Reset value to rawValue for coercion
             if (colType === 'NUMERIC') {
               value = parseFloat(value);
               if (isNaN(value)) throw new Error('Invalid numeric value');
@@ -480,15 +486,13 @@ router.post('/match', authMiddleware, async (req, res) => { // Added authMiddlew
               if (isNaN(value.getTime())) throw new Error('Invalid date/timestamp value');
             } else { // TEXT
               value = String(value);
-              // Add wildcards for LIKE/ILIKE if not already present
-              if ((operator === 'LIKE' || operator === 'ILIKE' || operator === 'NOT LIKE' || operator === 'NOT ILIKE') && !value.includes('%')) {
-                value = `%${value}%`;
-              }
+              // For standard LIKE/ILIKE, wildcards must be explicit in input
+              // For '=', it will be an exact match
             }
 
             // Standard operator handling
             queryFragment = `"${sanitizedColName}" ${operator} $${paramIndex++}`;
-            queryParams.push(value);
+            queryParams.push(value); // Push the coerced value
           }
         } catch (error) {
            console.warn(`[Match] Error processing criterion for attribute "${attribute}" (Value: "${rawValue}", Operator: "${operator}", Type: ${colType}): ${error.message}. Skipping criterion.`);
@@ -582,7 +586,7 @@ router.post('/match', authMiddleware, async (req, res) => { // Added authMiddlew
     const results = filteredProfiles.map(profile => {
       // The 'profile' object here has keys matching the sanitized DB column names
       const matchPercentage = engine.calculateMatchScore(
-        searchCriteria, // Pass the full searchCriteria array (with operators)
+        criteria, // Pass the full criteria array (with operators, without weights)
         profile, // Pass the profile object with sanitized keys
         originalToSanitizedMap, // Pass the map
         matchingRules // Pass the rules

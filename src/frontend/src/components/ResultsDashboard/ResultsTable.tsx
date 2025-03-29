@@ -44,7 +44,14 @@ function ResultsTable({ results, datasetAttributes, onMatchClick }: ResultsTable
     cols.push(columnHelper.accessor('matchPercentage', {
       id: 'matchPercentage',
       header: 'Match %',
-      cell: info => info.getValue() !== undefined ? `${info.getValue()?.toFixed(1)}%` : '-',
+      cell: info => {
+        const value = info.getValue();
+        // Check if value is a valid number before formatting
+        if (typeof value === 'number' && !isNaN(value)) {
+          return `${value.toFixed(1)}%`;
+        }
+        return '-'; // Fallback for undefined, null, NaN, or non-numeric types
+      },
       enableSorting: true,
       size: 120, // Set default size
       meta: { className: 'px-4 py-2 text-center font-semibold' }
