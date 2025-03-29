@@ -23,25 +23,25 @@ analysis_results = {}
 try:
     df = pd.read_csv('/input/data.csv', encoding='utf-8')
 
-    required_cols = ['Location', 'Addiction Level', 'Self Control', 'Satisfaction']
-    for col in required_cols:
-        if col not in df.columns:
-            analysis_results['error'] = f"Error: Column '{col}' not found."
-            print(f"Error: Column '{col}' not found.")
-            raise Exception(f"Column '{col}' not found.")
-
-    df['Addiction_Level_numeric'] = pd.to_numeric(df['Addiction Level'], errors='coerce')
-    df['Self_Control_numeric'] = pd.to_numeric(df['Self Control'], errors='coerce')
-    df['Satisfaction_numeric'] = pd.to_numeric(df['Satisfaction'], errors='coerce')
-
-    if df['Addiction_Level_numeric'].isnull().all() or df['Self_Control_numeric'].isnull().all() or df['Satisfaction_numeric'].isnull().all():
-        analysis_results['warning'] = "Warning: One or more health-related columns could not be treated as numeric."
-        print("Warning: One or more health-related columns could not be treated as numeric.")
+    required_cols = ['Location', 'ProductivityLoss']
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    
+    if missing_cols:
+        analysis_results['error'] = f"Error: Columns {missing_cols} not found in dataset."
+        print(f"Error: Columns {missing_cols} not found in dataset.")
     else:
-        df['Health_Score'] = (df['Self_Control_numeric'] + df['Satisfaction_numeric'] - df['Addiction_Level_numeric']) / 3
-        healthiest_by_country = df.loc[df.groupby('Location')['Health_Score'].idxmax()]
-        healthiest_by_country = healthiest_by_country[['Location', 'UserID', 'Age', 'Gender', 'Health_Score']]
-        analysis_results['healthiest_by_country'] = healthiest_by_country.to_dict('records')
+        df['ProductivityLoss_numeric'] = pd.to_numeric(df['ProductivityLoss'], errors='coerce')
+        
+        if not df['ProductivityLoss_numeric'].isnull().all():
+            max_loss_idx = df['ProductivityLoss_numeric'].idxmax()
+            max_loss_country = df.loc[max_loss_idx, 'Location']
+            max_loss_value = df.loc[max_loss_idx, 'ProductivityLoss_numeric']
+            
+            analysis_results['country_with_highest_productivity_loss'] = max_loss_country
+            analysis_results['max_productivity_loss_value'] = max_loss_value
+        else:
+            analysis_results['warning'] = "Warning: Column 'ProductivityLoss' could not be treated as numeric."
+            print("Warning: Column 'ProductivityLoss' could not be treated as numeric.")
 
     final_stats = convert_numpy_types(analysis_results)
     with open('/output/stats.json', 'w') as f:

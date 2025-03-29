@@ -53,11 +53,11 @@ async function ensureImageExists() {
  * Executes Python code in a secure, isolated Docker container.
  *
  * @param {string} pythonCode The Python code to execute.
- * @param {string} datasetId The identifier (filename) of the dataset to use.
+ * @param {string} datasetCsvString The dataset content formatted as a CSV string.
  * @returns {Promise<{imagePaths: string[], statsPath: string|null, logs: string, error: string|null, tempDir: string|null}>}
  *          Paths to the generated plot(s) and stats file (if successful), logs, any error message, and temp dir path on success.
  */
-async function runPythonInSandbox(pythonCode, datasetId) {
+async function runPythonInSandbox(pythonCode, datasetCsvString) { // Changed datasetId to datasetCsvString
   await ensureImageExists(); // Make sure the image is ready
 
   let tempDir;
@@ -74,20 +74,22 @@ async function runPythonInSandbox(pythonCode, datasetId) {
     const scriptPath = path.join(tempDir, 'script.py');
     const inputDirPath = path.join(tempDir, 'input');
     const outputDirPath = path.join(tempDir, 'output');
-    const inputDataHostPath = path.join(inputDirPath, 'data.csv');
-    const sourceDataPath = path.join(UPLOAD_DIR, datasetId); // SECURITY: Ensure datasetId is sanitized earlier
+    const inputDataHostPath = path.join(inputDirPath, 'data.csv'); // Path inside temp dir where CSV will be written
 
     await fs.mkdir(inputDirPath);
     await fs.mkdir(outputDirPath);
     await fs.chmod(outputDirPath, 0o777); // Make output dir writable by container user
     await fs.writeFile(scriptPath, pythonCode);
 
-    // Copy dataset
+    // Write the dataset CSV string to the temporary input file
     try {
-        await fs.access(sourceDataPath);
-        await fs.copyFile(sourceDataPath, inputDataHostPath);
-    } catch (fileError) {
-        throw new Error(`Dataset file not found or inaccessible: ${sourceDataPath} (${fileError.message})`);
+        if (typeof datasetCsvString !== 'string') {
+            throw new Error('Invalid datasetCsvString provided (must be a string).');
+        }
+        await fs.writeFile(inputDataHostPath, datasetCsvString, 'utf8');
+        console.log(`Docker Executor [${executionId}]: Wrote dataset CSV string to ${inputDataHostPath}`);
+    } catch (writeError) {
+        throw new Error(`Failed to write dataset CSV to temporary file: ${writeError.message}`);
     }
 
 

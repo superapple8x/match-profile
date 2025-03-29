@@ -75,7 +75,9 @@ function ResultsDashboard({ searchResults, searchCriteria, datasetAttributes, is
     console.log('ResultsDashboard: Rendering Search Error');
     resultsContent = (
       <div className="text-center py-10 text-red-600 dark:text-red-400">
-        Error during search: {searchError}
+        <p className="font-semibold">An error occurred while searching:</p>
+        <p className="text-sm mt-1">{searchError}</p>
+        <p className="text-xs mt-2 text-gray-500 dark:text-gray-400">(If this persists, please check server logs or contact support.)</p>
       </div>
     );
   } else if (resultsData.length > 0) {
@@ -101,7 +103,7 @@ function ResultsDashboard({ searchResults, searchCriteria, datasetAttributes, is
     // No results or initial state
     resultsContent = (
       <div className="text-center py-10 text-gray-500 dark:text-gray-400">
-        {searchCriteria ? 'No results match your criteria.' : 'Perform a search to see results.'}
+        {searchCriteria ? 'Cannot find match with such criteria.' : 'Perform a search to see results.'}
       </div>
     );
   }

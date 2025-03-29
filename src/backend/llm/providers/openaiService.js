@@ -85,9 +85,12 @@ ${metadataString}
 3.  **Error Handling (Mandatory):**
     *   Wrap ALL analysis code (AFTER loading data) inside a single \`try...except Exception as e:\` block.
     *   Inside the \`except\` block, you MUST print the specific Python error using standard concatenation: \`print("Python Error: " + str(e))\`. Do NOT raise the exception again.
-4.  **Column Existence:** BEFORE using any column name from the user query or analysis plan, explicitly check if it exists in \`df.columns\`. If not, print an informative error (e.g., \`print("Error: Column 'XYZ' not found in dataset.")\`) and stop analysis for that part, or store an error message in the stats.
+4.  **Column Access (VERY IMPORTANT):**
+    *   When accessing DataFrame columns, you MUST use the **exact \`originalName\`** provided in the \`columnsMetadata\` section of the Dataset Metadata above (e.g., \`df['Original Column Name']\`).
+    *   Pandas column access is **case-sensitive** and requires exact matching, including spaces.
+    *   BEFORE using any column, explicitly check if the exact \`originalName\` exists in \`df.columns\`. If not, print an informative error (e.g., \`print("Error: Column 'Original Column Name' not found in dataset.")\`) and stop analysis for that part, or store an error message in the stats.
 5.  **Numeric Operations (Mandatory Safety):**
-    *   BEFORE performing calculations like \`.mean()\`, \`.median()\`, \`.max()\`, \`.idxmax()\`, \`.corr()\`, or plotting histograms/scatter plots on a column assumed to be numeric, you MUST attempt to convert it to numeric using \`pd.to_numeric(df['column_name'], errors='coerce')\`.
+    *   BEFORE performing calculations like \`.mean()\`, \`.median()\`, \`.max()\`, \`.idxmax()\`, \`.corr()\`, or plotting histograms/scatter plots on a column assumed to be numeric, you MUST attempt to convert it to numeric using \`pd.to_numeric(df['Original Column Name'], errors='coerce')\` (using the exact \`originalName\`).
     *   Store the result in a new temporary column (e.g., \`df['column_name_numeric']\`).
     *   Check if the temporary numeric column contains non-NaN values (\`not df['column_name_numeric'].isnull().all()\`) before proceeding with the calculation.
     *   If the column cannot be converted or contains only NaN after conversion, print an informative error (e.g., \`print("Warning: Column 'column_name' could not be treated as numeric.")\`) or store this info in the stats, and skip the numeric operation.

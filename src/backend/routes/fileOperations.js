@@ -414,16 +414,30 @@ router.post('/match', authMiddleware, async (req, res) => { // Added authMiddlew
       }
 
 
-      // Add condition based on operator (defaulting to exact/partial based on rule)
+      // Determine operator based on rule and column type
       const rule = matchingRules?.[criterion.attribute] || {};
-      const operator = rule.type === 'exact' ? '=' :
-                       rule.type === 'range' ? '=' : // Range handled by engine, filter might be broader initially
-                       'ILIKE'; // Default to case-insensitive partial match for filtering
+      let operator;
+      let finalValue = value; // Use the already coerced value by default
+
+      // Determine the default operator based on column type
+      const isNonTextType = ['NUMERIC', 'BOOLEAN', 'TIMESTAMP WITH TIME ZONE'].includes(colType);
+      const defaultOperator = isNonTextType ? '=' : 'ILIKE';
+
+      // Set operator based on rule, falling back to type-based default
+      if (rule.type === 'exact' || rule.type === 'range') {
+          operator = '='; // Use exact match for 'exact' and 'range' (engine handles range logic)
+      } else {
+          // For 'partial' or undefined rule type, use the default based on column type
+          operator = defaultOperator;
+      }
+
+      // Add wildcards ONLY if using ILIKE
+      if (operator === 'ILIKE') {
+          finalValue = `%${value}%`; // value is already String()ified for TEXT types
+      }
 
       whereClause += ` AND "${sanitizedColName}" ${operator} $${paramIndex++}`;
-
-      // Adjust value for ILIKE
-      queryParams.push(operator === 'ILIKE' ? `%${value}%` : value);
+      queryParams.push(finalValue); // Push the potentially modified value
     });
 
     const selectSql = `SELECT * FROM "${dbTableName}" ${whereClause};`;

@@ -8,7 +8,8 @@ const fsp = require('fs').promises; // Use fs.promises
 const path = require('path');
 const crypto = require('crypto'); // For generating unique IDs
 const Docker = require('dockerode');
-const db = require('./config/db');
+const { query } = require('./config/db'); // Import query function directly
+const Papa = require('papaparse'); // Import papaparse for CSV stringifying
 const fileOperationsRoutes = require('./routes/fileOperations');
 const authRoutes = require('./routes/auth'); // Import auth routes
 const sessionRoutes = require('./routes/sessions'); // Import session routes
@@ -68,7 +69,7 @@ function sendSseUpdate(res, data) {
 // ---
 
 // --- Analysis Logic (Refactored) ---
-async function performAnalysis(res, analysisId, query, datasetId) {
+async function performAnalysis(res, analysisId, analysisPrompt, datasetId) { // Renamed 'query' parameter to 'analysisPrompt'
     let tempDirToClean = null;
     let pythonLogs = ''; // Store logs specifically from python execution
 
@@ -93,13 +94,54 @@ async function performAnalysis(res, analysisId, query, datasetId) {
 
     try {
         logAndEmit('Fetching dataset metadata...');
-        const metadata = await metadataService.getMetadata(datasetId);
-        logAndEmit('Metadata fetched.');
+        const metadata = await metadataService.getMetadata(datasetId); // Assumes this returns { dbTableName, columnsMetadata, ... }
+        if (!metadata || !metadata.dbTableName || !metadata.columnsMetadata) {
+            throw new Error(`Failed to retrieve valid metadata for dataset ID: ${datasetId}`);
+        }
+        logAndEmit(`Metadata fetched for table: ${metadata.dbTableName}`);
+
+        // --- Fetch Data from DB ---
+        logAndEmit(`Fetching data from table: ${metadata.dbTableName}...`);
+        const dataSql = `SELECT * FROM "${metadata.dbTableName}";`; // Select all columns
+        const dataResult = await query(dataSql);
+        const datasetRows = dataResult.rows;
+        logAndEmit(`Fetched ${datasetRows.length} rows.`);
+        // ---
+
+        // --- Convert Data to CSV String ---
+        let datasetCsvString = '';
+        if (datasetRows.length > 0) {
+            logAndEmit('Converting data to CSV format...');
+            // Get original column names in the correct order from metadata
+            const originalHeaders = metadata.columnsMetadata.map(col => col.originalName);
+
+            // Map DB rows (with sanitized keys) back to objects with original keys for CSV generation
+            const originalKeyRows = datasetRows.map(row => {
+                const newRow = {};
+                metadata.columnsMetadata.forEach(colMeta => {
+                    // Handle potential nulls/undefined if a column was missing in a row (shouldn't happen with SELECT *)
+                    newRow[colMeta.originalName] = row[colMeta.sanitizedName] !== undefined ? row[colMeta.sanitizedName] : null;
+                });
+                return newRow;
+            });
+
+            datasetCsvString = Papa.unparse(originalKeyRows, {
+                header: true,
+                columns: originalHeaders // Ensure CSV headers match original names and order
+            });
+            logAndEmit('Data converted to CSV string.');
+        } else {
+            logAndEmit('Dataset is empty, creating empty CSV string.');
+            // Create CSV with only headers if the table is empty
+             const originalHeaders = metadata.columnsMetadata.map(col => col.originalName);
+             datasetCsvString = Papa.unparse([], { header: true, columns: originalHeaders });
+        }
+        // ---
 
         if (!llmService) throw new Error("LLM Service is not initialized.");
 
         logAndEmit(`Generating Python code using ${llmService.serviceName}...`);
-        const pythonCode = await llmService.generatePythonCode(query, metadata);
+        const pythonCode = await llmService.generatePythonCode(analysisPrompt, metadata); // Use analysisPrompt
         // Store the generated code to send later
         logAndEmit('Python code generated.'); // Don't log full code via SSE for brevity
         console.log(`[${analysisId}] Full Generated Python Code:\n${pythonCode}`); // Log full code only to server console
@@ -111,7 +153,8 @@ async function performAnalysis(res, analysisId, query, datasetId) {
         // ---
 
         logAndEmit('Preparing analysis environment (Docker)...');
-        const execResult = await dockerExecutor.runPythonInSandbox(pythonCode, datasetId);
+        // Pass the CSV string instead of the datasetId
+        const execResult = await dockerExecutor.runPythonInSandbox(pythonCode, datasetCsvString);
         tempDirToClean = execResult.tempDir; // Store for potential cleanup
         pythonLogs = execResult.logs || ''; // Capture logs
 
@@ -189,7 +232,7 @@ async function performAnalysis(res, analysisId, query, datasetId) {
         if (stats && llmService) { // Check if stats object exists
             try {
                 logAndEmit(`Generating summary using ${llmService.serviceName}...`);
-                summary = await llmService.generateTextSummary(query, stats); // Pass original query and loaded stats
+                summary = await llmService.generateTextSummary(analysisPrompt, stats); // Use analysisPrompt
                 logAndEmit('Summary generated.');
             } catch (summaryError) {
                 errorAndEmit(`LLM summary generation failed: ${summaryError.message}`);
