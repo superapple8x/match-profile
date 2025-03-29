@@ -339,11 +339,36 @@ router.post('/match', authMiddleware, async (req, res) => { // Added authMiddlew
     }
 
     // 1. Get data from request body
-    const { datasetId, searchCriteria, weights, matchingRules } = req.body;
-    console.log('[Match] Received:', { datasetId, searchCriteria, weights, matchingRules });
+    const {
+        datasetId,
+        searchCriteria,
+        weights,
+        matchingRules,
+        page = 1, // Default to page 1
+        pageSize = 20, // Default page size
+        sortBy, // Optional column to sort by (original name)
+        sortDirection = 'ASC' // Default sort direction
+    } = req.body;
 
-    if (!datasetId || !searchCriteria || !Array.isArray(searchCriteria) || searchCriteria.length === 0) {
-      return res.status(400).json({ error: 'Missing or invalid datasetId or searchCriteria.' });
+    console.log('[Match] Received:', { datasetId, searchCriteria, weights, matchingRules, page, pageSize, sortBy, sortDirection });
+
+    // Validate required fields
+    if (!datasetId || !searchCriteria || !Array.isArray(searchCriteria)) { // Allow empty searchCriteria for browsing/sorting all data
+        return res.status(400).json({ error: 'Missing or invalid datasetId or searchCriteria.' });
+    }
+
+    // Validate pagination parameters
+    const pageNum = parseInt(page, 10);
+    const pageSizeNum = parseInt(pageSize, 10);
+    if (isNaN(pageNum) || pageNum < 1 || isNaN(pageSizeNum) || pageSizeNum < 1) {
+        return res.status(400).json({ error: 'Invalid page or pageSize parameters. Must be positive integers.' });
+    }
+
+    // Validate sort direction
+    const validSortDirections = ['ASC', 'DESC'];
+    const upperSortDirection = sortDirection.toUpperCase();
+    if (!validSortDirections.includes(upperSortDirection)) {
+        return res.status(400).json({ error: 'Invalid sortDirection. Must be ASC or DESC.' });
     }
 
     // 2. Fetch dataset metadata
@@ -380,77 +405,165 @@ router.post('/match', authMiddleware, async (req, res) => { // Added authMiddlew
     const queryParams = [];
     let paramIndex = 1;
 
+    // Define allowed operators
+    const allowedOperators = ['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'ILIKE', 'NOT LIKE', 'NOT ILIKE', 'IN', 'NOT IN', 'IS NULL', 'IS NOT NULL'];
+
     searchCriteria.forEach(criterion => {
-      const sanitizedColName = originalToSanitizedMap[criterion.attribute];
+      const { attribute, operator: rawOperator, value: rawValue } = criterion; // Expect operator and value
+      const sanitizedColName = originalToSanitizedMap[attribute];
       const colType = validDbColumns[sanitizedColName]; // Get the DB type
-      let value = criterion.value;
 
-      // Basic type coercion/validation for query parameters based on DB type
-      if (colType === 'NUMERIC') {
-          value = parseFloat(value);
-          if (isNaN(value)) {
-              console.warn(`[Match] Invalid numeric value for ${criterion.attribute}: ${criterion.value}. Skipping criterion.`);
-              return; // Skip this criterion if value is not a valid number
-          }
-      } else if (colType === 'BOOLEAN') {
-          if (typeof value === 'string') {
-              const lowerVal = value.trim().toLowerCase();
-              value = lowerVal === 'true' ? true : (lowerVal === 'false' ? false : null);
-          } else if (typeof value !== 'boolean') {
-              value = null;
-          }
-          if (value === null) {
-               console.warn(`[Match] Invalid boolean value for ${criterion.attribute}: ${criterion.value}. Skipping criterion.`);
-               return; // Skip if not a valid boolean representation
-          }
-      } else if (colType === 'TIMESTAMP WITH TIME ZONE') {
-          value = new Date(value);
-          if (isNaN(value.getTime())) {
-              console.warn(`[Match] Invalid date/timestamp value for ${criterion.attribute}: ${criterion.value}. Skipping criterion.`);
-              return; // Skip invalid dates
-          }
-      } else { // TEXT or other types
-          value = String(value); // Ensure it's a string for LIKE etc.
-      }
+      // Validate operator
+      const operator = rawOperator && allowedOperators.includes(rawOperator.toUpperCase())
+                       ? rawOperator.toUpperCase()
+                       : (colType === 'TEXT' ? 'ILIKE' : '='); // Default based on type if invalid/missing
 
+      let value = rawValue;
+      let queryFragment = '';
 
-      // Determine operator based on rule and column type
-      const rule = matchingRules?.[criterion.attribute] || {};
-      let operator;
-      let finalValue = value; // Use the already coerced value by default
-
-      // Determine the default operator based on column type
-      const isNonTextType = ['NUMERIC', 'BOOLEAN', 'TIMESTAMP WITH TIME ZONE'].includes(colType);
-      const defaultOperator = isNonTextType ? '=' : 'ILIKE';
-
-      // Set operator based on rule, falling back to type-based default
-      if (rule.type === 'exact' || rule.type === 'range') {
-          operator = '='; // Use exact match for 'exact' and 'range' (engine handles range logic)
+      // Handle operators that don't need a value
+      if (operator === 'IS NULL' || operator === 'IS NOT NULL') {
+        queryFragment = `"${sanitizedColName}" ${operator}`;
+      } else if (rawValue === undefined || rawValue === null) {
+         // Skip criteria if value is missing for operators that require it
+         console.warn(`[Match] Missing value for attribute "${attribute}" with operator "${operator}". Skipping criterion.`);
+         return;
       } else {
-          // For 'partial' or undefined rule type, use the default based on column type
-          operator = defaultOperator;
+        // Handle type coercion/validation based on column type AND operator
+        try {
+          if (operator === 'IN' || operator === 'NOT IN') {
+            if (!Array.isArray(value)) {
+              throw new Error(`Value for IN/NOT IN must be an array.`);
+            }
+            if (value.length === 0) {
+                 console.warn(`[Match] Empty array provided for IN/NOT IN for attribute "${attribute}". Skipping criterion.`);
+                 return; // Skip if array is empty
+            }
+            // Coerce array elements based on column type
+            value = value.map(item => {
+              if (colType === 'NUMERIC') return parseFloat(item);
+              if (colType === 'BOOLEAN') {
+                  if (typeof item === 'string') {
+                      const lower = item.trim().toLowerCase();
+                      return lower === 'true' ? true : (lower === 'false' ? false : null);
+                  }
+                  return typeof item === 'boolean' ? item : null;
+              }
+              // Timestamps in IN might be tricky, often better handled with BETWEEN or >= / <=
+              // For now, treat as text for IN/NOT IN unless specifically needed
+              return String(item);
+            }).filter(item => item !== null && !isNaN(item) || colType === 'TEXT'); // Filter out invalid coerced values except for text
+
+            if (value.length === 0) {
+                 console.warn(`[Match] Array became empty after type coercion for IN/NOT IN for attribute "${attribute}". Skipping criterion.`);
+                 return; // Skip if array is empty after coercion
+            }
+
+            // Build placeholder string like ($2, $3, $4)
+            const placeholders = value.map(() => `$${paramIndex++}`).join(', ');
+            queryFragment = `"${sanitizedColName}" ${operator} (${placeholders})`;
+            queryParams.push(...value); // Add all values to queryParams
+
+          } else {
+            // Handle single value operators
+            if (colType === 'NUMERIC') {
+              value = parseFloat(value);
+              if (isNaN(value)) throw new Error('Invalid numeric value');
+            } else if (colType === 'BOOLEAN') {
+              if (typeof value === 'string') {
+                const lowerVal = value.trim().toLowerCase();
+                value = lowerVal === 'true' ? true : (lowerVal === 'false' ? false : null);
+              }
+              if (typeof value !== 'boolean') throw new Error('Invalid boolean value');
+            } else if (colType === 'TIMESTAMP WITH TIME ZONE') {
+              value = new Date(value);
+              if (isNaN(value.getTime())) throw new Error('Invalid date/timestamp value');
+            } else { // TEXT
+              value = String(value);
+              // Add wildcards for LIKE/ILIKE if not already present
+              if ((operator === 'LIKE' || operator === 'ILIKE' || operator === 'NOT LIKE' || operator === 'NOT ILIKE') && !value.includes('%')) {
+                value = `%${value}%`;
+              }
+            }
+
+            // Standard operator handling
+            queryFragment = `"${sanitizedColName}" ${operator} $${paramIndex++}`;
+            queryParams.push(value);
+          }
+        } catch (error) {
+           console.warn(`[Match] Error processing criterion for attribute "${attribute}" (Value: "${rawValue}", Operator: "${operator}", Type: ${colType}): ${error.message}. Skipping criterion.`);
+           return; // Skip this criterion on error
+        }
       }
 
-      // Add wildcards ONLY if using ILIKE
-      if (operator === 'ILIKE') {
-          finalValue = `%${value}%`; // value is already String()ified for TEXT types
+      // Add the fragment to the WHERE clause
+      if (queryFragment) {
+        whereClause += ` AND (${queryFragment})`; // Wrap in parentheses for safety
       }
-
-      whereClause += ` AND "${sanitizedColName}" ${operator} $${paramIndex++}`;
-      queryParams.push(finalValue); // Push the potentially modified value
     });
 
-    const selectSql = `SELECT * FROM "${dbTableName}" ${whereClause};`;
+    // 4.1 Build ORDER BY clause
+    let orderByClause = 'ORDER BY "id" ASC'; // Default sort for consistent pagination
+    if (sortBy && originalToSanitizedMap.hasOwnProperty(sortBy)) {
+        const sanitizedSortBy = originalToSanitizedMap[sortBy];
+        // Ensure the sanitized column name is valid before using it
+        if (validDbColumns.hasOwnProperty(sanitizedSortBy)) {
+             // Use the validated upperSortDirection
+            orderByClause = `ORDER BY "${sanitizedSortBy}" ${upperSortDirection}`;
+            console.log(`[Match] Applying sorting: ${orderByClause}`);
+        } else {
+            console.warn(`[Match] Invalid sortBy column specified: ${sortBy}. Defaulting to ID sort.`);
+        }
+    } else if (sortBy) {
+         console.warn(`[Match] sortBy column "${sortBy}" not found in dataset metadata. Defaulting to ID sort.`);
+    }
+
+    // 4.2 Build LIMIT and OFFSET clauses
+    const limitClause = `LIMIT $${paramIndex++}`;
+    queryParams.push(pageSizeNum);
+    const offsetClause = `OFFSET $${paramIndex++}`;
+    const offset = (pageNum - 1) * pageSizeNum;
+    queryParams.push(offset);
+
+    // 4.3 Construct the main SELECT query with filtering, sorting, and pagination
+    const selectSql = `SELECT * FROM "${dbTableName}" ${whereClause} ${orderByClause} ${limitClause} ${offsetClause};`;
     console.log(`[Match] Executing SQL: ${selectSql}`);
     console.log('[Match] Query Params:', queryParams);
 
-    const dbResult = await query(selectSql, queryParams);
-    const filteredProfiles = dbResult.rows;
-    console.log(`[Match] Found ${filteredProfiles.length} profiles matching filter criteria.`);
+    // 4.4 Construct and execute the COUNT query (using the same WHERE clause but different params)
+    const countParams = queryParams.slice(0, paramIndex - 3); // Exclude LIMIT and OFFSET params
+    const countSql = `SELECT COUNT(*) AS total_count FROM "${dbTableName}" ${whereClause};`;
+    console.log(`[Match] Executing Count SQL: ${countSql}`);
+    console.log('[Match] Count Query Params:', countParams);
 
-    if (filteredProfiles.length === 0) {
-        return res.status(200).json({ matches: [] }); // Return empty if DB query yields nothing
-    }
+    // Execute both queries
+    const [dbResult, countResult] = await Promise.all([
+        query(selectSql, queryParams),
+        query(countSql, countParams)
+    ]);
+
+    const filteredProfiles = dbResult.rows;
+    const totalItems = parseInt(countResult.rows[0].total_count, 10);
+    const totalPages = Math.ceil(totalItems / pageSizeNum);
+
+    console.log(`[Match] Found ${filteredProfiles.length} profiles on page ${pageNum} (Total matching: ${totalItems}).`);
+
+    // Return empty if DB query yields nothing for the current page
+    // The total count might still be > 0
+    // if (filteredProfiles.length === 0) {
+    //     // Send pagination info even if current page is empty
+    //     return res.status(200).json({
+    //         matches: [],
+    //         pagination: {
+    //             totalItems: totalItems,
+    //             totalPages: totalPages,
+    //             currentPage: pageNum,
+    //             pageSize: pageSizeNum
+    //         }
+    //      });
+    // }
+    // Let the scoring proceed even if the current page is empty,
+    // the final response structure handles the empty matches array.
 
     // 5. Instantiate Matching Engine and Set Weights
     const engine = new MatchingEngine();
@@ -460,16 +573,16 @@ router.post('/match', authMiddleware, async (req, res) => { // Added authMiddlew
     }
 
     // 6. Calculate Scores using the Map
-    // Convert searchCriteria array back to an object for the engine
-    const searchCriteriaObject = searchCriteria.reduce((obj, item) => {
-        obj[item.attribute] = item.value;
-        return obj;
-    }, {});
+    // No longer need to reduce searchCriteria, pass the full array to the engine
+    // const searchCriteriaObject = searchCriteria.reduce((obj, item) => {
+    //     obj[item.attribute] = item.value;
+    //     return obj;
+    // }, {});
 
     const results = filteredProfiles.map(profile => {
       // The 'profile' object here has keys matching the sanitized DB column names
       const matchPercentage = engine.calculateMatchScore(
-        searchCriteriaObject,
+        searchCriteria, // Pass the full searchCriteria array (with operators)
         profile, // Pass the profile object with sanitized keys
         originalToSanitizedMap, // Pass the map
         matchingRules // Pass the rules
@@ -481,11 +594,17 @@ router.post('/match', authMiddleware, async (req, res) => { // Added authMiddlew
       };
     });
 
-    // 7. Format and Send Response
+    // 7. Format and Send Response (including pagination)
     const responseData = {
-      matches: results.sort((a, b) => b.matchPercentage - a.matchPercentage)
+      matches: results.sort((a, b) => b.matchPercentage - a.matchPercentage), // Keep sorting by score for display
+      pagination: {
+        totalItems: totalItems,
+        totalPages: totalPages,
+        currentPage: pageNum,
+        pageSize: pageSizeNum
+      }
     };
-    console.log(`[Match] Sending ${responseData.matches.length} results.`);
+    console.log(`[Match] Sending ${responseData.matches.length} results for page ${pageNum}/${totalPages} (Total items: ${totalItems}).`);
     res.status(200).json(responseData);
 
   } catch (error) {

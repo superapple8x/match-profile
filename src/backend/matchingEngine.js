@@ -18,7 +18,10 @@ class MatchingEngine {
       DeviceType: { type: 'partial' },
       OS: { type: 'partial' },
       name: { type: 'exact' },
-      email: { type: 'exact' }
+      email: { type: 'exact' },
+      // Added rules for boolean columns from the dataset sample
+      Debt: { type: 'exact' },
+      'Owns Property': { type: 'exact' }
     };
   }
 
@@ -59,60 +62,65 @@ class MatchingEngine {
     return value1 && value2 ? this.config.optionalMatchWeight : 0;
   }
 
-  // Add originalToSanitizedMap parameter
-  calculateMatchScore(searchCriteria, profile, originalToSanitizedMap, matchingRules = this.defaultMatchingRules) {
+  // Modify to accept the full searchCriteria array (with operators)
+  // Logic changed: Assume rows passed DB filter fully satisfy the criteria used.
+  // Score is based on the weights of the attributes included in the search.
+  calculateMatchScore(searchCriteriaArray, profile, originalToSanitizedMap, matchingRules = this.defaultMatchingRules) {
     let totalScore = 0;
     let maxPossibleScore = 0;
-    // console.log('Calculating match score for profile:', profile); // Can be very verbose with DB data
-    console.log('Using search criteria:', searchCriteria);
-    console.log('Using matching rules:', matchingRules);
 
-    for (const attribute in searchCriteria) {
-      // Check if the original attribute name exists in the map and rules
-      if (originalToSanitizedMap.hasOwnProperty(attribute) && matchingRules.hasOwnProperty(attribute)) {
-        const rule = matchingRules[attribute];
-        const searchValue = searchCriteria[attribute];
-        const sanitizedAttribute = originalToSanitizedMap[attribute]; // Get the DB column name
+    // Create a Set of attributes that were actually used in the search criteria for quick lookup
+    const searchedAttributes = new Set(searchCriteriaArray.map(c => c.attribute));
 
-        // Access profile data using the sanitized name
-        const profileValue = profile[sanitizedAttribute] !== undefined && profile[sanitizedAttribute] !== null
-                             ? profile[sanitizedAttribute]
-                             : ''; // Use empty string if property doesn't exist or is null/undefined
+    console.log('[Score] Calculating score based on searched attributes:', searchedAttributes);
+    // console.log('[Score] Profile data (sanitized keys):', profile);
 
-        console.log(`Evaluating attribute: ${attribute} (DB column: ${sanitizedAttribute})`);
-        console.log(`Search value: "${searchValue}" (${typeof searchValue})`);
-        console.log(`Profile value: "${profileValue}" (${typeof profileValue})`);
+    // Iterate through all attributes that *could* have a weight or were searched
+    // Combine keys from weights and searchedAttributes to cover all relevant attributes
+    const relevantAttributes = new Set([...Object.keys(this.weights), ...searchedAttributes]);
 
-        const weight = this.weights[attribute] || 1;
-        let score = 0;
+    relevantAttributes.forEach(attribute => {
+        // Check if the attribute exists in the profile's metadata map
+        if (originalToSanitizedMap.hasOwnProperty(attribute)) {
+            const weight = this.weights[attribute] || 1; // Get weight or default to 1
+            const maxAttributeScore = this.config.exactMatchWeight * weight; // Max potential score for this attribute
 
-        switch (rule.type) {
-          case 'exact':
-            score = this.exactMatch(searchValue, profileValue);
-            break;
-          case 'range':
-            score = this.rangeMatch(searchValue, profileValue, rule.tolerance);
-            break;
-          case 'partial':
-            score = this.partialTextMatch(searchValue, profileValue);
-            break;
-          case 'optional':
-            score = this.optionalMatch(searchValue, profileValue);
-            break;
-          default:
-            score = 0; // Default score for unknown rule types
+            // Add to the maximum possible score regardless of whether it was searched
+            maxPossibleScore += maxAttributeScore;
+
+            // If this attribute was part of the search criteria that the profile passed...
+            if (searchedAttributes.has(attribute)) {
+                // ...grant the full score for this attribute.
+                // The database already did the filtering (>, =, IN, LIKE etc.)
+                totalScore += maxAttributeScore;
+                console.log(`[Score] Attribute "${attribute}" was searched. Adding full score: ${maxAttributeScore}`);
+            } else {
+                 console.log(`[Score] Attribute "${attribute}" was not searched. Max score contribution: ${maxAttributeScore}, Added score: 0`);
+            }
+        } else {
+            console.warn(`[Score] Attribute "${attribute}" from weights/criteria not found in dataset metadata map. Skipping.`);
         }
+    });
 
-        console.log(`Score for ${attribute}: ${score} (weight: ${weight})`);
-        totalScore += score * weight;
-        maxPossibleScore += this.config.exactMatchWeight * weight;
-      } else {
-        console.log(`Attribute ${attribute} not found in matching rules, assigning a default score of 0.`);
-      }
+
+    // Handle the case where no relevant weighted/searched attributes were found
+    if (maxPossibleScore === 0 && searchedAttributes.size > 0) {
+        // If criteria were provided but none had weights or matched metadata,
+        // assign a baseline score or handle as needed. For now, let it be 0.
+         console.warn("[Score] Search criteria were provided, but no relevant attributes found in metadata/weights. Score might be 0.");
+         // Or, alternatively, if *any* match means 100% if no weights apply:
+         // return 100;
     }
+     else if (maxPossibleScore === 0 && searchedAttributes.size === 0) {
+         // If no criteria were provided (e.g., just browsing/sorting), score is irrelevant or could be 100?
+         // Let's return 0 for consistency, as no matching criteria were evaluated.
+         console.log("[Score] No search criteria provided. Score is 0.");
+         return 0;
+     }
+
 
     const finalScore = maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 100 : 0;
-    console.log(`Final match score: ${finalScore}%`);
+    console.log(`[Score] Final Score: ${totalScore} / ${maxPossibleScore} = ${finalScore.toFixed(2)}%`);
     return finalScore;
   }
 }
