@@ -5,8 +5,8 @@ import WeightAdjustmentModal from './WeightAdjustmentModal';
 import { MagnifyingGlassIcon, AdjustmentsHorizontalIcon, XCircleIcon } from '@heroicons/react/24/outline'; // Added icons
 import { debounce } from 'lodash-es'; // Import debounce
 
-// Accept datasetAttributes (array of strings), initialCriteria, datasetId, and authToken
-function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, authToken }) {
+// Accept datasetAttributes, initialCriteria, datasetId, authToken, and handleLogout
+function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, authToken, handleLogout }) { // Added handleLogout
   const [inputValue, setInputValue] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false); // Add loading state
@@ -56,6 +56,13 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
       } catch (error) {
         console.error("Error fetching value suggestions:", error);
         setSuggestions([]); // Clear suggestions on error
+        // Check for 401/403 errors
+        if (error.message.includes('401') || error.message.includes('403')) {
+            console.warn('Suggestion fetch failed due to invalid/expired token.');
+            if (handleLogout) handleLogout(); // Trigger logout
+        }
+        // Note: We don't set a visible error state in the SearchBar for this,
+        // as it might be too disruptive. The console warning and logout are sufficient.
       } finally {
         setIsLoadingSuggestions(false);
       }
@@ -315,6 +322,7 @@ SearchBar.propTypes = {
   })),
   datasetId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]), // Add datasetId
   authToken: PropTypes.string, // Add authToken
+  handleLogout: PropTypes.func.isRequired, // Add handleLogout
 };
 
 // Corrected defaultProps definition
@@ -323,6 +331,7 @@ SearchBar.defaultProps = {
   initialCriteria: [],
   datasetId: null,
   authToken: null,
+  // handleLogout is required, so no default needed, but added here for consistency pattern
 };
 
 

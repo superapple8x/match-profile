@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import PropTypes from 'prop-types'; // Import PropTypes
 import { PaperAirplaneIcon, ChevronDownIcon, ChevronUpIcon, ExclamationCircleIcon, InformationCircleIcon, ArrowUturnLeftIcon } from '@heroicons/react/24/solid';
 import ReactMarkdown from 'react-markdown'; // Import ReactMarkdown
 
@@ -147,7 +148,8 @@ function TabbedDetailsCard({ stats, generatedCode, processUpdates, initiallyOpen
 // --- End TabbedDetailsCard ---
 
 // --- Main DataAnalysisPage Component ---
-function DataAnalysisPage({ datasetId, messages, setMessages, onCloseAnalysis }) {
+// Added handleLogout prop
+function DataAnalysisPage({ datasetId, messages, setMessages, onCloseAnalysis, handleLogout }) {
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -284,6 +286,9 @@ function DataAnalysisPage({ datasetId, messages, setMessages, onCloseAnalysis })
                  eventSourceRef.current.close();
                  eventSourceRef.current = null;
              }
+            // Also attempt logout on SSE connection error, as it might be auth-related
+            console.warn('SSE connection error, potentially auth-related. Triggering logout.');
+            if (handleLogout) handleLogout();
         };
 
     } else {
@@ -350,6 +355,11 @@ function DataAnalysisPage({ datasetId, messages, setMessages, onCloseAnalysis })
       setProcessUpdates([`[System] ${errorMsg}`]); // Log initiation error with prefix
       setIsLoading(false);
       setLoadingStatus('Failed to start.');
+      // Check for 401/403 errors
+      if (err.message.includes('401') || err.message.includes('403')) {
+          console.warn('Analysis start failed due to invalid/expired token.');
+          if (handleLogout) handleLogout(); // Trigger logout
+      }
     }
   }, [query, datasetId, isLoading]);
 
@@ -510,5 +520,42 @@ function DataAnalysisPage({ datasetId, messages, setMessages, onCloseAnalysis })
     </div>
   );
 }
+
+// PropTypes for TabbedDetailsCard
+TabbedDetailsCard.propTypes = {
+  stats: PropTypes.object,
+  generatedCode: PropTypes.string,
+  processUpdates: PropTypes.arrayOf(PropTypes.string),
+  initiallyOpen: PropTypes.bool,
+  initialTab: PropTypes.oneOf(Object.values(DETAIL_TABS)),
+};
+
+// PropTypes for DataAnalysisPage
+DataAnalysisPage.propTypes = {
+  datasetId: PropTypes.string,
+  messages: PropTypes.arrayOf(PropTypes.shape({
+    sender: PropTypes.oneOf(['user', 'bot']).isRequired,
+    content: PropTypes.oneOfType([
+      PropTypes.string, // User message content
+      PropTypes.shape({ // Bot message content
+        imageUris: PropTypes.arrayOf(PropTypes.string),
+        summary: PropTypes.string,
+        stats: PropTypes.object,
+        generatedCode: PropTypes.string,
+        processUpdates: PropTypes.arrayOf(PropTypes.string),
+        error: PropTypes.string,
+      })
+    ]).isRequired,
+  })).isRequired,
+  setMessages: PropTypes.func.isRequired,
+  onCloseAnalysis: PropTypes.func.isRequired,
+  handleLogout: PropTypes.func.isRequired, // Added handleLogout
+};
+
+// DefaultProps for DataAnalysisPage
+DataAnalysisPage.defaultProps = {
+  datasetId: null,
+};
+
 
 export default DataAnalysisPage;

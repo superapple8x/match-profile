@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import PropTypes from 'prop-types'; // Import PropTypes
 import { FolderPlusIcon, TrashIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, BookmarkSquareIcon } from '@heroicons/react/24/outline'; // Added BookmarkSquareIcon
 
 // Simple Modal Component (can be extracted later)
+// Add PropTypes for the modal as well for completeness
 const SaveSessionModal = ({ isOpen, onClose, onSave, sessionName, setSessionName, isLoading }) => {
   if (!isOpen) return null;
 
@@ -39,8 +41,8 @@ const SaveSessionModal = ({ isOpen, onClose, onSave, sessionName, setSessionName
 };
 
 
-// Accept isCollapsed and onRequestExpand props
-function SavedSessions({ authToken, currentAppState, onLoadSession, isCollapsed, onRequestExpand }) {
+// Accept isCollapsed, onRequestExpand, and handleLogout props
+function SavedSessions({ authToken, currentAppState, onLoadSession, isCollapsed, onRequestExpand, handleLogout }) { // Added handleLogout
   const [sessions, setSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -76,17 +78,17 @@ function SavedSessions({ authToken, currentAppState, onLoadSession, isCollapsed,
         setSessions(data);
       } catch (err) {
         console.error('Error fetching sessions:', err);
-        // Check for specific token errors
-        const isTokenError = err.message.includes('401') || err.message.toLowerCase().includes('token is not valid');
+        // Check for specific token errors (401 or 403)
+        const isTokenError = err.message.includes('401') || err.message.includes('403') || err.message.toLowerCase().includes('token is not valid');
 
         if (isTokenError) {
-            // Don't show a persistent error message for invalid tokens, as user is effectively logged out (backend-wise)
+            // Don't show a persistent error message for invalid tokens
             setError(''); // Clear local error state
-            console.warn('Session fetch failed due to invalid token.');
-            // Optionally, could trigger a full logout here if handleLogout prop was passed down
+            console.warn('Session fetch failed due to invalid/expired token.');
+            if (handleLogout) handleLogout(); // Trigger logout
         } else if (!isCollapsed) {
             // Show other errors only if the sidebar is expanded
-            setError(err.message);
+            setError(err.message); // Show other errors
         }
       } finally {
         if (!isCollapsed) setIsLoading(false);
@@ -157,11 +159,12 @@ function SavedSessions({ authToken, currentAppState, onLoadSession, isCollapsed,
         setNewSessionName(''); // Clear name input
     } catch (err) {
         console.error('Error saving session:', err);
-        const isTokenError = err.message.includes('401') || err.message.toLowerCase().includes('token is not valid');
+        // Check for 401/403 or token validity messages
+        const isTokenError = err.message.includes('401') || err.message.includes('403') || err.message.toLowerCase().includes('token is not valid');
         if (isTokenError) {
-            setError(''); // Clear error if it's just an invalid token
-            console.warn('Session save failed due to invalid token.');
-            // Optionally trigger logout
+            setError(''); // Clear local error
+            console.warn('Session save failed due to invalid/expired token.');
+            if (handleLogout) handleLogout(); // Trigger logout
         } else {
             setError(`Save failed: ${err.message}`); // Show other errors
         }
@@ -186,12 +189,19 @@ function SavedSessions({ authToken, currentAppState, onLoadSession, isCollapsed,
         const sessionData = await response.json();
         console.log("Loading session data:", sessionData); // Debug log
         onLoadSession(sessionData); // Pass loaded data up to App.jsx
-
-     } catch (err) {
-         console.error('Error loading session:', err);
-         setError(`Load failed: ${err.message}`);
-     } finally {
-         setActionLoading(null);
+      } catch (err) {
+          console.error('Error loading session:', err);
+          // Check for 401/403 or token validity messages
+          const isTokenError = err.message.includes('401') || err.message.includes('403') || err.message.toLowerCase().includes('token is not valid');
+          if (isTokenError) {
+              setError(''); // Clear local error
+              console.warn('Session load failed due to invalid/expired token.');
+              if (handleLogout) handleLogout(); // Trigger logout
+          } else {
+              setError(`Load failed: ${err.message}`); // Show other errors
+          }
+      } finally {
+          setActionLoading(null);
      }
   };
 
@@ -211,12 +221,19 @@ function SavedSessions({ authToken, currentAppState, onLoadSession, isCollapsed,
         }
         // Remove session from local state
         setSessions(sessions.filter(s => s.id !== sessionId));
-
-    } catch (err) {
-         console.error('Error deleting session:', err);
-         setError(`Delete failed: ${err.message}`);
-    } finally {
-        setActionLoading(null);
+     } catch (err) {
+          console.error('Error deleting session:', err);
+          // Check for 401/403 or token validity messages
+          const isTokenError = err.message.includes('401') || err.message.includes('403') || err.message.toLowerCase().includes('token is not valid');
+          if (isTokenError) {
+              setError(''); // Clear local error
+              console.warn('Session delete failed due to invalid/expired token.');
+              if (handleLogout) handleLogout(); // Trigger logout
+          } else {
+              setError(`Delete failed: ${err.message}`); // Show other errors
+          }
+     } finally {
+         setActionLoading(null);
     }
   };
 
@@ -338,5 +355,42 @@ function SavedSessions({ authToken, currentAppState, onLoadSession, isCollapsed,
     </>
   );
 }
+
+// PropTypes for SaveSessionModal
+SaveSessionModal.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  onSave: PropTypes.func.isRequired,
+  sessionName: PropTypes.string.isRequired,
+  setSessionName: PropTypes.func.isRequired,
+  isLoading: PropTypes.bool,
+};
+SaveSessionModal.defaultProps = {
+  isLoading: false,
+};
+
+
+// PropTypes for SavedSessions
+SavedSessions.propTypes = {
+  authToken: PropTypes.string,
+  currentAppState: PropTypes.shape({
+    datasetId: PropTypes.string,
+    searchCriteria: PropTypes.any, // Adjust as needed based on actual structure
+    analysisQuery: PropTypes.string,
+    analysisMessages: PropTypes.array,
+  }),
+  onLoadSession: PropTypes.func.isRequired,
+  isCollapsed: PropTypes.bool,
+  onRequestExpand: PropTypes.func,
+  handleLogout: PropTypes.func.isRequired, // Added handleLogout
+};
+
+// DefaultProps for SavedSessions
+SavedSessions.defaultProps = {
+  authToken: null,
+  currentAppState: null,
+  isCollapsed: false,
+  onRequestExpand: () => {}, // Provide a default no-op function
+};
 
 export default SavedSessions;

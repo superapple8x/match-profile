@@ -46,7 +46,8 @@ function ResultsTable({ results, datasetAttributes, onMatchClick }: ResultsTable
       header: 'Match %',
       cell: info => info.getValue() !== undefined ? `${info.getValue()?.toFixed(1)}%` : '-',
       enableSorting: true,
-      meta: { className: 'w-24 text-center font-semibold' } // Keep width for consistency
+      // Removed fixed width, added padding
+      meta: { className: 'px-4 py-2 text-center font-semibold' }
     }));
 
     // 2. Add Profile ID column (using original_row_index)
@@ -55,7 +56,8 @@ function ResultsTable({ results, datasetAttributes, onMatchClick }: ResultsTable
         header: 'Profile ID', // Correct Header
         cell: info => String(info.getValue() ?? '-'),
         enableSorting: true,
-        meta: { className: 'w-24 text-center' } // Give it consistent width
+        // Removed fixed width, added padding
+        meta: { className: 'px-4 py-2 text-center' }
     }));
 
     // 3. Add Actions column
@@ -72,7 +74,8 @@ function ResultsTable({ results, datasetAttributes, onMatchClick }: ResultsTable
              Details
            </button>
          ),
-         meta: { className: 'w-20 text-center' } // Removed sticky
+          // Removed fixed width, added padding
+         meta: { className: 'px-4 py-2 text-center' }
        }));
      }
 

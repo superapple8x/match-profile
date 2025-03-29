@@ -296,7 +296,7 @@ function App() {
     setIsAuthenticated(true);
     // Reset application state on login
     setCurrentView('welcome');
-    setImportedData(null);
+    // setImportedData(null); // Removed stale state setter
     setDatasetId(null);
     setSearchResults(null);
     setSearchCriteria(null);
@@ -311,7 +311,7 @@ function App() {
     setIsAuthenticated(false);
     // Reset application state on logout
     setCurrentView('welcome');
-    setImportedData(null);
+    // setImportedData(null); // Removed stale state setter
     setDatasetId(null);
     setSearchResults(null);
     setSearchCriteria(null);
@@ -351,8 +351,39 @@ function App() {
         setCurrentDatasetName('');
     }
 
-      // Always update the datasetId state
+      // Always update the datasetId state first
       setDatasetId(newDatasetId);
+
+      // Fetch metadata for the loaded datasetId
+      if (newDatasetId) {
+          try {
+              console.log(`[handleLoadSession] Fetching metadata for dataset ID: ${newDatasetId}`);
+              const metaResponse = await fetch(`/api/datasets/${newDatasetId}/metadata`, {
+                  headers: { 'Authorization': `Bearer ${authToken}` }
+              });
+              if (!metaResponse.ok) {
+                  const errorData = await metaResponse.json().catch(() => ({}));
+                  throw new Error(errorData.error || `Failed to fetch metadata. Status: ${metaResponse.status}`);
+              }
+              const metaData = await metaResponse.json();
+              console.log('[handleLoadSession] Received metadata:', metaData);
+              setDatasetAttributes(metaData.columnsMetadata || []);
+              setCurrentDatasetName(metaData.originalFileName || '');
+          } catch (error) {
+              console.error('Failed to load dataset metadata for session:', error);
+              // Clear potentially stale data if metadata fetch fails
+              setDatasetAttributes([]);
+              setCurrentDatasetName('');
+              // Show error to user, but continue loading session data
+              alert(`Error loading metadata for dataset ID ${newDatasetId}: ${error.message}`);
+              // We might still want to load the session criteria/messages even if metadata fails
+          }
+      } else {
+           // Clear attributes/name if session has no datasetId
+           setDatasetAttributes([]);
+           setCurrentDatasetName('');
+      }
+
 
       // Update other states from session
       setSearchCriteria(sessionData.search_criteria || null);
@@ -487,6 +518,7 @@ function App() {
                 isCollapsed={isSidebarCollapsed} // Pass collapsed state down
                 // Pass function to expand sidebar
                 onRequestExpand={ensureSidebarExpanded}
+                handleLogout={handleLogout} // Pass logout handler
              />
            </div>
 
@@ -548,6 +580,8 @@ function App() {
                     searchCriteria={searchCriteria}
                     datasetId={datasetId} // Pass datasetId if needed for fetching overview stats
                     authToken={authToken} // Pass token if needed
+                    darkMode={darkMode} // Pass darkMode state
+                    handleLogout={handleLogout} // Pass logout handler
                 />
                 <SearchBuilder
                   // Pass datasetAttributes, datasetId, and authToken
@@ -556,6 +590,7 @@ function App() {
                   initialCriteria={searchCriteria}
                   datasetId={datasetId} // Pass datasetId
                   authToken={authToken} // Pass authToken
+                  handleLogout={handleLogout} // Pass logout handler
                 />
                 <div className="mt-6" />
                 {/* ResultsDashboard will get profileData within searchResults, doesn't need importedData */}
@@ -582,6 +617,7 @@ function App() {
                 setQuery={setAnalysisQuery} // Allow DataAnalysisPage to update the query state
                 onCloseAnalysis={closeAnalysisView}
                 authToken={authToken}
+                handleLogout={handleLogout} // Pass logout handler
               />
             )}
           </div>

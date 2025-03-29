@@ -1,18 +1,19 @@
 import React, { useState, useCallback } from 'react';
+import PropTypes from 'prop-types'; // Import PropTypes
 import Papa from 'papaparse';
 import { DocumentArrowUpIcon, CheckCircleIcon, ExclamationTriangleIcon, FolderOpenIcon } from '@heroicons/react/24/outline'; // Added FolderOpenIcon
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 
-// Accept isCollapsed and authToken props
-function FileImport({ onFileImport, isCollapsed, authToken }) {
+
+// Accept isCollapsed, authToken, and handleLogout props
+function FileImport({ onFileImport, isCollapsed, authToken, handleLogout }) { // Added handleLogout
   const [file, setFile] = useState(null);
   const [fileName, setFileName] = useState('No file chosen');
   const [parseError, setParseError] = useState(null);
   const [fileSizeError, setFileSizeError] = useState(null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-
   // Define handleUpload BEFORE handleFileChange because handleFileChange depends on it
   // Modified handleUpload to accept file directly
   // Wrapped in useCallback to satisfy useEffect dependency linting
@@ -69,6 +70,10 @@ function FileImport({ onFileImport, isCollapsed, authToken }) {
         console.error('Upload/Parsing error:', error.message);
         setParseError(error.message);
         setUploadSuccess(false);
+        // Check for auth error and trigger logout
+        if (error.message.includes('401') || error.message.includes('403')) {
+            if (handleLogout) handleLogout();
+        }
       } finally {
         setIsUploading(false);
       }
@@ -205,5 +210,20 @@ function FileImport({ onFileImport, isCollapsed, authToken }) {
     </div>
   );
 }
+
+// Add PropTypes
+FileImport.propTypes = {
+  onFileImport: PropTypes.func.isRequired,
+  isCollapsed: PropTypes.bool,
+  authToken: PropTypes.string, // authToken is optional but should be a string if provided
+  handleLogout: PropTypes.func.isRequired, // handleLogout is required
+};
+
+// Add defaultProps
+FileImport.defaultProps = {
+  isCollapsed: false,
+  authToken: null, // Default authToken to null
+};
+
 
 export default FileImport;

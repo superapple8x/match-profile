@@ -610,5 +610,254 @@ router.get('/suggest/values', authMiddleware, async (req, res) => {
   }
 });
 
+// --- Dataset Statistics Endpoint ---
+router.get('/datasets/:datasetId/stats', authMiddleware, async (req, res) => {
+  console.log('--- /api/datasets/:datasetId/stats request received ---');
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required.' });
+    }
+
+    const { datasetId } = req.params;
+    console.log('[Stats] Params:', { datasetId });
+
+    if (!datasetId) {
+      return res.status(400).json({ error: 'Missing required parameter: datasetId.' });
+    }
+
+    // 1. Fetch dataset metadata
+    const metadataSql = `
+      SELECT db_table_name, columns_metadata FROM dataset_metadata
+      WHERE id = $1 AND user_id = $2;
+    `;
+    const metadataResult = await query(metadataSql, [datasetId, userId]);
+
+    if (metadataResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Dataset metadata not found or access denied.' });
+    }
+
+    const { db_table_name: dbTableName, columns_metadata: columnsMetadata } = metadataResult.rows[0];
+    console.log(`[Stats] Found metadata for table: ${dbTableName}`);
+
+    // 2. Calculate Statistics
+    const stats = {
+      totalRows: 0,
+      numericStats: {}, // For min, max, avg, stddev of numeric cols
+      categoricalStats: {}, // For top values of text cols
+      columnDetails: {}, // Added: To store type and null count for ALL columns
+    };
+
+    // Get total row count
+    const countSql = `SELECT COUNT(*) AS total FROM "${dbTableName}";`;
+    const countResult = await query(countSql);
+    stats.totalRows = parseInt(countResult.rows[0].total, 10);
+    console.log(`[Stats] Total rows: ${stats.totalRows}`);
+
+    // Calculate stats for each relevant column
+    for (const colMeta of columnsMetadata) {
+      const sanitizedColName = colMeta.sanitizedName;
+      const originalColName = colMeta.originalName;
+      const colType = colMeta.type;
+      let nullCount = 0; // Initialize null count for the column
+
+      try {
+        // --- Calculate Null Count (for ALL types) ---
+        const nullCountSql = `
+            SELECT COUNT(*) AS null_count
+            FROM "${dbTableName}"
+            WHERE "${sanitizedColName}" IS NULL;
+        `;
+        const nullCountResult = await query(nullCountSql);
+        nullCount = parseInt(nullCountResult.rows[0].null_count, 10) || 0;
+        // Store type and null count immediately
+        stats.columnDetails[originalColName] = { type: colType, nullCount: nullCount };
+
+        // --- Calculate Type-Specific Stats ---
+        if (colType === 'NUMERIC') {
+          const numericSql = `
+            SELECT
+              MIN("${sanitizedColName}") AS min,
+              MAX("${sanitizedColName}") AS max,
+              AVG("${sanitizedColName}") AS avg,
+              STDDEV("${sanitizedColName}") AS stddev
+            FROM "${dbTableName}";
+          `;
+          console.log(`[Stats] Querying numeric stats for: ${sanitizedColName}`);
+          const numericResult = await query(numericSql);
+          if (numericResult.rows.length > 0) {
+               const row = numericResult.rows[0];
+               // Ensure avg and stddev are numbers, handle potential null if table is empty/all nulls
+               const avg = row.avg !== null ? parseFloat(row.avg) : null;
+               const stddev = row.stddev !== null ? parseFloat(row.stddev) : null;
+               stats.numericStats[originalColName] = {
+                   min: row.min !== null ? parseFloat(row.min) : null,
+                   max: row.max !== null ? parseFloat(row.max) : null,
+                   average: avg !== null && !isNaN(avg) ? avg : null,
+                   standardDeviation: stddev !== null && !isNaN(stddev) ? stddev : null,
+                   // nullCount is stored in columnDetails
+                };
+
+                // --- Calculate Percentiles (Median, P25, P75) ---
+                const percentileSql = `
+                    SELECT
+                        percentile_cont(0.25) WITHIN GROUP (ORDER BY "${sanitizedColName}") AS p25,
+                        percentile_cont(0.5) WITHIN GROUP (ORDER BY "${sanitizedColName}") AS median,
+                        percentile_cont(0.75) WITHIN GROUP (ORDER BY "${sanitizedColName}") AS p75
+                    FROM "${dbTableName}"
+                    WHERE "${sanitizedColName}" IS NOT NULL;
+                `;
+                console.log(`[Stats] Querying percentiles for: ${sanitizedColName}`);
+                const percentileResult = await query(percentileSql);
+                if (percentileResult.rows.length > 0) {
+                    const pRow = percentileResult.rows[0];
+                    stats.numericStats[originalColName].p25 = pRow.p25 !== null ? parseFloat(pRow.p25) : null;
+                    stats.numericStats[originalColName].median = pRow.median !== null ? parseFloat(pRow.median) : null;
+                    stats.numericStats[originalColName].p75 = pRow.p75 !== null ? parseFloat(pRow.p75) : null;
+                }
+                // --- End Percentile Calculation ---
+
+
+                // --- Calculate Histogram Data ---
+                const minVal = stats.numericStats[originalColName].min;
+               const maxVal = stats.numericStats[originalColName].max;
+               let histogramData = [];
+
+               if (minVal !== null && maxVal !== null && typeof minVal === 'number' && typeof maxVal === 'number') {
+                   const numBuckets = 10; // Define the number of buckets for the histogram
+
+                   if (maxVal > minVal) {
+                       const bucketWidth = (maxVal - minVal) / numBuckets;
+                       const histogramSql = `
+                           SELECT
+                               width_bucket("${sanitizedColName}", $1, $2, $3) AS bucket,
+                               COUNT(*) AS count
+                           FROM "${dbTableName}"
+                           WHERE "${sanitizedColName}" IS NOT NULL
+                           GROUP BY bucket
+                           ORDER BY bucket;
+                       `;
+                       // Note: width_bucket bounds are (min, max]. Values = max go into num_buckets. Values < min go into 0.
+                       // We add a small epsilon to maxVal for the upper bound to include maxVal in the last bucket.
+                       const epsilon = (maxVal - minVal) * 0.00001; // Small value to ensure max is included
+                       const histogramResult = await query(histogramSql, [minVal, maxVal + epsilon, numBuckets]);
+
+                       histogramData = histogramResult.rows.map(row => {
+                           const bucketNum = parseInt(row.bucket, 10);
+                           const count = parseInt(row.count, 10);
+                           // Calculate bounds based on bucket number
+                           const lowerBound = minVal + (bucketNum - 1) * bucketWidth;
+                           const upperBound = minVal + bucketNum * bucketWidth;
+                           return {
+                               bucket: bucketNum,
+                               count: count,
+                               lower_bound: lowerBound,
+                               // Ensure the last bucket's upper bound is exactly maxVal
+                               upper_bound: bucketNum === numBuckets ? maxVal : upperBound
+                           };
+                       }).filter(b => b.bucket >= 1 && b.bucket <= numBuckets); // Filter out potential 0 or numBuckets+1 buckets if any
+
+                   } else if (minVal === maxVal) {
+                       // If min and max are the same, create a single bucket
+                       const singleValueCountSql = `SELECT COUNT(*) AS count FROM "${dbTableName}" WHERE "${sanitizedColName}" = $1;`;
+                       const singleValueResult = await query(singleValueCountSql, [minVal]);
+                       histogramData = [{
+                           bucket: 1,
+                           count: parseInt(singleValueResult.rows[0].count, 10),
+                           lower_bound: minVal,
+                           upper_bound: maxVal
+                       }];
+                   }
+               }
+               stats.numericStats[originalColName].histogram = histogramData;
+               console.log(`[Stats] Calculated histogram for ${sanitizedColName}: ${histogramData.length} buckets`);
+               // --- End Histogram Calculation ---
+          }
+        } else if (colType === 'TEXT') {
+          // Get top 5 most frequent values for text columns
+          const categoricalSql = `
+            SELECT "${sanitizedColName}", COUNT(*) AS count
+            FROM "${dbTableName}"
+            WHERE "${sanitizedColName}" IS NOT NULL AND "${sanitizedColName}"::text <> '' -- Exclude nulls and empty strings
+            GROUP BY "${sanitizedColName}"
+            ORDER BY count DESC
+            LIMIT 5;
+          `;
+          console.log(`[Stats] Querying categorical stats for: ${sanitizedColName}`);
+          const categoricalResult = await query(categoricalSql);
+          stats.categoricalStats[originalColName] = categoricalResult.rows.map(row => ({
+            value: row[sanitizedColName],
+            count: parseInt(row.count, 10),
+          }));
+        }
+        // Add more stats for BOOLEAN, TIMESTAMP etc. if needed (e.g., true/false counts for boolean)
+
+      } catch (columnStatError) {
+        // Log error for specific column but continue with others
+        console.error(`[Stats] Error calculating stats for column "${sanitizedColName}":`, columnStatError.message);
+        // Ensure columnDetails entry still exists even if stats calculation failed
+        if (!stats.columnDetails[originalColName]) {
+            stats.columnDetails[originalColName] = { type: colType, nullCount: nullCount }; // Use potentially calculated nullCount
+        }
+      }
+    }
+
+    console.log('[Stats] Statistics calculation complete.');
+    res.status(200).json(stats);
+
+  } catch (error) {
+    console.error("--- Dataset statistics error ---:", error);
+    res.status(500).json({ error: 'Failed to fetch dataset statistics', details: error.message });
+  }
+});
+
+// --- Get Dataset Metadata Endpoint ---
+router.get('/datasets/:datasetId/metadata', authMiddleware, async (req, res) => {
+  console.log('--- /api/datasets/:datasetId/metadata request received ---');
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required.' });
+    }
+
+    const { datasetId } = req.params;
+    // Validate datasetId is a number
+    const numericDatasetId = parseInt(datasetId, 10);
+    if (isNaN(numericDatasetId)) {
+        console.error(`[Metadata] Invalid dataset ID format received: ${datasetId}`);
+        return res.status(400).json({ error: 'Invalid dataset ID format.' });
+    }
+    console.log(`[Metadata] User ${userId} requesting metadata for dataset ID: ${numericDatasetId}`);
+
+    // Fetch dataset metadata from the database
+    const metadataSql = `
+      SELECT dataset_identifier, columns_metadata
+      FROM dataset_metadata
+      WHERE id = $1 AND user_id = $2;
+    `;
+    const metadataResult = await query(metadataSql, [numericDatasetId, userId]);
+
+    if (metadataResult.rows.length === 0) {
+      console.warn(`[Metadata] Metadata not found for ID ${numericDatasetId} and user ${userId}`);
+      return res.status(404).json({ error: 'Dataset metadata not found or access denied.' });
+    }
+
+    const { dataset_identifier: originalFileName, columns_metadata: columnsMetadata } = metadataResult.rows[0];
+    console.log(`[Metadata] Found metadata for ID ${numericDatasetId}: FileName: ${originalFileName}`);
+
+    // Ensure columnsMetadata is parsed if stored as JSON string (it should be JSONB now, but good practice)
+    const parsedColumnsMetadata = typeof columnsMetadata === 'string' ? JSON.parse(columnsMetadata) : columnsMetadata;
+
+    res.status(200).json({
+        originalFileName,
+        columnsMetadata: parsedColumnsMetadata // Send parsed metadata
+    });
+
+  } catch (error) {
+    console.error("--- Dataset metadata retrieval error ---:", error);
+    res.status(500).json({ error: 'Failed to fetch dataset metadata', details: error.message });
+  }
+});
+
 
 module.exports = router;
