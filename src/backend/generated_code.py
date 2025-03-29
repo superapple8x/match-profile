@@ -23,25 +23,28 @@ analysis_results = {}
 try:
     df = pd.read_csv('/input/data.csv', encoding='utf-8')
 
-    required_cols = ['Location', 'ProductivityLoss']
-    missing_cols = [col for col in required_cols if col not in df.columns]
-    
-    if missing_cols:
-        analysis_results['error'] = f"Error: Columns {missing_cols} not found in dataset."
-        print(f"Error: Columns {missing_cols} not found in dataset.")
+    required_col = 'Income'
+    location_col = 'Location'
+
+    if required_col not in df.columns:
+        analysis_results['error'] = f"Error: Column '{required_col}' not found."
+        print(f"Error: Column '{required_col}' not found.")
+    elif location_col not in df.columns:
+        analysis_results['error'] = f"Error: Column '{location_col}' not found."
+        print(f"Error: Column '{location_col}' not found.")
     else:
-        df['ProductivityLoss_numeric'] = pd.to_numeric(df['ProductivityLoss'], errors='coerce')
-        
-        if not df['ProductivityLoss_numeric'].isnull().all():
-            max_loss_idx = df['ProductivityLoss_numeric'].idxmax()
-            max_loss_country = df.loc[max_loss_idx, 'Location']
-            max_loss_value = df.loc[max_loss_idx, 'ProductivityLoss_numeric']
-            
-            analysis_results['country_with_highest_productivity_loss'] = max_loss_country
-            analysis_results['max_productivity_loss_value'] = max_loss_value
+        df[f'{required_col}_numeric'] = pd.to_numeric(df[required_col], errors='coerce')
+
+        if not df[f'{required_col}_numeric'].isnull().all():
+            max_income_idx = df[f'{required_col}_numeric'].idxmax()
+            max_income_country = df.loc[max_income_idx, location_col]
+            max_income_value = df.loc[max_income_idx, f'{required_col}_numeric']
+
+            analysis_results['highest_salary_country'] = max_income_country
+            analysis_results['highest_salary_value'] = max_income_value
         else:
-            analysis_results['warning'] = "Warning: Column 'ProductivityLoss' could not be treated as numeric."
-            print("Warning: Column 'ProductivityLoss' could not be treated as numeric.")
+            analysis_results['warning'] = f"Warning: Column '{required_col}' could not be treated as numeric."
+            print(f"Warning: Column '{required_col}' could not be treated as numeric.")
 
     final_stats = convert_numpy_types(analysis_results)
     with open('/output/stats.json', 'w') as f:

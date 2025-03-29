@@ -46,7 +46,7 @@ function ResultsTable({ results, datasetAttributes, onMatchClick }: ResultsTable
       header: 'Match %',
       cell: info => info.getValue() !== undefined ? `${info.getValue()?.toFixed(1)}%` : '-',
       enableSorting: true,
-      // Removed fixed width, added padding
+      size: 120, // Set default size
       meta: { className: 'px-4 py-2 text-center font-semibold' }
     }));
 
@@ -56,7 +56,7 @@ function ResultsTable({ results, datasetAttributes, onMatchClick }: ResultsTable
         header: 'Profile ID', // Correct Header
         cell: info => String(info.getValue() ?? '-'),
         enableSorting: true,
-        // Removed fixed width, added padding
+        size: 100, // Set default size
         meta: { className: 'px-4 py-2 text-center' }
     }));
 
@@ -65,6 +65,7 @@ function ResultsTable({ results, datasetAttributes, onMatchClick }: ResultsTable
        cols.push(columnHelper.display({
          id: 'actions',
          header: 'Actions',
+         size: 100, // Set default size
          cell: ({ row }) => (
            <button
              onClick={() => onMatchClick(row.original)}
@@ -74,7 +75,6 @@ function ResultsTable({ results, datasetAttributes, onMatchClick }: ResultsTable
              Details
            </button>
          ),
-          // Removed fixed width, added padding
          meta: { className: 'px-4 py-2 text-center' }
        }));
      }

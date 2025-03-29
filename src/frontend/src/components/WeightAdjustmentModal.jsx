@@ -37,7 +37,8 @@ function WeightAdjustmentModal({ selectedCriteria, onWeightChange, onClose }) {
                 min="1"
                 max="10"
                 value={criteria.weight}
-                onChange={(e) => onWeightChange(criteria.attribute, parseInt(e.target.value))}
+                // Pass attribute, operator, value, and the new weight
+                onChange={(e) => onWeightChange(criteria.attribute, criteria.operator, criteria.value, parseInt(e.target.value))}
                 className="flex-1 h-2 bg-gray-300 dark:bg-gray-600 rounded-full appearance-none cursor-pointer accent-primary-500 dark:accent-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-all duration-150"
               />
               <span className="w-8 text-center font-semibold text-gray-700 dark:text-gray-200">{criteria.weight}</span>
