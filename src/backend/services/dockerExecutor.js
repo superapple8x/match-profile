@@ -83,13 +83,13 @@ async function runPythonInSandbox(pythonCode, datasetCsvString) { // Changed dat
 
     // Write the dataset CSV string to the temporary input file
     try {
-        if (typeof datasetCsvString !== 'string') {
-            throw new Error('Invalid datasetCsvString provided (must be a string).');
-        }
-        await fs.writeFile(inputDataHostPath, datasetCsvString, 'utf8');
-        console.log(`Docker Executor [${executionId}]: Wrote dataset CSV string to ${inputDataHostPath}`);
+      if (typeof datasetCsvString !== 'string') {
+        throw new Error('Invalid datasetCsvString provided (must be a string).');
+      }
+      await fs.writeFile(inputDataHostPath, datasetCsvString, 'utf8');
+      console.log(`Docker Executor [${executionId}]: Wrote dataset CSV string to ${inputDataHostPath}`);
     } catch (writeError) {
-        throw new Error(`Failed to write dataset CSV to temporary file: ${writeError.message}`);
+      throw new Error(`Failed to write dataset CSV to temporary file: ${writeError.message}`);
     }
 
 
@@ -111,7 +111,7 @@ async function runPythonInSandbox(pythonCode, datasetCsvString) { // Changed dat
         NetworkMode: 'none',
         Memory: MEMORY_LIMIT_MB * 1024 * 1024,
         // CpuShares: CPU_SHARES,
-        AutoRemove: false,
+        AutoRemove: true, // Let Docker handle cleanup
       },
       Tty: false,
       AttachStdout: true,
@@ -242,7 +242,7 @@ async function runPythonInSandbox(pythonCode, datasetCsvString) { // Changed dat
     ...outputPaths, // imagePaths (array), statsPath
     logs: executionLogs,
     error: executionError,
-    tempDir: !executionError && (outputPaths.imagePaths.length > 0 || outputPaths.statsPath) ? tempDir : null // Return tempDir only on success with results
+    tempDir: null // No need to return tempDir anymore
   };
 }
 
