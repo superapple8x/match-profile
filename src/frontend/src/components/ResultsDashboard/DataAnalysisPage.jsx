@@ -148,8 +148,8 @@ function TabbedDetailsCard({ stats, generatedCode, processUpdates, initiallyOpen
 // --- End TabbedDetailsCard ---
 
 // --- Main DataAnalysisPage Component ---
-// Added handleLogout prop
-function DataAnalysisPage({ datasetId, messages, setMessages, onCloseAnalysis, handleLogout }) {
+// Added handleLogout, isAuthenticated, switchToAuthView props
+function DataAnalysisPage({ datasetId, messages, setMessages, onCloseAnalysis, handleLogout, isAuthenticated, switchToAuthView }) {
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -495,6 +495,21 @@ function DataAnalysisPage({ datasetId, messages, setMessages, onCloseAnalysis, h
              <ExclamationCircleIcon className="h-5 w-5 mr-2 flex-shrink-0" /> <span>{error}</span>
            </div>
          )}
+         {/* Prompt for anonymous users */}
+         {!isAuthenticated && datasetId && (
+           <div className="mb-3 p-3 text-sm bg-blue-50 dark:bg-gray-700 border border-blue-200 dark:border-gray-600 text-blue-700 dark:text-blue-200 rounded-md flex items-center justify-between shadow-sm">
+             <span>
+               <InformationCircleIcon className="h-5 w-5 mr-2 inline-block align-middle" />
+               Log in or register to save analysis sessions and access full features.
+             </span>
+             <button
+               onClick={switchToAuthView}
+               className="ml-4 px-3 py-1 bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-medium rounded shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 dark:focus:ring-offset-gray-700"
+             >
+               Login / Register
+             </button>
+           </div>
+         )}
         <form onSubmit={handleSubmit} className="flex items-center space-x-3">
           <input
             type="text"
@@ -549,7 +564,9 @@ DataAnalysisPage.propTypes = {
   })).isRequired,
   setMessages: PropTypes.func.isRequired,
   onCloseAnalysis: PropTypes.func.isRequired,
-  handleLogout: PropTypes.func.isRequired, // Added handleLogout
+  handleLogout: PropTypes.func.isRequired,
+  isAuthenticated: PropTypes.bool.isRequired, // Added isAuthenticated
+  switchToAuthView: PropTypes.func.isRequired, // Added switchToAuthView
 };
 
 // DefaultProps for DataAnalysisPage

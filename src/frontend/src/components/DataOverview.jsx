@@ -57,52 +57,74 @@ function DataOverview({ datasetId, datasetName, datasetAttributes, authToken, da
     setIsExpanded(!isExpanded);
   };
 
-  // Fetch statistics when datasetId or authToken changes
+  // Fetch statistics when datasetId changes (authToken presence determines header)
   useEffect(() => {
     const fetchStats = async () => {
-      if (!datasetId || !authToken) {
+      // Only proceed if datasetId is present
+      if (!datasetId) {
         setStatsData(null);
         setError(null);
         setIsLoading(false);
+        setIsHeaderLoading(false); // Ensure header loading stops if no datasetId
         return;
       }
+
       setIsLoading(true); // Keep this for the content area message
       setIsHeaderLoading(true); // Start header loading indicator
       setError(null);
       setStatsData(null);
-      console.log(`[DataOverview] Fetching stats for dataset ID: ${datasetId}`);
+      console.log(`[DataOverview] Fetching stats for dataset ID: ${datasetId}. Auth token present: ${!!authToken}`);
+
+      // Prepare fetch options, conditionally adding Authorization header
+      const fetchOptions = {
+          method: 'GET', // Explicitly GET
+          headers: {},
+      };
+      if (authToken) {
+          fetchOptions.headers['Authorization'] = `Bearer ${authToken}`;
+      }
+
       try {
-        const response = await fetch(`/api/datasets/${datasetId}/stats`, {
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-          },
-        });
+        const response = await fetch(`/api/datasets/${datasetId}/stats`, fetchOptions);
+
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          throw new Error(`HTTP error! status: ${response.status} - ${errorData.error || 'Unknown error'}`);
-        }
-        const data = await response.json();
-        setStatsData(data);
-        console.log('[DataOverview] Stats received:', data);
-        // Set initial tab based on fetched data availability
-        const hasAttributes = datasetAttributes && datasetAttributes.length > 0;
-        const hasCategorical = data?.categoricalStats && Object.keys(data.categoricalStats).length > 0;
-        const hasNumerical = data?.numericStats && Object.keys(data.numericStats).length > 0;
-        if (hasAttributes) {
-            setActiveTab(TABS.ATTRIBUTES);
-        } else if (hasCategorical) {
-            setActiveTab(TABS.CATEGORICAL);
-        } else if (hasNumerical) {
-            setActiveTab(TABS.NUMERICAL);
+          // If no auth token was sent, a 401/403 might be expected, treat differently
+          if (!authToken && (response.status === 401 || response.status === 403)) {
+              setError('Statistics are not available for anonymous users.'); // Specific message for anonymous
+              console.warn('[DataOverview] Stats fetch failed (expectedly?) without auth token:', response.status);
+          } else {
+              // Throw error for other failures or if auth token *was* sent and failed
+              throw new Error(`HTTP error! status: ${response.status} - ${errorData.error || 'Unknown error'}`);
+          }
+          // Don't proceed to set data if response was not ok
+          setStatsData(null);
         } else {
-            setActiveTab(TABS.MISSING); // Fallback
+            // Only process data if response is ok
+            const data = await response.json();
+            setStatsData(data);
+            console.log('[DataOverview] Stats received:', data);
+            // Set initial tab based on fetched data availability
+            const hasAttributes = datasetAttributes && datasetAttributes.length > 0;
+            const hasCategorical = data?.categoricalStats && Object.keys(data.categoricalStats).length > 0;
+            const hasNumerical = data?.numericStats && Object.keys(data.numericStats).length > 0;
+            if (hasAttributes) {
+                setActiveTab(TABS.ATTRIBUTES);
+            } else if (hasCategorical) {
+                setActiveTab(TABS.CATEGORICAL);
+            } else if (hasNumerical) {
+                setActiveTab(TABS.NUMERICAL);
+            } else {
+                setActiveTab(TABS.MISSING); // Fallback
+            }
         }
 
       } catch (e) {
         console.error("Failed to fetch dataset statistics:", e);
         setError(`Failed to load statistics: ${e.message}`);
-        // Check for auth error and trigger logout
-        if (e.message.includes('401') || e.message.includes('403')) {
+        // Check for auth error ONLY if a token was provided, then trigger logout
+        if (authToken && (e.message.includes('401') || e.message.includes('403'))) {
+            console.warn('[DataOverview] Auth error with token detected, logging out.');
             if (handleLogout) handleLogout();
         }
       } finally {
@@ -112,7 +134,7 @@ function DataOverview({ datasetId, datasetName, datasetAttributes, authToken, da
     };
 
     fetchStats();
-  }, [datasetId, authToken, datasetAttributes, handleLogout]); // Added datasetAttributes and handleLogout dependencies
+  }, [datasetId, authToken, datasetAttributes, handleLogout]); // Dependencies remain the same
 
   // --- Chart Data Preparation ---
 

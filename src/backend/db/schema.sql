@@ -42,23 +42,20 @@ END $$;
 -- Dataset Metadata table to track dynamically created dataset tables
 CREATE TABLE IF NOT EXISTS dataset_metadata (
     id SERIAL PRIMARY KEY,
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, -- Made nullable for anonymous uploads
     dataset_identifier VARCHAR(255) NOT NULL, -- User-facing identifier (e.g., original filename)
     db_table_name VARCHAR(255) NOT NULL UNIQUE, -- Actual name of the table in the database
     columns_metadata JSONB, -- Store column names and inferred types (e.g., {"col1": "text", "col2": "numeric"})
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    -- Add a unique constraint for user_id and dataset_identifier to prevent duplicates per user
-    UNIQUE (user_id, dataset_identifier)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    -- Removed UNIQUE (user_id, dataset_identifier) constraint to allow multiple anonymous uploads with same identifier
 );
 
+-- Apply changes to existing table if necessary
+-- Make user_id nullable for anonymous uploads
+ALTER TABLE dataset_metadata ALTER COLUMN user_id DROP NOT NULL;
 
--- Example for associating uploaded files with users (if needed):
-/*
-CREATE TABLE IF NOT EXISTS user_files (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    file_path VARCHAR(1024) NOT NULL, -- Path where the file is stored
-    original_filename VARCHAR(255) NOT NULL,
-    upload_timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-*/
+-- Remove the unique constraint that includes user_id
+-- Note: Constraint name might vary. If this fails, find the name using \d dataset_metadata in psql.
+ALTER TABLE dataset_metadata DROP CONSTRAINT IF EXISTS dataset_metadata_user_id_dataset_identifier_key;
+
+

@@ -8,6 +8,7 @@ const cors = require('cors');
 const fs = require('fs').promises; // Use fs.promises
 const path = require('path'); // Need path module
 const authMiddleware = require('../middleware/authMiddleware'); // Import auth middleware
+const optionalAuthMiddleware = require('../middleware/optionalAuthMiddleware'); // Import optional auth middleware
 const { query, pool: dbPool } = require('../config/db'); // Import query function and the instantiated pool
 
 // --- Helper Functions ---
@@ -60,18 +61,14 @@ const upload = multer({
   }
 });
 
-// File import endpoint - Apply authMiddleware first
-router.post('/import', authMiddleware, upload.single('file'), async (req, res) => {
+// File import endpoint - Use optionalAuthMiddleware
+router.post('/import', optionalAuthMiddleware, upload.single('file'), async (req, res) => { // Use optional auth
   console.log('--- /api/import request received ---');
   try {
-    // User ID should be available from authMiddleware
-    const userId = req.user?.id;
-    if (!userId) {
-        // This shouldn't happen if authMiddleware is working, but good to check
-        console.error('User ID missing after authMiddleware in /import');
-        return res.status(401).json({ error: 'Authentication required but user ID not found.' });
-    }
-    console.log(`Authenticated user ID: ${userId}`);
+    // User ID might be null if request is anonymous
+    const userId = req.user?.id || null;
+    console.log(`[Import] User ID: ${userId === null ? 'Anonymous' : userId}`);
+    // Removed the strict check that returned 401 if !userId
 
     console.log('req.file received:', req.file ? `Name: ${req.file.originalname}, Size: ${req.file.size}` : 'No file object');
     if (!req.file) {
@@ -167,20 +164,41 @@ router.post('/import', authMiddleware, upload.single('file'), async (req, res) =
 
     // 2. Generate Unique Table Name
     const timestamp = Date.now();
-    const dbTableName = sanitizeDbIdentifier(`dataset_user_${userId}_${timestamp}_${safeFileName}`);
+    // Use 'anonymous' in table name if userId is null
+    const userPart = userId ? `user_${userId}` : 'anonymous';
+    const dbTableName = sanitizeDbIdentifier(`dataset_${userPart}_${timestamp}_${safeFileName}`);
     console.log(`[Import] Generated DB Table Name: ${dbTableName}`);
 
     // --- Overwrite Logic: Check for and clean up existing dataset with the same identifier ---
-    const checkExistingSql = `
-      SELECT id, db_table_name FROM dataset_metadata
-      WHERE user_id = $1 AND dataset_identifier = $2;
-    `;
+    // Adjust query based on whether userId is null
+    let checkExistingSql;
+    let checkParams;
+    if (userId) {
+        checkExistingSql = `
+          SELECT id, db_table_name FROM dataset_metadata
+          WHERE user_id = $1 AND dataset_identifier = $2;
+        `;
+        checkParams = [userId, originalFileName];
+    } else {
+        // For anonymous, only check based on identifier where user_id IS NULL
+        // Note: This means an anonymous user overwrites the *last* anonymous upload with the same name.
+        // Consider if a different strategy is needed for anonymous overwrites (e.g., disallow, or keep multiple).
+        // For now, we'll allow overwriting the last anonymous upload with the same name.
+        checkExistingSql = `
+          SELECT id, db_table_name FROM dataset_metadata
+          WHERE user_id IS NULL AND dataset_identifier = $1
+          ORDER BY created_at DESC LIMIT 1; -- Find the most recent anonymous one
+        `;
+        checkParams = [originalFileName];
+    }
+
     try {
-        const existingResult = await query(checkExistingSql, [userId, originalFileName]);
+        const existingResult = await query(checkExistingSql, checkParams);
         if (existingResult.rows.length > 0) {
             const oldMetadataId = existingResult.rows[0].id;
             const oldDbTableName = existingResult.rows[0].db_table_name;
-            console.log(`[Import] Found existing dataset metadata (ID: ${oldMetadataId}) for "${originalFileName}" and user ${userId}. Table: "${oldDbTableName}". Proceeding with overwrite.`);
+            const userIdentifierLog = userId ? `user ${userId}` : 'anonymous user';
+            console.log(`[Import] Found existing dataset metadata (ID: ${oldMetadataId}) for "${originalFileName}" and ${userIdentifierLog}. Table: "${oldDbTableName}". Proceeding with overwrite.`);
 
             // Delete old metadata
             const deleteMetadataSql = `DELETE FROM dataset_metadata WHERE id = $1;`;
@@ -330,14 +348,14 @@ router.get('/export/csv', (req, res) => {
   }
 });
 
-// Match profiles endpoint - Modified for DB querying
-router.post('/match', authMiddleware, async (req, res) => { // Added authMiddleware, made async
+// Match profiles endpoint - Modified for DB querying and optional auth
+router.post('/match', optionalAuthMiddleware, async (req, res) => { // Use optionalAuthMiddleware, made async
   console.log('--- /api/match request received ---');
   try {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(401).json({ error: 'Authentication required.' });
-    }
+    // User ID might be null if request is anonymous
+    const userId = req.user?.id || null;
+    console.log(`[Match] Requesting User ID: ${userId === null ? 'Anonymous' : userId}`);
+    // Removed the strict check that returned 401 if !userId
 
     // 1. Get data from request body (Updated: Expect 'criteria' instead of 'searchCriteria')
     const {
@@ -372,15 +390,23 @@ router.post('/match', authMiddleware, async (req, res) => { // Added authMiddlew
         return res.status(400).json({ error: 'Invalid sortDirection. Must be ASC or DESC.' });
     }
 
-    // 2. Fetch dataset metadata
+    // 2. Fetch dataset metadata by ID only first
     const metadataSql = `
-      SELECT db_table_name, columns_metadata FROM dataset_metadata
-      WHERE id = $1 AND user_id = $2;
+      SELECT db_table_name, columns_metadata, user_id AS owner_id
+      FROM dataset_metadata
+      WHERE id = $1;
     `;
-    const metadataResult = await query(metadataSql, [datasetId, userId]);
+    const metadataResult = await query(metadataSql, [datasetId]);
 
     if (metadataResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Dataset metadata not found or access denied.' });
+      return res.status(404).json({ error: 'Dataset metadata not found.' });
+    }
+
+    // 2.1 Check Authorization: Authenticated users can only access their own datasets. Anonymous users can only access anonymous datasets.
+    const ownerId = metadataResult.rows[0].owner_id;
+    if (ownerId !== userId) { // This covers both cases: (ownerId=null, userId=123) and (ownerId=123, userId=null) and (ownerId=123, userId=456)
+        console.warn(`[Match] Authorization failed: User ${userId} attempted to access dataset ${datasetId} owned by user ${ownerId}.`);
+        return res.status(403).json({ error: 'Access denied to this dataset.' });
     }
 
     const { db_table_name: dbTableName, columns_metadata: columnsMetadata } = metadataResult.rows[0];
@@ -681,15 +707,13 @@ router.get('/datasets/:filename', authMiddleware, async (req, res) => {
   }
 });
 
-
 // --- Value Suggestions Endpoint ---
-router.get('/suggest/values', authMiddleware, async (req, res) => {
+router.get('/suggest/values', optionalAuthMiddleware, async (req, res) => { // Use optional auth
   console.log('--- /api/suggest/values request received ---');
   try {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(401).json({ error: 'Authentication required.' });
-    }
+    // User ID might be null if request is anonymous
+    const userId = req.user?.id || null;
+    console.log(`[Suggest] Requesting User ID: ${userId === null ? 'Anonymous' : userId}`);
 
     const { datasetId, attributeName, searchTerm } = req.query;
     console.log('[Suggest] Params:', { datasetId, attributeName, searchTerm });
@@ -698,14 +722,15 @@ router.get('/suggest/values', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Missing required query parameters: datasetId, attributeName, searchTerm.' });
     }
 
-    // 1. Fetch dataset metadata to get table name and sanitized column name
+    // 1. Fetch dataset metadata by ID only
     const metadataSql = `
-      SELECT db_table_name, columns_metadata FROM dataset_metadata
-      WHERE id = $1 AND user_id = $2;
+      SELECT db_table_name, columns_metadata, user_id AS owner_id FROM dataset_metadata
+      WHERE id = $1;
     `;
-    const metadataResult = await query(metadataSql, [datasetId, userId]);
+    const metadataResult = await query(metadataSql, [datasetId]);
 
     if (metadataResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Dataset metadata not found.' }); // Changed error message
       return res.status(404).json({ error: 'Dataset metadata not found or access denied.' });
     }
 
@@ -748,13 +773,12 @@ router.get('/suggest/values', authMiddleware, async (req, res) => {
 });
 
 // --- Dataset Statistics Endpoint ---
-router.get('/datasets/:datasetId/stats', authMiddleware, async (req, res) => {
+router.get('/datasets/:datasetId/stats', optionalAuthMiddleware, async (req, res) => { // Use optional auth
   console.log('--- /api/datasets/:datasetId/stats request received ---');
   try {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(401).json({ error: 'Authentication required.' });
-    }
+    // User ID might be null if request is anonymous
+    const userId = req.user?.id || null;
+    console.log(`[Stats] Requesting User ID: ${userId === null ? 'Anonymous' : userId}`);
 
     const { datasetId } = req.params;
     console.log('[Stats] Params:', { datasetId });
@@ -763,15 +787,15 @@ router.get('/datasets/:datasetId/stats', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Missing required parameter: datasetId.' });
     }
 
-    // 1. Fetch dataset metadata
+    // 1. Fetch dataset metadata by ID only
     const metadataSql = `
-      SELECT db_table_name, columns_metadata FROM dataset_metadata
-      WHERE id = $1 AND user_id = $2;
+      SELECT db_table_name, columns_metadata, user_id AS owner_id FROM dataset_metadata
+      WHERE id = $1;
     `;
-    const metadataResult = await query(metadataSql, [datasetId, userId]);
+    const metadataResult = await query(metadataSql, [datasetId]);
 
     if (metadataResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Dataset metadata not found or access denied.' });
+      return res.status(404).json({ error: 'Dataset metadata not found.' }); // Changed error message
     }
 
     const { db_table_name: dbTableName, columns_metadata: columnsMetadata } = metadataResult.rows[0];

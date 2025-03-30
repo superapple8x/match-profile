@@ -96,41 +96,64 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
 
   const fetchValueSuggestions = useCallback(
     debounce(async (attributeName, operator, searchTerm) => {
-      // Only fetch if attribute, operator, and datasetId are valid, and searchTerm is not empty
-      if (!datasetId || !attributeName || !operator || !searchTerm) {
+      // Only fetch if attribute, operator, datasetId are valid, and searchTerm is not empty
+      // Note: We allow fetching even if authToken is null
+      if (!datasetId || !attributeName || !operator || searchTerm === undefined) { // Check searchTerm explicitly
         setSuggestions([]);
         setIsLoadingSuggestions(false);
         return;
       }
       setIsLoadingSuggestions(true);
+      console.log(`[SearchBar] Fetching suggestions for "${attributeName}" with term "${searchTerm}". Auth token present: ${!!authToken}`);
+
+      // Prepare fetch options, conditionally adding Authorization header
+      const fetchOptions = {
+          method: 'GET', // Explicitly GET
+          headers: {},
+      };
+      if (authToken) {
+          fetchOptions.headers['Authorization'] = `Bearer ${authToken}`;
+      }
+
       try {
-        const headers = { 'Authorization': `Bearer ${authToken}` };
-        // Adjust API endpoint if needed, assuming it can handle operator context or just filters by value prefix
-        const response = await fetch(`/api/suggest/values?datasetId=${encodeURIComponent(datasetId)}&attributeName=${encodeURIComponent(attributeName)}&searchTerm=${encodeURIComponent(searchTerm)}`, { headers });
+        const apiUrl = `/api/suggest/values?datasetId=${encodeURIComponent(datasetId)}&attributeName=${encodeURIComponent(attributeName)}&searchTerm=${encodeURIComponent(searchTerm)}`;
+        const response = await fetch(apiUrl, fetchOptions);
+
         if (!response.ok) {
-          if (response.status === 401 || response.status === 403) {
-            console.warn('Suggestion fetch failed due to invalid/expired token.');
-            if (handleLogout) handleLogout();
+          // If no auth token was sent, a 401/403 might be expected, don't treat as critical error for suggestions
+          if (!authToken && (response.status === 401 || response.status === 403)) {
+              console.warn(`[SearchBar] Suggestion fetch failed (expectedly?) without auth token: ${response.status}`);
+              setSuggestions([]); // Clear suggestions as they are unavailable
+          } else {
+              // Throw error for other failures or if auth token *was* sent and failed
+              const errorData = await response.json().catch(() => ({}));
+              throw new Error(`HTTP error! status: ${response.status} - ${errorData.error || response.statusText}`);
           }
-          throw new Error(`Failed to fetch suggestions: ${response.statusText}`);
+        } else {
+            // Only process data if response is ok
+            const data = await response.json();
+            setSuggestions(data.suggestions.map(val => ({
+                type: 'value',
+                value: val,
+                display: String(val).replace(
+                     new RegExp(`(${searchTerm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'i'),
+                     '<mark class="bg-yellow-200 dark:bg-yellow-600 rounded">$1</mark>'
+                )
+            })));
         }
-        const data = await response.json();
-        setSuggestions(data.suggestions.map(val => ({
-            type: 'value',
-            value: val,
-            display: String(val).replace(
-                 new RegExp(`(${searchTerm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'i'),
-                 '<mark class="bg-yellow-200 dark:bg-yellow-600 rounded">$1</mark>'
-            )
-        })));
       } catch (error) {
         console.error("Error fetching value suggestions:", error);
-        setSuggestions([]);
+        setSuggestions([]); // Clear suggestions on error
+        // Check for auth error ONLY if a token was provided, then trigger logout
+        if (authToken && (error.message.includes('401') || error.message.includes('403'))) {
+            console.warn('[SearchBar] Auth error with token detected during suggestions fetch, logging out.');
+            if (handleLogout) handleLogout();
+        }
       } finally {
         setIsLoadingSuggestions(false);
       }
     }, 300), // 300ms debounce delay
-    [datasetId, authToken, handleLogout] // Dependencies for useCallback
+    [datasetId, authToken, handleLogout] // Dependencies remain the same
   );
 
   const handleInputChange = (e) => {

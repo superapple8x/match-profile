@@ -23,26 +23,32 @@ analysis_results = {}
 try:
     df = pd.read_csv('/input/data.csv', encoding='utf-8')
 
-    required_cols = ['Gender', 'Medical Condition']
+    required_cols = ['Location', 'Addiction Level']
     missing_cols = [col for col in required_cols if col not in df.columns]
     
     if missing_cols:
         analysis_results['error'] = f"Error: Columns {missing_cols} not found in dataset."
-        for col in missing_cols:
-            print(f"Error: Column '{col}' not found in dataset.")
+        print(f"Error: Columns {missing_cols} not found in dataset.")
     else:
-        cancer_patients = df[df['Medical Condition'] == 'Cancer']
-        gender_counts = cancer_patients['Gender'].value_counts().to_dict()
+        df['Addiction Level_numeric'] = pd.to_numeric(df['Addiction Level'], errors='coerce')
         
-        analysis_results['gender_counts'] = gender_counts
-        analysis_results['most_sufferers'] = max(gender_counts, key=gender_counts.get)
-
-        plt.figure(figsize=(10, 6))
-        sns.countplot(data=cancer_patients, x='Gender')
-        plt.title('Cancer Patients by Gender')
-        plt.tight_layout()
-        plt.savefig('/output/plot_1.png')
-        plt.close()
+        if not df['Addiction Level_numeric'].isnull().all():
+            max_addiction = df['Addiction Level_numeric'].max()
+            most_addicted_location = df.loc[df['Addiction Level_numeric'].idxmax(), 'Location']
+            
+            analysis_results['most_addicted_country'] = most_addicted_location
+            analysis_results['max_addiction_level'] = max_addiction
+            
+            plt.figure(figsize=(10, 6))
+            sns.barplot(x='Location', y='Addiction Level_numeric', data=df.groupby('Location')['Addiction Level_numeric'].mean().reset_index().sort_values('Addiction Level_numeric', ascending=False).head(10))
+            plt.title('Top 10 Countries by Average Addiction Level')
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            plt.savefig('/output/plot_1.png')
+            plt.close()
+        else:
+            analysis_results['warning'] = "Warning: 'Addiction Level' column could not be treated as numeric."
+            print("Warning: 'Addiction Level' column could not be treated as numeric.")
 
     final_stats = convert_numpy_types(analysis_results)
     with open('/output/stats.json', 'w') as f:

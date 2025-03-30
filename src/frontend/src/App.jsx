@@ -9,10 +9,12 @@ import DataOverview from './components/DataOverview';
 import DataAnalysisPage from './components/ResultsDashboard/DataAnalysisPage';
 import LoginForm from './components/Auth/LoginForm';
 import RegisterForm from './components/Auth/RegisterForm';
+import { UserCircleIcon } from '@heroicons/react/24/solid'; // Added for Login button
 import {
   ArrowLeftIcon, ChatBubbleLeftRightIcon, SunIcon, MoonIcon, ArrowRightOnRectangleIcon,
   ChevronDoubleLeftIcon, ChevronDoubleRightIcon, Bars3Icon
 } from '@heroicons/react/24/outline';
+
 
 // Constants
 const DEFAULT_PAGE_SIZE = 10; // Default number of results per page
@@ -33,17 +35,34 @@ function WelcomeMessage() {
   );
 }
 
-// Auth View Component (remains the same)
-function AuthView({ onLoginSuccess }) {
+// Auth View Component (Updated to accept switchToAppView)
+function AuthView({ onLoginSuccess, switchToAppView }) { // Accept switchToAppView
     const [view, setView] = useState('login');
     const switchToRegister = () => setView('register');
     const switchToLogin = () => setView('login');
     return (
-        <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-gray-800 dark:to-gray-950">
+        // Added flex-col for layout with back button
+        <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-gray-800 dark:to-gray-950 relative">
+             {/* Add Back to App Button */}
+             <button
+                 onClick={switchToAppView}
+                 className="absolute top-4 left-4 text-sm text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-200 flex items-center z-10 p-2 rounded-md hover:bg-indigo-100 dark:hover:bg-gray-700 transition-colors" // Example styling
+                 aria-label="Back to application"
+             >
+                 <ArrowLeftIcon className="h-4 w-4 mr-1" /> Back to App
+             </button>
             {view === 'login' ? (
-                <LoginForm onLoginSuccess={onLoginSuccess} onSwitchToRegister={switchToRegister} />
+                <LoginForm
+                    onLoginSuccess={onLoginSuccess}
+                    onSwitchToRegister={switchToRegister}
+                    // No need to pass switchToAppView down further if handled here
+                />
             ) : (
-                <RegisterForm onRegisterSuccess={switchToLogin} onSwitchToLogin={switchToLogin} />
+                <RegisterForm
+                    onRegisterSuccess={switchToLogin} // Register success switches to login view
+                    onSwitchToLogin={switchToLogin}
+                    // No need to pass switchToAppView down further if handled here
+                />
             )}
         </div>
     );
@@ -68,6 +87,11 @@ function App() {
   // --- Authentication State ---
   const [authToken, setAuthToken] = useState(localStorage.getItem('authToken'));
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('authToken'));
+  const [viewMode, setViewMode] = useState('app'); // 'app' or 'auth'
+
+  // --- View Switching Functions ---
+  const switchToAuthView = () => setViewMode('auth');
+  const switchToAppView = () => setViewMode('app');
 
   // --- Sidebar State ---
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -105,9 +129,9 @@ function App() {
     }
   }, [darkMode]);
 
-  // View switching effect (remains the same)
+  // View switching effect (works for anonymous users)
   useEffect(() => {
-    if (!isAuthenticated) return;
+    // NOTE: Removed isAuthenticated check from condition and dependency array
     if (isAnalysisViewOpen) {
       setCurrentView('analysis');
     } else if (datasetId) {
@@ -115,7 +139,7 @@ function App() {
     } else {
       setCurrentView('welcome');
     }
-  }, [isAnalysisViewOpen, datasetId, isAuthenticated]);
+  }, [isAnalysisViewOpen, datasetId]); // Removed isAuthenticated from dependencies
 
   // Use useCallback for handleLogout as it's passed down
   const handleLogout = useCallback(() => {
@@ -367,6 +391,7 @@ function App() {
     setIsAnalysisViewOpen(false);
     setAnalysisMessages([]);
     setAnalysisQuery('');
+    switchToAppView(); // Switch back to app view after successful login
   };
 
 
@@ -452,153 +477,176 @@ function App() {
 
   // --- Render Logic ---
 
-  if (!isAuthenticated) {
-    return (
-        <Router>
-            <AuthView onLoginSuccess={handleLoginSuccess} />
-        </Router>
-    );
-  }
+  // Removed the top-level authentication gate (if (!isAuthenticated) block)
 
   return (
     <Router>
-      <div className="flex h-screen relative bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-gray-800 dark:to-gray-950">
-        {/* Sidebar */}
-        <aside
-          ref={sidebarRef}
-          style={{ width: `${sidebarWidth}px` }}
-          className={`flex-shrink-0 p-4 flex flex-col bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm shadow-lg h-full sticky top-0 z-20 transition-all duration-100 ease-linear border-r border-gray-200 dark:border-gray-700/50`} // Adjusted background/border
-        >
-           <h1 className={`font-bold text-gray-800 dark:text-white pt-4 pb-2 px-2 mb-4 transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'text-lg text-center' : 'text-xl'}`}>
-             {isSidebarCollapsed ? 'PM' : 'Profile Matching'}
-           </h1>
-           <div className={`flex-grow space-y-4 overflow-y-auto mb-4 transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'overflow-x-hidden px-0' : 'pr-1'}`}>
-             <FileImport onFileImport={handleFileImport} isCollapsed={isSidebarCollapsed} authToken={authToken} />
-             <button
-               onClick={() => openAnalysisView()}
-               disabled={!datasetId}
-               className={`${baseButtonClasses} ${!datasetId ? primaryButtonDisabledClasses : primaryButtonActiveClasses}`}
-               title={isSidebarCollapsed ? "LLM Analysis" : ""}
-             >
-               <ChatBubbleLeftRightIcon className={`h-5 w-5 ${!isSidebarCollapsed ? 'mr-2' : 'mx-auto'}`} /> {/* Adjusted size */}
-               {!isSidebarCollapsed && <span>LLM Analysis</span>}
-             </button>
-             <SavedSessions
-                authToken={authToken}
-                currentAppState={currentAppState}
-                onLoadSession={handleLoadSession}
-                isCollapsed={isSidebarCollapsed}
-                onRequestExpand={ensureSidebarExpanded}
-                handleLogout={handleLogout}
-             />
-           </div>
-           {/* Bottom Controls */}
-           <div className="mt-auto pb-4 space-y-2 flex-shrink-0">
-                <button
-                    onClick={toggleSidebarCollapse}
-                    className={`w-full flex items-center justify-center px-4 py-2 rounded-md shadow-sm transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${secondaryButtonClasses}`} // Indigo focus
-                    aria-label={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-                >
-                    {isSidebarCollapsed ? <ChevronDoubleRightIcon className="h-5 w-5" /> : <ChevronDoubleLeftIcon className="h-5 w-5" />} {/* Adjusted size */}
-                    {!isSidebarCollapsed && <span className="ml-2 text-sm">Collapse</span>} {/* Adjusted size */}
-                </button>
-                 <button
-                     onClick={toggleDarkMode}
-                     className={`w-full flex items-center justify-center px-4 py-2 rounded-md shadow-sm transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${secondaryButtonClasses}`} // Indigo focus
-                     aria-label={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
-                 >
-                     {darkMode ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />} {/* Adjusted size */}
-                     {!isSidebarCollapsed && <span className="ml-2 text-sm">{darkMode ? 'Light Mode' : 'Dark Mode'}</span>} {/* Adjusted size */}
-                 </button>
-                 <button
-                     onClick={handleLogout}
-                     className={`w-full flex items-center justify-center px-4 py-2 rounded-md shadow-sm transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 bg-red-100 hover:bg-red-200 dark:bg-red-800/80 dark:hover:bg-red-700/80 text-red-700 dark:text-red-100 font-semibold`}
-                     aria-label="Logout"
-                 >
-                    <ArrowRightOnRectangleIcon className={`h-5 w-5 ${!isSidebarCollapsed ? 'mr-2' : 'mx-auto'}`} /> {/* Adjusted size */}
-                    {!isSidebarCollapsed && <span className="text-sm">Logout</span>} {/* Adjusted size */}
-                 </button>
-           </div>
-        </aside>
-
-        {/* Draggable Resize Handle */}
-        <div
-            className="flex-shrink-0 w-1.5 cursor-col-resize bg-gray-300/50 dark:bg-gray-600/50 hover:bg-indigo-500 dark:hover:bg-indigo-400 transition-colors duration-150 h-full sticky top-0 z-20" // Adjusted width
-            onMouseDown={startResizing}
-            title="Resize Sidebar"
+      {viewMode === 'auth' ? (
+        <AuthView
+          onLoginSuccess={handleLoginSuccess}
+          switchToAppView={switchToAppView} // Pass switch back function
         />
+      ) : (
+        // Main App Layout
+        <div className="flex h-screen relative bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-gray-800 dark:to-gray-950">
+          {/* Sidebar */}
+          <aside
+            ref={sidebarRef}
+            style={{ width: `${sidebarWidth}px` }}
+            className={`flex-shrink-0 p-4 flex flex-col bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm shadow-lg h-full sticky top-0 z-20 transition-all duration-100 ease-linear border-r border-gray-200 dark:border-gray-700/50`} // Adjusted background/border
+          >
+             <h1 className={`font-bold text-gray-800 dark:text-white pt-4 pb-2 px-2 mb-4 transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'text-lg text-center' : 'text-xl'}`}>
+               {isSidebarCollapsed ? 'PM' : 'Profile Matching'}
+             </h1>
+             <div className={`flex-grow space-y-4 overflow-y-auto mb-4 transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'overflow-x-hidden px-0' : 'pr-1'}`}>
+               {/* Pass authToken to FileImport */}
+               <FileImport onFileImport={handleFileImport} isCollapsed={isSidebarCollapsed} authToken={authToken} />
+               <button
+                 onClick={() => openAnalysisView()}
+                 disabled={!datasetId}
+                 className={`${baseButtonClasses} ${!datasetId ? primaryButtonDisabledClasses : primaryButtonActiveClasses}`}
+                 title={isSidebarCollapsed ? "LLM Analysis" : ""}
+               >
+                 <ChatBubbleLeftRightIcon className={`h-5 w-5 ${!isSidebarCollapsed ? 'mr-2' : 'mx-auto'}`} /> {/* Adjusted size */}
+                 {!isSidebarCollapsed && <span>LLM Analysis</span>}
+               </button>
+               {/* Only show Saved Sessions if authenticated */}
+               {isAuthenticated && (
+                 <SavedSessions
+                    authToken={authToken}
+                    currentAppState={currentAppState}
+                    onLoadSession={handleLoadSession}
+                    isCollapsed={isSidebarCollapsed}
+                    onRequestExpand={ensureSidebarExpanded}
+                    handleLogout={handleLogout}
+                 />
+               )}
+             </div>
+             {/* Bottom Controls */}
+             <div className="mt-auto pb-4 space-y-2 flex-shrink-0">
+                  {/* Add Login/Register Button for Anonymous Users */}
+                 {!isAuthenticated && (
+                   <button
+                     onClick={switchToAuthView}
+                     className={`w-full flex items-center justify-center px-4 py-2 rounded-md shadow-sm transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${secondaryButtonClasses}`}
+                     title={isSidebarCollapsed ? "Login or Register" : ""}
+                   >
+                     <UserCircleIcon className={`h-5 w-5 ${!isSidebarCollapsed ? 'mr-2' : 'mx-auto'}`} />
+                     {!isSidebarCollapsed && <span className="text-sm">Login / Register</span>}
+                   </button>
+                 )}
+                  <button
+                      onClick={toggleSidebarCollapse}
+                      className={`w-full flex items-center justify-center px-4 py-2 rounded-md shadow-sm transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${secondaryButtonClasses}`} // Indigo focus
+                      aria-label={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+                  >
+                      {isSidebarCollapsed ? <ChevronDoubleRightIcon className="h-5 w-5" /> : <ChevronDoubleLeftIcon className="h-5 w-5" />} {/* Adjusted size */}
+                      {!isSidebarCollapsed && <span className="ml-2 text-sm">Collapse</span>} {/* Adjusted size */}
+                  </button>
+                   <button
+                       onClick={toggleDarkMode}
+                       className={`w-full flex items-center justify-center px-4 py-2 rounded-md shadow-sm transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${secondaryButtonClasses}`} // Indigo focus
+                       aria-label={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+                   >
+                       {darkMode ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />} {/* Adjusted size */}
+                       {!isSidebarCollapsed && <span className="ml-2 text-sm">{darkMode ? 'Light Mode' : 'Dark Mode'}</span>} {/* Adjusted size */}
+                   </button>
+                   {/* Only show Logout if authenticated */}
+                   {isAuthenticated && (
+                     <button
+                         onClick={handleLogout}
+                         className={`w-full flex items-center justify-center px-4 py-2 rounded-md shadow-sm transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 bg-red-100 hover:bg-red-200 dark:bg-red-800/80 dark:hover:bg-red-700/80 text-red-700 dark:text-red-100 font-semibold`}
+                         aria-label="Logout"
+                     >
+                        <ArrowRightOnRectangleIcon className={`h-5 w-5 ${!isSidebarCollapsed ? 'mr-2' : 'mx-auto'}`} /> {/* Adjusted size */}
+                        {!isSidebarCollapsed && <span className="text-sm">Logout</span>} {/* Adjusted size */}
+                     </button>
+                   )}
+             </div>
+          </aside>
 
-        {/* Main Content Area */}
-        <main className="flex-1 p-6 overflow-y-auto relative bg-transparent">
-          {/* Suggestions Portal Target */}
-          <div id="suggestions-portal" className="relative z-30"></div>
+          {/* Draggable Resize Handle */}
+          <div
+              className="flex-shrink-0 w-1.5 cursor-col-resize bg-gray-300/50 dark:bg-gray-600/50 hover:bg-indigo-500 dark:hover:bg-indigo-400 transition-colors duration-150 h-full sticky top-0 z-20" // Adjusted width
+              onMouseDown={startResizing}
+              title="Resize Sidebar"
+          />
 
-          {/* Welcome View */}
-          <div className={`absolute inset-6 transition-opacity duration-300 ease-in-out ${currentView === 'welcome' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
-             <WelcomeMessage />
-          </div>
+          {/* Main Content Area */}
+          <main className="flex-1 p-6 overflow-y-auto relative bg-transparent">
+            {/* Suggestions Portal Target */}
+            <div id="suggestions-portal" className="relative z-30"></div>
 
-          {/* Dashboard View */}
-          <div className={`transition-opacity duration-300 ease-in-out ${currentView === 'dashboard' ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-            {currentView === 'dashboard' && datasetId && (
-              <div className="space-y-6"> {/* Added wrapper for spacing */}
-                <DataOverview
-                    datasetAttributes={datasetAttributes}
-                    datasetName={currentDatasetName}
-                    searchCriteria={searchCriteria}
+            {/* Welcome View */}
+            <div className={`absolute inset-6 transition-opacity duration-300 ease-in-out ${currentView === 'welcome' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+               <WelcomeMessage />
+            </div>
+
+            {/* Dashboard View */}
+            <div className={`transition-opacity duration-300 ease-in-out ${currentView === 'dashboard' ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+              {currentView === 'dashboard' && datasetId && (
+                <div className="space-y-6"> {/* Added wrapper for spacing */}
+                  <DataOverview
+                      datasetAttributes={datasetAttributes}
+                      datasetName={currentDatasetName}
+                      searchCriteria={searchCriteria}
+                      datasetId={datasetId}
+                      authToken={authToken}
+                      darkMode={darkMode}
+                      handleLogout={handleLogout}
+                  />
+                  {/* Use SearchBar instead of SearchBuilder */}
+                  <SearchBar
+                    datasetAttributes={datasetAttributes.map(attr => attr.originalName)} // Pass only names
+                    onSearch={handleSearch} // Initial search trigger
+                    initialCriteria={searchCriteria} // Pass current criteria for display/removal
                     datasetId={datasetId}
                     authToken={authToken}
-                    darkMode={darkMode}
                     handleLogout={handleLogout}
-                />
-                {/* Use SearchBar instead of SearchBuilder */}
-                <SearchBar
-                  datasetAttributes={datasetAttributes.map(attr => attr.originalName)} // Pass only names
-                  onSearch={handleSearch} // Initial search trigger
-                  initialCriteria={searchCriteria} // Pass current criteria for display/removal
+                  />
+                  {/* Pass sorting/pagination state and handlers to ResultsDashboard */}
+                  <ResultsDashboard
+                    searchResults={searchResults} // Contains matches AND pagination data
+                    searchCriteria={searchCriteria}
+                    searchWeights={searchWeights} // Pass the weights map
+                    datasetAttributes={datasetAttributes} // Pass full attribute objects
+                    isSearching={isSearching}
+                    // Sorting Props
+                    sortBy={sortBy}
+                    sortDirection={sortDirection}
+                    onSortChange={handleSortChange}
+                    // Pagination Props
+                    currentPage={currentPage}
+                    pageSize={pageSize}
+                    paginationData={searchResults?.pagination} // Pass pagination data from results
+                    onPageChange={handlePageChange}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Analysis View */}
+             <div className={`absolute inset-6 transition-opacity duration-300 ease-in-out ${currentView === 'analysis' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+              {currentView === 'analysis' && datasetId && (
+                <DataAnalysisPage
                   datasetId={datasetId}
+                  initialQuery={analysisQuery}
+                  messages={analysisMessages}
+                  setMessages={setAnalysisMessages}
+                  setQuery={setAnalysisQuery}
+                  onCloseAnalysis={closeAnalysisView}
                   authToken={authToken}
                   handleLogout={handleLogout}
+                  // Pass down auth status and view switcher
+                  isAuthenticated={isAuthenticated}
+                  switchToAuthView={switchToAuthView}
                 />
-                {/* Pass sorting/pagination state and handlers to ResultsDashboard */}
-                <ResultsDashboard
-                  searchResults={searchResults} // Contains matches AND pagination data
-                  searchCriteria={searchCriteria}
-                  searchWeights={searchWeights} // Pass the weights map
-                  datasetAttributes={datasetAttributes} // Pass full attribute objects
-                  isSearching={isSearching}
-                  // Sorting Props
-                  sortBy={sortBy}
-                  sortDirection={sortDirection}
-                  onSortChange={handleSortChange}
-                  // Pagination Props
-                  currentPage={currentPage}
-                  pageSize={pageSize}
-                  paginationData={searchResults?.pagination} // Pass pagination data from results
-                  onPageChange={handlePageChange}
-                />
-              </div>
-            )}
-          </div>
+              )}
+            </div>
 
-          {/* Analysis View */}
-           <div className={`absolute inset-6 transition-opacity duration-300 ease-in-out ${currentView === 'analysis' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
-            {currentView === 'analysis' && datasetId && (
-              <DataAnalysisPage
-                datasetId={datasetId}
-                initialQuery={analysisQuery}
-                messages={analysisMessages}
-                setMessages={setAnalysisMessages}
-                setQuery={setAnalysisQuery}
-                onCloseAnalysis={closeAnalysisView}
-                authToken={authToken}
-                handleLogout={handleLogout}
-              />
-            )}
-          </div>
-
-        </main>
-      </div>
+          </main>
+        </div>
+      )}
     </Router>
   );
 }
