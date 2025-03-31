@@ -1,38 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import ResultsSummary from './ResultsDashboard/ResultsSummary';
 import ResultsTable from './ResultsDashboard/ResultsTable.tsx';
-import MatchBreakdown from './ResultsDashboard/MatchBreakdown';
-import ProgressBar from './ProgressBar';
-import { ArrowLeftIcon, ArrowRightIcon, ArrowsUpDownIcon, BarsArrowDownIcon, BarsArrowUpIcon } from '@heroicons/react/24/outline'; // Added icons
+// Import the new DetailsWindow component
+import DetailsWindow from './ResultsDashboard/DetailsWindow';
 
-// Accept new props for sorting and pagination
+// Updated ResultsDashboard component for new retro theme
 function ResultsDashboard({
   searchResults,
   searchCriteria,
-  datasetAttributes, // Still needed for sorting options and breakdown
+  datasetAttributes,
   isSearching,
-  // Sorting props
   sortBy,
   sortDirection,
   onSortChange,
-  // Pagination props
   currentPage,
-  pageSize, // Keep pageSize if needed for display, though often managed by parent
-  paginationData, // Contains totalItems, totalPages etc.
+  pageSize,
+  paginationData,
   onPageChange,
-  searchWeights, // Added: Receive the attribute weights map
+  searchWeights,
 }) {
-  const [selectedMatch, setSelectedMatch] = useState(null);
   const [totalMatches, setTotalMatches] = useState(0);
-  const [averageMatchPercentage, setAverageMatchPercentage] = useState(0);
-  const [highestMatch, setHighestMatch] = useState(0);
-
-  // Local state for sort controls - reflects props but allows UI interaction
   const [localSortBy, setLocalSortBy] = useState(sortBy || '');
   const [localSortDirection, setLocalSortDirection] = useState(sortDirection || 'desc');
+  const [selectedMatch, setSelectedMatch] = useState(null); // State for details window
 
-  // Update local state when props change (e.g., initial load or external update)
   useEffect(() => {
     setLocalSortBy(sortBy || '');
   }, [sortBy]);
@@ -41,49 +32,25 @@ function ResultsDashboard({
     setLocalSortDirection(sortDirection || 'desc');
   }, [sortDirection]);
 
-
   useEffect(() => {
     if (!isSearching && searchResults && !searchResults.error) {
-      const matches = Array.isArray(searchResults.matches) ? searchResults.matches : [];
-      const validMatches = matches.filter(match => typeof match?.matchPercentage === 'number');
-      const count = validMatches.length;
-      setTotalMatches(paginationData?.totalItems || count); // Use totalItems from pagination if available
-
-      if (count > 0) {
-        const sum = validMatches.reduce((acc, match) => acc + match.matchPercentage, 0);
-        setAverageMatchPercentage(sum / count);
-        setHighestMatch(validMatches.reduce((max, match) => Math.max(max, match.matchPercentage), 0));
-      } else {
-        setAverageMatchPercentage(0);
-        setHighestMatch(0);
-      }
+      setTotalMatches(paginationData?.totalItems || searchResults.matches?.length || 0);
     } else if (!isSearching) {
       setTotalMatches(0);
-      setAverageMatchPercentage(0);
-      setHighestMatch(0);
     }
-  }, [searchResults, isSearching, paginationData]); // Added paginationData dependency
-
-  const handleMatchClick = (match) => {
-    setSelectedMatch(match);
-  };
-
-  const handleCloseBreakdown = () => {
+    // Reset selected match when search results change
     setSelectedMatch(null);
-  };
+  }, [searchResults, isSearching, paginationData]);
 
-  // --- Event Handlers for Sorting/Pagination ---
   const handleLocalSortChange = (e) => {
       const { name, value } = e.target;
       if (name === 'sortBy') {
           setLocalSortBy(value);
-          // Trigger sort change immediately if direction is set, or wait for direction change
           if (localSortDirection) {
               onSortChange(value, localSortDirection);
           }
       } else if (name === 'sortDirection') {
           setLocalSortDirection(value);
-          // Trigger sort change only if sortBy is also set
           if (localSortBy) {
               onSortChange(localSortBy, value);
           }
@@ -101,62 +68,51 @@ function ResultsDashboard({
       onPageChange(currentPage + 1);
     }
   };
-  // ---
+
+  // Function to handle row click and set selected match
+  const handleMatchClick = (matchData) => {
+    console.log("Match clicked:", matchData);
+    setSelectedMatch(matchData);
+  };
+
+  // Function to close the details window
+  const handleCloseDetails = () => {
+    setSelectedMatch(null);
+  };
+
 
   const searchError = searchResults?.error;
   const resultsData = (searchResults && !searchError && Array.isArray(searchResults.matches))
     ? searchResults.matches
     : [];
 
-  // --- DEBUG LOGGING ---
-  console.log('ResultsDashboard Render:', {
-    isSearching,
-    searchError: !!searchError,
-    resultsDataLength: resultsData.length,
-    searchCriteriaExists: !!searchCriteria,
-    sortBy, sortDirection, currentPage, pageSize,
-    paginationData, // Log pagination data
-    searchResults
-  });
-  // --- END DEBUG LOGGING ---
-
   // Determine content based on state
   let resultsContent;
   if (isSearching) {
-    resultsContent = <ProgressBar />;
+    resultsContent = <p style={{ color: '#FFFF00', textAlign: 'center', margin: '20px', fontWeight: 'bold' }}><span className="blink">*** Searching Database... Please Stand By... ***</span></p>;
   } else if (searchError) {
     resultsContent = (
-      <div className="text-center py-10 text-red-600 dark:text-red-400">
-        <p className="font-semibold">An error occurred while searching:</p>
-        <p className="text-sm mt-1">{searchError}</p>
-        <p className="text-xs mt-2 text-gray-500 dark:text-gray-400">(If this persists, please check server logs or contact support.)</p>
+      <div style={{ color: 'red', border: '2px dashed red', padding: '10px', margin: '10px 0', backgroundColor: '#330000' }}>
+        <p style={{ fontWeight: 'bold', color: 'yellow' }}>!! SEARCH ERROR !!</p>
+        <p>{searchError}</p>
       </div>
     );
-  } else if (resultsData.length > 0 || (paginationData && paginationData.totalItems > 0)) { // Show controls even if current page is empty but total items > 0
+  } else if (resultsData.length > 0 || (paginationData && paginationData.totalItems > 0)) {
     resultsContent = (
-      <div className="space-y-6">
-        <ResultsSummary
-          totalMatches={totalMatches} // Use calculated totalMatches (based on paginationData if available)
-          averageMatchPercentage={averageMatchPercentage}
-          highestMatch={highestMatch}
-        />
-
+      <div>
         {/* --- Sorting and Pagination Controls --- */}
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-md border border-gray-200 dark:border-gray-600/50 shadow-sm">
-          {/* Sorting Controls */}
-          <div className="flex items-center gap-2">
-             <label htmlFor="sortBy" className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">Sort by:</label>
+        <div style={{ border: '2px groove #00FFFF', padding: '8px', margin: '10px 0', backgroundColor: '#444444', color: '#FFFFFF' }}>
+          {/* Sorting */}
+          <span style={{ marginRight: '15px' }}>
+             <label htmlFor="sortBy" style={{ marginRight: '5px', fontWeight: 'bold', color: '#FFFF00' }}>Sort by:</label>
              <select
                id="sortBy"
                name="sortBy"
                value={localSortBy}
                onChange={handleLocalSortChange}
-               className="block w-full sm:w-auto pl-3 pr-8 py-1.5 text-base border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
              >
-               <option value="">Select Attribute</option>
-               {/* Add Match Percentage as a sort option */}
+               <option value="">-- Select --</option>
                <option value="_matchPercentage">Match Score</option>
-               {/* Use originalName for value and display text, ensure unique keys */}
                {datasetAttributes && datasetAttributes.map((attr) => (
                  <option key={attr.originalName} value={attr.originalName}>
                    {attr.originalName}
@@ -168,94 +124,106 @@ function ResultsDashboard({
                name="sortDirection"
                value={localSortDirection}
                onChange={handleLocalSortChange}
-               disabled={!localSortBy} // Disable if no attribute selected
-               className="block w-auto pl-3 pr-8 py-1.5 text-base border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm disabled:opacity-50"
+               disabled={!localSortBy}
+               style={{ marginLeft: '5px' }}
              >
                <option value="desc">Descending</option>
                <option value="asc">Ascending</option>
              </select>
-             {/* Optional: Icon indicating sort direction */}
-             {localSortBy && (
-                localSortDirection === 'asc'
-                    ? <BarsArrowUpIcon className="h-5 w-5 text-gray-500 dark:text-gray-400" title="Ascending"/>
-                    : <BarsArrowDownIcon className="h-5 w-5 text-gray-500 dark:text-gray-400" title="Descending"/>
-             )}
-          </div>
-          {/* Removed redundant top pagination controls */}
+          </span>
+
+          {/* Pagination */}
+          {paginationData && paginationData.totalPages > 1 && (
+            <span style={{ marginLeft: '15px', fontSize: '11px' }}>
+              Page {currentPage} of {paginationData.totalPages} ({paginationData.totalItems.toLocaleString()} total)
+              {/* Corrected button syntax */}
+              <button onClick={handlePrevPage} disabled={currentPage <= 1} style={{ marginLeft: '10px', padding: '2px 6px', fontSize: '11px' }}>
+                &lt; Prev
+              </button>
+              <button onClick={handleNextPage} disabled={currentPage >= paginationData.totalPages} style={{ marginLeft: '5px', padding: '2px 6px', fontSize: '11px' }}>
+                Next &gt;
+              </button>
+            </span>
+          )}
         </div>
         {/* --- End Controls --- */}
 
-
+        {/* Pass handleMatchClick to ResultsTable */}
         <ResultsTable
           results={resultsData}
           datasetAttributes={datasetAttributes}
-          onMatchClick={handleMatchClick}
-          // Pass sort info for potential header highlighting
-          sortBy={localSortBy}
-          sortDirection={localSortDirection}
+          onMatchClick={handleMatchClick} // Pass the handler
         />
 
-        {/* Removed redundant pagination controls previously rendered here */}
+        {/* Bottom Pagination */}
+         {paginationData && paginationData.totalPages > 1 && (
+            <div style={{ border: '2px groove #00FFFF', padding: '8px', margin: '10px 0', backgroundColor: '#444444', color: '#FFFFFF', textAlign: 'center' }}>
+              Page {currentPage} of {paginationData.totalPages}
+              {/* Corrected button syntax */}
+              <button onClick={handlePrevPage} disabled={currentPage <= 1} style={{ marginLeft: '10px', padding: '2px 6px', fontSize: '11px' }}>
+                &lt; Prev
+              </button>
+              <button onClick={handleNextPage} disabled={currentPage >= paginationData.totalPages} style={{ marginLeft: '5px', padding: '2px 6px', fontSize: '11px' }}>
+                Next &gt;
+              </button>
+            </div>
+          )}
 
       </div>
     );
   } else {
-    // No results or initial state
     resultsContent = (
-      <div className="text-center py-10 text-gray-500 dark:text-gray-400">
-        {searchCriteria && searchCriteria.length > 0 ? 'No matches found for the current criteria.' : 'Perform a search to see results.'}
+      <div style={{ textAlign: 'center', margin: '20px 0', color: '#CCCCCC', fontStyle: 'italic' }}>
+        {searchCriteria && searchCriteria.length > 0 ? 'No matches found. Try different criteria!' : 'Perform a search to see results here.'}
       </div>
     );
   }
 
 
   return (
-    <div className="p-5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-md transition-all duration-300 ease-in-out min-h-[200px]"> {/* Standard background */}
-      <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100">Results Dashboard</h2>
+    <div className="content-cell" style={{ marginTop: '15px', position: 'relative' /* Needed for positioning the details window */ }}>
+      <h2 className="form-title" style={{ color: '#00FF00', textShadow: '1px 1px #FF00FF' }}>Results Dashboard</h2>
+      <hr />
 
-      {/* Display Search Criteria - Updated to show operator */}
+      {/* Display Search Criteria */}
       {searchCriteria && searchCriteria.length > 0 && (
-        <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700/60 rounded-md border border-gray-200/80 dark:border-gray-600/40 shadow-sm">
-          <h3 className="text-md font-semibold mb-1.5 text-gray-700 dark:text-gray-200">Active Search Criteria:</h3>
-          <ul className="flex flex-wrap gap-1.5">
+        <div style={{ margin: '10px 0', padding: '5px', border: '1px dashed #FFFF00', backgroundColor: '#000033', color: '#FFFFFF' }}>
+          <b style={{ color: '#FFFF00' }}>Active Criteria:</b>
+          <ul style={{ listStyleType: 'none', padding: 0, margin: '5px 0 0 0' }}>
             {searchCriteria.map((criteria, index) => (
-              <li key={index} className="inline-flex items-center bg-indigo-100 dark:bg-gray-600 border border-indigo-200 dark:border-gray-500 rounded-full px-2.5 py-0.5 text-xs font-medium text-indigo-800 dark:text-gray-100 shadow-sm">
-                {/* Look up weight from the searchWeights map using the attribute name */}
-                {criteria.attribute} <strong className="mx-1">{criteria.operator}</strong> {String(criteria.value)} (W: {searchWeights?.[criteria.attribute] ?? 'N/A'})
+              <li key={index} style={{ display: 'inline-block', border: '1px solid #00FFFF', borderRadius: '3px', padding: '2px 6px', margin: '2px', fontSize: '11px', backgroundColor: '#000080' }}>
+                <span style={{ color: '#00FF00' }}>{criteria.attribute}</span>{' '}
+                <span style={{ color: '#FF00FF' }}>{criteria.operator}</span>{' '}
+                <span style={{ color: '#FFFFFF' }}>{String(criteria.value)}</span>{' '}
+                <span style={{ color: '#CCCCCC' }}>(W: {searchWeights?.[criteria.attribute] ?? 'N/A'})</span>
               </li>
             ))}
           </ul>
         </div>
       )}
 
-      {/* Render the determined content */}
+      {/* Render the results content */}
       {resultsContent}
 
-      {/* Match Breakdown Modal */}
+      {/* Conditionally render the Details Window */}
+      {/*
       {selectedMatch && (
-        <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-[1000] transition-opacity duration-300 ease-out" // Added overlay
-          onClick={handleCloseBreakdown}
-        >
-          <div
-            className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-11/12 max-w-3xl max-h-[90vh] overflow-y-auto transition-all duration-300 ease-out border border-gray-300 dark:border-gray-700" // Standard modal style
-            onClick={(e) => e.stopPropagation()}
-          >
-            <MatchBreakdown
-                match={selectedMatch}
-                datasetAttributes={datasetAttributes}
-            />
-            <div className="flex justify-end mt-4">
-              <button
-                onClick={handleCloseBreakdown}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100 font-semibold border border-gray-300 dark:border-gray-500 rounded-md shadow-sm hover:shadow-md transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-gray-400 dark:focus:ring-offset-gray-800"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+        <DetailsWindow
+          matchData={selectedMatch}
+          datasetAttributes={datasetAttributes} // Pass attributes for display context
+          onClose={handleCloseDetails}
+        />
       )}
+      */}
+      {/* Render the actual DetailsWindow */}
+       {selectedMatch && (
+         <DetailsWindow
+           matchData={selectedMatch}
+           datasetAttributes={datasetAttributes} // Ensure datasetAttributes is passed
+           onClose={handleCloseDetails}
+         />
+       )}
+
     </div>
   )
 }
@@ -265,7 +233,6 @@ ResultsDashboard.propTypes = {
   searchResults: PropTypes.shape({
     matches: PropTypes.array,
     error: PropTypes.string,
-    // Include pagination shape if available from backend
     pagination: PropTypes.shape({
         currentPage: PropTypes.number,
         pageSize: PropTypes.number,
@@ -273,44 +240,34 @@ ResultsDashboard.propTypes = {
         totalPages: PropTypes.number,
     }),
   }),
-  searchCriteria: PropTypes.arrayOf(PropTypes.shape({
-    attribute: PropTypes.string.isRequired,
-    operator: PropTypes.string.isRequired,
-    value: PropTypes.any.isRequired,
-    weight: PropTypes.number,
-  })),
+  searchCriteria: PropTypes.array,
   datasetAttributes: PropTypes.arrayOf(PropTypes.shape({
       originalName: PropTypes.string.isRequired,
-      sanitizedName: PropTypes.string.isRequired,
-      type: PropTypes.string, // Added type if available
-  })).isRequired, // Make datasetAttributes required
+  })).isRequired,
   isSearching: PropTypes.bool,
-  // Sorting props
   sortBy: PropTypes.string,
   sortDirection: PropTypes.oneOf(['asc', 'desc']),
-  onSortChange: PropTypes.func.isRequired, // Required handler
-  // Pagination props
-  currentPage: PropTypes.number.isRequired, // Required
-  pageSize: PropTypes.number.isRequired,    // Required
+  onSortChange: PropTypes.func.isRequired,
+  currentPage: PropTypes.number.isRequired,
+  pageSize: PropTypes.number.isRequired,
   paginationData: PropTypes.shape({
     currentPage: PropTypes.number,
     pageSize: PropTypes.number,
     totalItems: PropTypes.number,
     totalPages: PropTypes.number,
   }),
-  onPageChange: PropTypes.func.isRequired, // Required handler
-  searchWeights: PropTypes.object, // Added: PropType for weights map
+  onPageChange: PropTypes.func.isRequired,
+  searchWeights: PropTypes.object,
 };
 
 ResultsDashboard.defaultProps = {
   searchResults: { matches: [], error: null, pagination: null },
   searchCriteria: [],
   isSearching: false,
-  sortBy: '', // Default sort
-  sortDirection: 'desc', // Default direction
-  // currentPage, pageSize, onSortChange, onPageChange are required, no defaults
+  sortBy: '',
+  sortDirection: 'desc',
   paginationData: null,
-  searchWeights: {}, // Added: Default prop for weights
+  searchWeights: {},
 };
 
 

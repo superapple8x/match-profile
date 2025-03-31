@@ -1,21 +1,229 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* --- 90s/00s Maximalist Styles --- */
 
-@layer base {
-  html, body, #root {
-    @apply h-full; /* Ensure root elements fill the height */
-  }
-
-  body {
-    /* Apply base background matching the gradient edges */
-    /* Light: to-indigo-100, Dark: to-gray-950 */
-    @apply bg-indigo-100 dark:bg-gray-950;
-    /* Apply base text color (Tailwind does this, but explicit doesn't hurt) */
-    @apply text-gray-900 dark:text-gray-100;
-  }
-
-  button, a, input, select, textarea {
-    @apply transition-colors duration-200 ease-in-out;
-  }
+/* Tiled background using CSS gradients for a retro pattern */
+body {
+  font-family: Arial, Helvetica, sans-serif; /* Default font */
+  font-size: 12px;
+  /* Repeating radial gradient for a 'space' or 'techno' feel */
+  background-color: #000033; /* Dark blue fallback */
+  background-image: repeating-radial-gradient(circle at 0 0, transparent 0, #000044 10px),
+                    repeating-linear-gradient(#003366, #004488);
+  background-size: 10px 10px, 100% 100%; /* Control pattern size */
+  color: #FFFFFF; /* Default white text on dark bg */
+  margin: 0;
+  padding: 15px; /* Padding around the main table */
 }
+
+/* Main container table - applied to #root > table in App.jsx */
+/* .main-container-table { ... } */ /* Style applied directly in App.jsx for now */
+
+/* Header cell style (can be applied where needed) */
+.header-cell {
+  background-color: #C0C0C0; /* Silver header background */
+  padding: 10px;
+  border-bottom: 3px double #000000; /* Double black border */
+  text-align: center;
+  color: #000000; /* Black text for header */
+}
+
+/* Main title style (can be applied where needed) */
+.main-title {
+  font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif; /* Classic chunky font */
+  font-size: 32px; /* BIG */
+  color: #FF00FF; /* Bright Magenta */
+  letter-spacing: 2px;
+  text-shadow: 2px 2px #00FFFF; /* Cyan shadow */
+  margin: 0;
+}
+
+/* Blinking text effect */
+@keyframes blink {
+  0% { opacity: 1; }
+  49% { opacity: 1; }
+  50% { opacity: 0; }
+  100% { opacity: 0; }
+}
+.blink {
+  animation: blink 1s linear infinite;
+  font-weight: bold;
+  color: #FFFF00; /* Blinking yellow */
+}
+
+/* Horizontal rule styling */
+hr {
+  height: 3px;
+  border: none;
+  background-color: #00FF00; /* Lime green */
+  color: #00FF00; /* For older IE */
+  margin: 10px 0;
+}
+
+/* Tab area styling using table cells */
+.tabs-table {
+  width: 100%;
+  border-collapse: collapse; /* Remove spacing between cells */
+  margin-bottom: 10px;
+  background-color: #444444; /* Dark gray tab background */
+}
+.tab-button-cell {
+  border: 2px outset #888888;
+  padding: 8px;
+  text-align: center;
+  cursor: pointer;
+  font-weight: bold;
+  color: #FFFFFF;
+  background-color: #666666; /* Default tab color */
+}
+.tab-button-cell.active {
+  border-style: inset;
+  background-color: #0055AA; /* Brighter blue for active tab */
+  color: #FFFF00; /* Yellow text for active tab */
+}
+.tab-button-cell:hover {
+   background-color: #888888; /* Simple hover effect */
+}
+
+/* Content area */
+.content-cell {
+  padding: 15px;
+  background-color: #EEEEEE; /* Light gray content background */
+  color: #000000; /* Black text for content */
+  border-top: 3px groove #FF0000; /* Red groove border */
+}
+
+/* Form styling */
+.form-title {
+  font-family: "Comic Sans MS", cursive, sans-serif; /* The infamous Comic Sans */
+  font-size: 20px;
+  color: #FF0000; /* Red heading */
+  margin-top: 0;
+  margin-bottom: 15px;
+  text-align: center;
+  font-weight: bold;
+}
+
+.form-table {
+  margin: 0 auto; /* Center form table */
+  background-color: #D0D0D0; /* Slightly darker gray for form bg */
+  padding: 10px;
+  border: 1px solid #000000;
+}
+.form-table td {
+ padding: 5px;
+}
+.form-table label {
+  font-weight: bold;
+  color: #000080; /* Navy label text */
+  font-size: 13px; /* Slightly larger label */
+}
+input[type="text"],
+input[type="password"],
+input[type="email"] { /* Added email */
+  width: 180px; /* Default width */
+  padding: 3px;
+  border: 1px solid #000000; /* Simple black border */
+  font-size: 12px;
+  background-color: #FFFFFF;
+  color: #000000;
+  margin-left: 5px; /* Space from label */
+  box-sizing: border-box; /* Include padding/border in width */
+}
+
+/* General Input styling (override for specific types above) */
+input, select, textarea, button {
+    font-family: Arial, Helvetica, sans-serif; /* Consistent font */
+    font-size: 12px;
+    border: 2px outset #888888; /* Default outset border */
+    background-color: #C0C0C0; /* Default silver background */
+    color: #000000; /* Default black text */
+    padding: 3px 5px; /* Default padding */
+}
+input:active, select:active, textarea:active, button:active {
+    border-style: inset; /* Inset border when active */
+}
+input[disabled], select[disabled], textarea[disabled], button[disabled] {
+    color: #666666; /* Gray text when disabled */
+    background-color: #AAAAAA;
+    cursor: not-allowed;
+}
+
+
+/* Buttons - more colorful! */
+.button {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 14px; /* Larger button text */
+  font-weight: bold;
+  padding: 6px 18px;
+  background-color: #00FF00; /* LIME GREEN button */
+  border: 3px outset #00AA00; /* Darker green border */
+  cursor: pointer;
+  color: #000000; /* Black text */
+}
+.button:active {
+  border-style: inset;
+  background-color: #00DD00; /* Slightly lighter green when pressed */
+}
+.button-register { /* Different color for register */
+   background-color: #FF00FF; /* MAGENTA button */
+   border-color: #AA00AA;
+}
+ .button-register:active {
+   background-color: #DD00DD;
+ }
+
+/* Links */
+a {
+  color: #00FFFF; /* Cyan links */
+  text-decoration: underline;
+  font-weight: bold;
+}
+a:visited {
+  color: #FF00FF; /* Magenta visited links */
+}
+a:hover {
+  color: #FFFF00; /* Yellow hover */
+}
+
+/* Fake Hit Counter / Banner */
+.fake-graphic {
+  border: 1px dashed #FFFF00;
+  padding: 5px;
+  margin-top: 15px;
+  text-align: center;
+  font-family: monospace;
+  font-size: 10px;
+  color: #CCCCCC;
+  background-color: #222222;
+}
+
+/* Hide inactive tab content */
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+.center-align { text-align: center; padding-top: 10px; }
+.small-text { font-size: 11px; color: #333333; text-align: center; margin-top: 15px; }
+
+/* Basic table styling (overrides previous simple one) */
+table {
+  border-collapse: collapse; /* Collapse borders by default */
+  border: 1px solid #808080; /* Default simple border */
+  background-color: #FFFFFF; /* Default white background */
+  color: #000000; /* Default black text */
+  font-size: 12px; /* Match body font size */
+  margin-bottom: 10px; /* Space below tables */
+}
+
+th, td {
+  border: 1px solid #808080; /* Default cell borders */
+  padding: 4px;
+  text-align: left;
+  vertical-align: top; /* Align top by default */
+}
+
+th {
+  background-color: #C0C0C0; /* Silver header */
+  font-weight: bold;
+  color: #000000;
+}
+
+/* --- End 90s/00s Maximalist Styles --- */

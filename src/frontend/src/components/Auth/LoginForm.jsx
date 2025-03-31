@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 
+// Refactored LoginForm to match the provided HTML structure/classes
 function LoginForm({ onLoginSuccess, onSwitchToRegister }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -8,7 +9,7 @@ function LoginForm({ onLoginSuccess, onSwitchToRegister }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(''); // Clear previous errors
+    setError('');
      if (!username || !password) {
         setError('Username and password are required.');
         return;
@@ -25,17 +26,14 @@ function LoginForm({ onLoginSuccess, onSwitchToRegister }) {
       const data = await response.json();
 
       if (!response.ok) {
-        // Use message from backend if available, otherwise construct one
         throw new Error(data.message || `Login failed. Status: ${response.status}`);
       }
 
       console.log('Login successful, token:', data.token);
-      // Store the token (e.g., in localStorage or context)
-      localStorage.setItem('authToken', data.token); // Example: using localStorage
+      localStorage.setItem('authToken', data.token);
 
-      // Call the success handler passed via props
       if (onLoginSuccess) {
-        onLoginSuccess(data.token); // Pass token up
+        onLoginSuccess(data.token);
       }
 
     } catch (err) {
@@ -46,51 +44,68 @@ function LoginForm({ onLoginSuccess, onSwitchToRegister }) {
     }
   };
 
-   // Basic form styling (can be enhanced with Tailwind)
-  const inputStyle = "w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white";
-  const buttonStyle = `w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${isLoading ? 'bg-indigo-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'} dark:focus:ring-offset-gray-800`;
-  const labelStyle = "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1";
-
-
   return (
-    <div className="max-w-md mx-auto mt-8 p-6 bg-white dark:bg-gray-800 rounded-lg shadow-md">
-      <h2 className="text-2xl font-bold text-center text-gray-900 dark:text-white mb-6">Login</h2>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-        <div>
-          <label htmlFor="login-username" className={labelStyle}>Username</label>
-          <input
-            type="text"
-            id="login-username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-            className={inputStyle}
-            disabled={isLoading}
-          />
-        </div>
-        <div>
-          <label htmlFor="login-password" className={labelStyle}>Password</label>
-          <input
-            type="password"
-            id="login-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            className={inputStyle}
-            disabled={isLoading}
-          />
-        </div>
-        <button type="submit" className={buttonStyle} disabled={isLoading}>
-          {isLoading ? 'Logging in...' : 'Login'}
-        </button>
+    // Container div matches the structure in AuthView
+    <div>
+      <h2 className="form-title">-- Enter the Member Zone --</h2>
+      {error && <p style={{ color: 'red', fontSize: '0.9em', textAlign: 'center', marginBottom: '10px' }}>{error}</p>}
+      <form onSubmit={handleSubmit} name="loginForm">
+         <table className="form-table" align="center">
+             <tbody>
+                 <tr>
+                     <td><label htmlFor="login-user">Login Name:</label></td>
+                     <td>
+                         <input
+                            type="text"
+                            id="login-user"
+                            name="username" // Added name attribute
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                            required
+                            disabled={isLoading}
+                            // size="20" // Size attribute is less common in React, handled by CSS/input style
+                         />
+                     </td>
+                 </tr>
+                 <tr>
+                     <td><label htmlFor="login-pass">Password:</label></td>
+                     <td>
+                         <input
+                            type="password"
+                            id="login-pass"
+                            name="password" // Added name attribute
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                            disabled={isLoading}
+                            // size="20"
+                         />
+                     </td>
+                 </tr>
+                 <tr>
+                     <td colSpan="2" className="center-align">
+                         <button type="submit" className="button" disabled={isLoading}>
+                            {isLoading ? 'Logging in...' : 'GO!'}
+                         </button>
+                     </td>
+                 </tr>
+                 <tr>
+                     <td colSpan="2" style={{ textAlign: 'center', paddingTop: '10px' }}>
+                         {/* Using a simple link for now, functionality can be added later */}
+                         <a href="#">Forgot Password?! Click Here!</a>
+                     </td>
+                 </tr>
+             </tbody>
+         </table>
+           <p className="small-text">
+              Need an account?{' '}
+              {/* Use a link/button styled element to trigger the switch */}
+              <a href="#" onClick={(e) => { e.preventDefault(); onSwitchToRegister(); }}>
+                Sign Up NOW!
+              </a>
+           </p>
       </form>
-       <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
-        Don't have an account?{' '}
-        <button onClick={onSwitchToRegister} className="font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300">
-          Register
-        </button>
-      </p>
+      {/* Fake graphic moved to AuthView */}
     </div>
   );
 }

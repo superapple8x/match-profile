@@ -1,80 +1,126 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BrowserRouter as Router } from 'react-router-dom';
 import FileImport from './components/FileImport';
-// import SearchBuilder from './components/SearchBuilder'; // Replaced
-import SearchBar from './components/SearchBar'; // Use updated SearchBar
+import SearchBar from './components/SearchBar';
 import ResultsDashboard from './components/ResultsDashboard';
 import SavedSessions from './components/SavedSessions';
 import DataOverview from './components/DataOverview';
 import DataAnalysisPage from './components/ResultsDashboard/DataAnalysisPage';
 import LoginForm from './components/Auth/LoginForm';
 import RegisterForm from './components/Auth/RegisterForm';
-import { UserCircleIcon } from '@heroicons/react/24/solid'; // Added for Login button
-import {
-  ArrowLeftIcon, ChatBubbleLeftRightIcon, SunIcon, MoonIcon, ArrowRightOnRectangleIcon,
-  ChevronDoubleLeftIcon, ChevronDoubleRightIcon, Bars3Icon
-} from '@heroicons/react/24/outline';
-
 
 // Constants
-const DEFAULT_PAGE_SIZE = 10; // Default number of results per page
+const DEFAULT_PAGE_SIZE = 10;
 
-// Welcome Message Component (remains the same)
+// Welcome Message Component (Remains the same simplified version)
 function WelcomeMessage() {
   return (
-    <div className="flex items-center justify-center h-full text-center px-6">
-      <div>
-        <h2 className="text-2xl font-semibold text-gray-600 dark:text-gray-400 mb-4">
-          Upload a File to Begin
-        </h2>
-        <p className="text-gray-500 dark:text-gray-500">
-          Select a dataset using the panel on the left to start searching or analyzing.
-        </p>
-      </div>
+    <div style={{ textAlign: 'center', padding: '20px' }}>
+      <h2>Upload a File to Begin</h2>
+      <p>Select a dataset using the panel on the left to start searching or analyzing.</p>
     </div>
   );
 }
 
-// Auth View Component (Updated to accept switchToAppView)
-function AuthView({ onLoginSuccess, switchToAppView }) { // Accept switchToAppView
-    const [view, setView] = useState('login');
-    const switchToRegister = () => setView('register');
-    const switchToLogin = () => setView('login');
+// Auth View Component (Rebuilt to match the provided HTML structure)
+function AuthView({ onLoginSuccess, switchToAppView }) { // Keep switchToAppView for potential future use, though not in current design
+    const [activeTab, setActiveTab] = useState('login'); // 'login' or 'register'
+
+    const showTab = (tabName) => {
+        setActiveTab(tabName);
+    };
+
+    // Get current date/time for the footer
+    const getCurrentDateTime = () => {
+        const now = new Date();
+        // Example format, adjust as needed
+        return now.toLocaleString('en-US', {
+            weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+            hour: 'numeric', minute: 'numeric', second: 'numeric', timeZoneName: 'short'
+        });
+    };
+
     return (
-        // Added flex-col for layout with back button
-        <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-gray-800 dark:to-gray-950 relative">
-             {/* Add Back to App Button */}
-             <button
-                 onClick={switchToAppView}
-                 className="absolute top-4 left-4 text-sm text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-200 flex items-center z-10 p-2 rounded-md hover:bg-indigo-100 dark:hover:bg-gray-700 transition-colors" // Example styling
-                 aria-label="Back to application"
-             >
-                 <ArrowLeftIcon className="h-4 w-4 mr-1" /> Back to App
-             </button>
-            {view === 'login' ? (
-                <LoginForm
-                    onLoginSuccess={onLoginSuccess}
-                    onSwitchToRegister={switchToRegister}
-                    // No need to pass switchToAppView down further if handled here
-                />
-            ) : (
-                <RegisterForm
-                    onRegisterSuccess={switchToLogin} // Register success switches to login view
-                    onSwitchToLogin={switchToLogin}
-                    // No need to pass switchToAppView down further if handled here
-                />
-            )}
-        </div>
+        // Mimic the HTML structure using JSX and CSS classes from index.css
+        <table className="main-container-table" cellPadding="0" cellSpacing="0">
+            <tbody>
+                <tr>
+                    <td className="header-cell">
+                        <h1 className="main-title">Web Portal Access</h1>
+                        <span style={{ color: '#FF0000', fontWeight: 'bold' }}>Your Gateway to the Information Superhighway!</span>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <table className="tabs-table" cellPadding="0" cellSpacing="0">
+                            <tbody>
+                                <tr>
+                                    <td
+                                        id="login-tab-button"
+                                        className={`tab-button-cell ${activeTab === 'login' ? 'active' : ''}`}
+                                        onClick={() => showTab('login')}
+                                    >
+                                        &gt;&gt; Member Login &lt;&lt;
+                                    </td>
+                                    <td
+                                        id="register-tab-button"
+                                        className={`tab-button-cell ${activeTab === 'register' ? 'active' : ''}`}
+                                        onClick={() => showTab('register')}
+                                    >
+                                       Join the <span className="blink">FUN!</span> Register!
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </td>
+                </tr>
+                <tr>
+                    <td className="content-cell">
+                        {/* Login Tab Content */}
+                        <div id="login-tab" className={`tab-content ${activeTab === 'login' ? 'active' : ''}`}>
+                            {/* LoginForm component expects onLoginSuccess and onSwitchToRegister */}
+                            <LoginForm
+                                onLoginSuccess={onLoginSuccess}
+                                onSwitchToRegister={() => showTab('register')} // Use showTab to switch
+                            />
+                             <hr />
+                             <div className="fake-graphic">
+                                 ** Site Optimized for Netscape Navigator 4.0+ ** <br />
+                                 Best Viewed at 800x600 Resolution
+                             </div>
+                        </div>
+
+                        {/* Register Tab Content */}
+                        <div id="register-tab" className={`tab-content ${activeTab === 'register' ? 'active' : ''}`}>
+                             {/* RegisterForm component expects onRegisterSuccess and onSwitchToLogin */}
+                             <RegisterForm
+                                onRegisterSuccess={() => showTab('login')} // Switch to login on success
+                                onSwitchToLogin={() => showTab('login')} // Use showTab to switch
+                             />
+                            <hr />
+                             <div className="fake-graphic">
+                                 Your IP: 192.168.1.100 | Hits Today: 00001234 <br />
+                                 (c) 1999-2001 MegaWeb Corp.
+                             </div>
+                        </div>
+                    </td>
+                </tr>
+                 <tr>
+                     <td style={{ textAlign: 'center', padding: '5px', fontSize: '10px', color: '#AAAAAA', borderTop: '1px solid #FFFF00' }}>
+                         This page was last updated: {getCurrentDateTime()}. Wow!
+                     </td>
+                 </tr>
+            </tbody>
+        </table>
     );
 }
 
 
 function App() {
-  const prefersDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const [darkMode, setDarkMode] = useState(prefersDarkMode);
-  const [searchResults, setSearchResults] = useState(null); // Will contain { matches: [], pagination: {}, error: null }
-  const [searchCriteria, setSearchCriteria] = useState(null); // Array of criteria objects
-  const [searchWeights, setSearchWeights] = useState({}); // Object for per-attribute weights
+  // Removed dark mode state
+  const [searchResults, setSearchResults] = useState(null);
+  const [searchCriteria, setSearchCriteria] = useState(null);
+  const [searchWeights, setSearchWeights] = useState({});
   const [isSearching, setIsSearching] = useState(false);
   const [datasetId, setDatasetId] = useState(null);
   const [datasetAttributes, setDatasetAttributes] = useState([]);
@@ -93,45 +139,21 @@ function App() {
   const switchToAuthView = () => setViewMode('auth');
   const switchToAppView = () => setViewMode('app');
 
-  // --- Sidebar State ---
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(256);
-  const [isResizing, setIsResizing] = useState(false);
-  const sidebarRef = useRef(null);
+  // Removed Sidebar State
 
   // --- Sorting & Pagination State ---
-  const [sortBy, setSortBy] = useState(''); // Default: No sort (or maybe '_matchPercentage'?)
-  const [sortDirection, setSortDirection] = useState('desc'); // Default direction
+  const [sortBy, setSortBy] = useState('');
+  const [sortDirection, setSortDirection] = useState('desc');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const isInitialSearchTrigger = useRef(false); // Ref to prevent effect trigger on initial search
+  const isInitialSearchTrigger = useRef(false);
 
   // --- Effects ---
 
-  // Dark mode effect (remains the same)
-  useEffect(() => {
-    const body = document.body;
-    const bodyClassList = body.classList;
-    if (darkMode) {
-      bodyClassList.add('dark');
-    } else {
-      bodyClassList.remove('dark');
-    }
-    body.style.color = darkMode ? 'rgb(243 244 246)' : 'rgb(17 24 39)';
-    body.style.backgroundColor = '';
-    body.style.height = '';
-    body.style.overflow = '';
-    document.documentElement.style.height = '';
-    body.style.transition = 'color 0.3s ease-in-out';
-    return () => {
-        bodyClassList.remove('dark');
-        body.style.color = '';
-    }
-  }, [darkMode]);
+  // Removed Dark mode effect
 
-  // View switching effect (works for anonymous users)
+  // View switching effect (simplified)
   useEffect(() => {
-    // NOTE: Removed isAuthenticated check from condition and dependency array
     if (isAnalysisViewOpen) {
       setCurrentView('analysis');
     } else if (datasetId) {
@@ -139,9 +161,9 @@ function App() {
     } else {
       setCurrentView('welcome');
     }
-  }, [isAnalysisViewOpen, datasetId]); // Removed isAuthenticated from dependencies
+  }, [isAnalysisViewOpen, datasetId]);
 
-  // Use useCallback for handleLogout as it's passed down
+  // Logout Handler (Simplified)
   const handleLogout = useCallback(() => {
     localStorage.removeItem('authToken');
     setAuthToken(null);
@@ -160,49 +182,39 @@ function App() {
     setAnalysisMessages([]);
     setAnalysisQuery('');
     console.log('User logged out.');
-  }, []); // No dependencies needed if it only uses setters
+    // Optionally switch to auth view on logout
+    // switchToAuthView();
+  }, []);
 
 
-  // --- Search Trigger Function --- (Updated to accept weights)
+  // --- Search Trigger Function --- (Logic remains similar, headers simplified)
   const triggerSearch = useCallback(async (criteria, weights, page, size, sortCol, sortDir) => {
-    // Use the criteria passed directly, don't rely on state here as it might not be updated yet
     if (!datasetId || !criteria || criteria.length === 0) {
-        console.log("Search trigger skipped: No dataset ID or criteria provided to function.");
-        setIsSearching(false); // Ensure searching state is off
-        // Clear results if criteria are cleared but dataset exists
+        console.log("Search trigger skipped: No dataset ID or criteria provided.");
+        setIsSearching(false);
         if (datasetId && (!criteria || criteria.length === 0)) {
             setSearchResults(null);
-            setSearchCriteria(null); // Ensure criteria state is also null
+            setSearchCriteria(null);
         }
         return;
     }
 
     console.log(`Triggering search: Page=${page}, Size=${size}, Sort=${sortCol}@${sortDir}`, criteria);
     setIsSearching(true);
-    // Keep existing criteria, but clear results for new fetch
-    setSearchCriteria(criteria); // Ensure criteria state is set
-    // setSearchResults(prev => ({ ...prev, matches: [], error: null })); // Clear matches/error, keep pagination? Maybe clear all. Let's clear all for now.
-    setSearchResults(null); // Clear previous results entirely
+    setSearchCriteria(criteria);
+    setSearchResults(null); // Clear previous results
 
-    // Remove redundant weights calculation - weights are now passed in
-    // const weights = {};
-    const matchingRules = {}; // Keep matchingRules calculation for now, could be externalized later
+    const matchingRules = {};
     criteria.forEach(criterion => {
-      // Use originalName for matching rules if available, otherwise fallback to attribute
       const attributeName = datasetAttributes.find(a => a.originalName === criterion.attribute)?.originalName || criterion.attribute;
-      // weights[attributeName] = criterion.weight || 5; // Removed - use passed-in weights
-      // Define matchingRules (same logic as before, using attributeName)
       if (attributeName === 'Age') {
         matchingRules[attributeName] = { type: 'range', tolerance: 5 };
-      } else if (['Gender', 'Platform', 'Video Category', 'Debt', 'Owns Property'].includes(attributeName)) { // Added boolean fields
+      } else if (['Gender', 'Platform', 'Video Category', 'Debt', 'Owns Property'].includes(attributeName)) {
         matchingRules[attributeName] = { type: 'exact' };
       } else {
-        // Defaulting others to partial might not be ideal for all cases (e.g., numeric IDs)
-        // Consider adding more specific rules or making it configurable
-        matchingRules[attributeName] = { type: 'partial' }; // Use attributeName here too
+        matchingRules[attributeName] = { type: 'partial' };
       }
     });
-
 
     const headers = {
         'Content-Type': 'application/json',
@@ -211,15 +223,14 @@ function App() {
         headers['Authorization'] = `Bearer ${authToken}`;
     }
 
-    // Construct query parameters for pagination and sorting
     const queryParams = new URLSearchParams({
         page: page.toString(),
         pageSize: size.toString(),
     });
     if (sortCol) {
-        // Use sanitized name if available for sorting, otherwise original name
-        const sortAttribute = datasetAttributes.find(a => a.originalName === sortCol)?.sanitizedName || sortCol;
-        queryParams.append('sortBy', sortAttribute); // Send potentially sanitized name to backend
+        // Use original name for sorting as sanitizedName might not exist in simplified attributes
+        const sortAttribute = datasetAttributes.find(a => a.originalName === sortCol)?.originalName || sortCol;
+        queryParams.append('sortBy', sortAttribute);
         queryParams.append('sortDirection', sortDir);
     }
 
@@ -229,99 +240,56 @@ function App() {
             headers: headers,
             body: JSON.stringify({
                 datasetId: datasetId,
-                criteria: criteria, // Send the criteria array
-                matchingRules, // Rules based on original names (can be refined later)
-                weights: weights, // Send the weights object received as parameter
+                criteria: criteria,
+                matchingRules,
+                weights: weights,
             }),
         });
 
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({})); // Try to get error details
+            const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
         }
 
         const data = await response.json();
         console.log('Search results received:', data);
-        // Expect data to be { matches: [...], pagination: { currentPage, pageSize, totalItems, totalPages } }
         setSearchResults(data);
 
     } catch (error) {
         console.error('Search error:', error);
-        setSearchResults({ matches: [], pagination: null, error: error.message }); // Set error state
+        setSearchResults({ matches: [], pagination: null, error: error.message });
         if (error.message.includes('401') || error.message.includes('403')) {
-            handleLogout(); // Use useCallback version
+            handleLogout();
         }
     } finally {
         setIsSearching(false);
-        isInitialSearchTrigger.current = false; // Reset flag after search completes/fails
+        isInitialSearchTrigger.current = false;
     }
-  }, [datasetId, authToken, handleLogout, datasetAttributes]); // Added handleLogout, datasetAttributes
+  }, [datasetId, authToken, handleLogout, datasetAttributes]);
 
 
-  // --- Effect for Sorting/Pagination Changes ---
+  // --- Effect for Sorting/Pagination Changes --- (Logic remains same)
   useEffect(() => {
-    // Prevent triggering on initial mount or if initial search hasn't happened yet
-    // Also prevent if currently searching
     if (!searchCriteria || isInitialSearchTrigger.current || isSearching) {
         return;
     }
-    // Trigger search only if criteria exist and it's not the initial search call
-    // Pass the current searchWeights state here
     triggerSearch(searchCriteria, searchWeights, currentPage, pageSize, sortBy, sortDirection);
-
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, pageSize, sortBy, sortDirection]); // Exclude searchCriteria, triggerSearch to avoid loops on criteria/function identity change
+  }, [currentPage, pageSize, sortBy, sortDirection]);
 
 
   // --- Handlers ---
 
-  const toggleDarkMode = () => setDarkMode(!darkMode);
+  // Removed Dark Mode Toggle
+  // Removed Sidebar Handlers
 
-  // Sidebar Handlers (remain the same)
-  const toggleSidebarCollapse = () => {
-    const collapsed = !isSidebarCollapsed;
-    setIsSidebarCollapsed(collapsed);
-    setSidebarWidth(collapsed ? 80 : 256);
-  };
-  const ensureSidebarExpanded = () => {
-      if (isSidebarCollapsed) {
-          setIsSidebarCollapsed(false);
-          setSidebarWidth(256);
-      }
-  };
-  const startResizing = useCallback((mouseDownEvent) => {
-    if (isSidebarCollapsed) return;
-    setIsResizing(true);
-  }, [isSidebarCollapsed]);
-  const stopResizing = useCallback(() => setIsResizing(false), []);
-  const resize = useCallback((mouseMoveEvent) => {
-      if (isResizing && sidebarRef.current) {
-        const newWidth = mouseMoveEvent.clientX - sidebarRef.current.getBoundingClientRect().left;
-        const constrainedWidth = Math.max(80, Math.min(newWidth, 512));
-        setSidebarWidth(constrainedWidth);
-        if (constrainedWidth <= 100 && !isSidebarCollapsed) {
-            setIsSidebarCollapsed(true);
-        } else if (constrainedWidth > 100 && isSidebarCollapsed) {
-            setIsSidebarCollapsed(false);
-        }
-      }
-    }, [isResizing, isSidebarCollapsed]);
-  useEffect(() => {
-    window.addEventListener("mousemove", resize);
-    window.addEventListener("mouseup", stopResizing);
-    return () => {
-      window.removeEventListener("mousemove", resize);
-      window.removeEventListener("mouseup", stopResizing);
-    };
-  }, [resize, stopResizing]);
-
-  // File Import Handler - Reset pagination/sort
+  // File Import Handler (Logic remains same)
   const handleFileImport = (metadata) => {
     console.log(`App: File processed. Metadata:`, metadata);
     setDatasetId(metadata.datasetId);
-    setDatasetAttributes(metadata.columnsMetadata || []);
+    // Ensure columnsMetadata is an array, even if empty
+    setDatasetAttributes(Array.isArray(metadata.columnsMetadata) ? metadata.columnsMetadata : []);
     setCurrentDatasetName(metadata.originalFileName || '');
-    // Reset search, pagination, and sort state
     setSearchResults(null);
     setSearchCriteria(null);
     setCurrentPage(1);
@@ -332,39 +300,32 @@ function App() {
     setAnalysisQuery('');
   };
 
-  // Initial Search Handler (from SearchBar) - Updated to accept { criteria, weights }
+  // Initial Search Handler (Logic remains same)
   const handleSearch = (searchData) => {
-    const { criteria, weights } = searchData; // Destructure the incoming object
+    const { criteria, weights } = searchData;
     console.log('Initial search triggered with:', { criteria, weights });
-    isInitialSearchTrigger.current = true; // Set flag to prevent effect trigger
-    setCurrentPage(1); // Reset to page 1 for new search
-    setSearchCriteria(criteria); // Set the criteria array state
-    setSearchWeights(weights); // Set the weights object state
-    // Optionally reset sort on new search, or keep existing sort? Let's reset.
-    // setSortBy('');
-    // setSortDirection('desc');
-    // Trigger the search, passing the criteria and weights from the searchData object
-    triggerSearch(criteria, weights, 1, pageSize, sortBy, sortDirection);
+    isInitialSearchTrigger.current = true;
+    setCurrentPage(1);
+    setSearchCriteria(criteria);
+    setSearchWeights(weights || {}); // Ensure weights is an object
+    triggerSearch(criteria, weights || {}, 1, pageSize, sortBy, sortDirection);
   };
 
-  // Sort Change Handler
+  // Sort Change Handler (Logic remains same)
   const handleSortChange = (newSortBy, newSortDirection) => {
     console.log(`Sort changed: ${newSortBy} ${newSortDirection}`);
-    // Reset to page 1 when sorting changes
     setCurrentPage(1);
     setSortBy(newSortBy);
     setSortDirection(newSortDirection);
-    // The useEffect hook will trigger the search (if criteria exist)
   };
 
-  // Page Change Handler
+  // Page Change Handler (Logic remains same)
   const handlePageChange = (newPage) => {
     console.log(`Page changed: ${newPage}`);
     setCurrentPage(newPage);
-    // The useEffect hook will trigger the search (if criteria exist)
   };
 
-  // Analysis View Handlers (remain the same)
+  // Analysis View Handlers (Logic remains same)
   const openAnalysisView = (query = '') => {
     if (datasetId) {
         setAnalysisQuery(query);
@@ -373,12 +334,11 @@ function App() {
   };
   const closeAnalysisView = () => setIsAnalysisViewOpen(false);
 
-  // Authentication Handlers - Reset pagination/sort
+  // Authentication Handlers (Logic remains same)
   const handleLoginSuccess = (token) => {
     localStorage.setItem('authToken', token);
     setAuthToken(token);
     setIsAuthenticated(true);
-    // Reset application state
     setCurrentView('welcome');
     setDatasetId(null);
     setDatasetAttributes([]);
@@ -391,25 +351,22 @@ function App() {
     setIsAnalysisViewOpen(false);
     setAnalysisMessages([]);
     setAnalysisQuery('');
-    switchToAppView(); // Switch back to app view after successful login
+    switchToAppView();
   };
 
 
-  // Session Load Handler - Reset pagination/sort
+  // Session Load Handler (Logic remains similar)
   const handleLoadSession = useCallback(async (sessionData) => {
       console.log("App: Loading session data", sessionData);
       const newDatasetId = sessionData.dataset_id;
 
-      // Reset states before loading
       setSearchResults(null);
       setIsSearching(false);
-      setCurrentPage(1); // Reset page
-      setSortBy('');      // Reset sort
+      setCurrentPage(1);
+      setSortBy('');
       setSortDirection('desc');
+      setDatasetId(newDatasetId);
 
-      setDatasetId(newDatasetId); // Set dataset ID first
-
-      // Fetch metadata if dataset ID exists
       if (newDatasetId) {
           try {
               console.log(`[handleLoadSession] Fetching metadata for dataset ID: ${newDatasetId}`);
@@ -418,36 +375,32 @@ function App() {
               });
               if (!metaResponse.ok) throw new Error(`Failed to fetch metadata. Status: ${metaResponse.status}`);
               const metaData = await metaResponse.json();
-              setDatasetAttributes(metaData.columnsMetadata || []);
+              // Ensure columnsMetadata is an array
+              setDatasetAttributes(Array.isArray(metaData.columnsMetadata) ? metaData.columnsMetadata : []);
               setCurrentDatasetName(metaData.originalFileName || '');
           } catch (error) {
               console.error('Failed to load dataset metadata for session:', error);
               setDatasetAttributes([]);
               setCurrentDatasetName('');
               alert(`Error loading metadata for dataset ID ${newDatasetId}: ${error.message}`);
-              // Continue loading session criteria/messages even if metadata fails
           }
       } else {
            setDatasetAttributes([]);
            setCurrentDatasetName('');
       }
 
-      // Update other states from session
-      // IMPORTANT: Set criteria *after* resetting page/sort, but *before* deciding view
       setSearchCriteria(sessionData.search_criteria || null);
       setAnalysisMessages(sessionData.analysis_messages || []);
       setAnalysisQuery(sessionData.analysis_query || '');
 
-      // Decide which view to show based on loaded data
       if (sessionData.analysis_messages && sessionData.analysis_messages.length > 0) {
-          setIsAnalysisViewOpen(true); // This will trigger view change effect
+          setIsAnalysisViewOpen(true);
       } else if (newDatasetId) {
           setIsAnalysisViewOpen(false);
-          setCurrentView('dashboard'); // Directly set view if no analysis
-          // If criteria were loaded, trigger a search for page 1 with default sort
+          setCurrentView('dashboard');
           if (sessionData.search_criteria && sessionData.search_criteria.length > 0) {
               console.log("Triggering search after session load with criteria.");
-              isInitialSearchTrigger.current = true; // Prevent effect loop
+              isInitialSearchTrigger.current = true;
               // Pass empty weights object as saved sessions don't store weights yet
               triggerSearch(sessionData.search_criteria, {}, 1, pageSize, '', 'desc');
           }
@@ -458,7 +411,7 @@ function App() {
 
       alert(`Session "${sessionData.session_name}" loaded.`);
 
-  }, [authToken, pageSize, triggerSearch]); // Added pageSize, triggerSearch
+  }, [authToken, pageSize, triggerSearch]);
 
   // State object for saving session (remains the same)
   const currentAppState = {
@@ -466,187 +419,155 @@ function App() {
       searchCriteria,
       analysisQuery,
       analysisMessages,
-      // We don't save pagination/sort state currently
   };
 
-  // Common button classes (remain the same)
-  const baseButtonClasses = "w-full flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2";
-  const primaryButtonActiveClasses = "bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500 dark:bg-indigo-500 dark:hover:bg-indigo-600 dark:focus:ring-indigo-400 dark:focus:ring-offset-gray-900"; // Adjusted dark focus ring
-  const primaryButtonDisabledClasses = "bg-gray-400 dark:bg-gray-700 text-gray-600 dark:text-gray-400 cursor-not-allowed opacity-70";
-  const secondaryButtonClasses = "bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-semibold";
+  // Removed button class variables
 
   // --- Render Logic ---
 
-  // Removed the top-level authentication gate (if (!isAuthenticated) block)
-
-  return (
-    <Router>
-      {viewMode === 'auth' ? (
+  if (viewMode === 'auth') {
+    // Render the new AuthView when in 'auth' mode
+    return (
+      <Router>
         <AuthView
           onLoginSuccess={handleLoginSuccess}
-          switchToAppView={switchToAppView} // Pass switch back function
+          switchToAppView={switchToAppView}
         />
-      ) : (
-        // Main App Layout
-        <div className="flex h-screen relative bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-gray-800 dark:to-gray-950">
-          {/* Sidebar */}
-          <aside
-            ref={sidebarRef}
-            style={{ width: `${sidebarWidth}px` }}
-            className={`flex-shrink-0 p-4 flex flex-col bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm shadow-lg h-full sticky top-0 z-20 transition-all duration-100 ease-linear border-r border-gray-200 dark:border-gray-700/50`} // Adjusted background/border
-          >
-             <h1 className={`font-bold text-gray-800 dark:text-white pt-4 pb-2 px-2 mb-4 transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'text-lg text-center' : 'text-xl'}`}>
-               {isSidebarCollapsed ? 'PM' : 'Profile Matching'}
-             </h1>
-             <div className={`flex-grow space-y-4 overflow-y-auto mb-4 transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'overflow-x-hidden px-0' : 'pr-1'}`}>
-               {/* Pass authToken to FileImport */}
-               <FileImport onFileImport={handleFileImport} isCollapsed={isSidebarCollapsed} authToken={authToken} />
-               <button
-                 onClick={() => openAnalysisView()}
-                 disabled={!datasetId}
-                 className={`${baseButtonClasses} ${!datasetId ? primaryButtonDisabledClasses : primaryButtonActiveClasses}`}
-                 title={isSidebarCollapsed ? "LLM Analysis" : ""}
-               >
-                 <ChatBubbleLeftRightIcon className={`h-5 w-5 ${!isSidebarCollapsed ? 'mr-2' : 'mx-auto'}`} /> {/* Adjusted size */}
-                 {!isSidebarCollapsed && <span>LLM Analysis</span>}
-               </button>
-               {/* Only show Saved Sessions if authenticated */}
-               {isAuthenticated && (
-                 <SavedSessions
-                    authToken={authToken}
-                    currentAppState={currentAppState}
-                    onLoadSession={handleLoadSession}
-                    isCollapsed={isSidebarCollapsed}
-                    onRequestExpand={ensureSidebarExpanded}
-                    handleLogout={handleLogout}
-                 />
-               )}
-             </div>
-             {/* Bottom Controls */}
-             <div className="mt-auto pb-4 space-y-2 flex-shrink-0">
-                  {/* Add Login/Register Button for Anonymous Users */}
-                 {!isAuthenticated && (
-                   <button
-                     onClick={switchToAuthView}
-                     className={`w-full flex items-center justify-center px-4 py-2 rounded-md shadow-sm transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${secondaryButtonClasses}`}
-                     title={isSidebarCollapsed ? "Login or Register" : ""}
-                   >
-                     <UserCircleIcon className={`h-5 w-5 ${!isSidebarCollapsed ? 'mr-2' : 'mx-auto'}`} />
-                     {!isSidebarCollapsed && <span className="text-sm">Login / Register</span>}
-                   </button>
-                 )}
-                  <button
-                      onClick={toggleSidebarCollapse}
-                      className={`w-full flex items-center justify-center px-4 py-2 rounded-md shadow-sm transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${secondaryButtonClasses}`} // Indigo focus
-                      aria-label={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-                  >
-                      {isSidebarCollapsed ? <ChevronDoubleRightIcon className="h-5 w-5" /> : <ChevronDoubleLeftIcon className="h-5 w-5" />} {/* Adjusted size */}
-                      {!isSidebarCollapsed && <span className="ml-2 text-sm">Collapse</span>} {/* Adjusted size */}
-                  </button>
-                   <button
-                       onClick={toggleDarkMode}
-                       className={`w-full flex items-center justify-center px-4 py-2 rounded-md shadow-sm transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${secondaryButtonClasses}`} // Indigo focus
-                       aria-label={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
-                   >
-                       {darkMode ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />} {/* Adjusted size */}
-                       {!isSidebarCollapsed && <span className="ml-2 text-sm">{darkMode ? 'Light Mode' : 'Dark Mode'}</span>} {/* Adjusted size */}
-                   </button>
-                   {/* Only show Logout if authenticated */}
-                   {isAuthenticated && (
-                     <button
-                         onClick={handleLogout}
-                         className={`w-full flex items-center justify-center px-4 py-2 rounded-md shadow-sm transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 bg-red-100 hover:bg-red-200 dark:bg-red-800/80 dark:hover:bg-red-700/80 text-red-700 dark:text-red-100 font-semibold`}
-                         aria-label="Logout"
-                     >
-                        <ArrowRightOnRectangleIcon className={`h-5 w-5 ${!isSidebarCollapsed ? 'mr-2' : 'mx-auto'}`} /> {/* Adjusted size */}
-                        {!isSidebarCollapsed && <span className="text-sm">Logout</span>} {/* Adjusted size */}
-                     </button>
-                   )}
-             </div>
-          </aside>
+      </Router>
+    );
+  }
 
-          {/* Draggable Resize Handle */}
-          <div
-              className="flex-shrink-0 w-1.5 cursor-col-resize bg-gray-300/50 dark:bg-gray-600/50 hover:bg-indigo-500 dark:hover:bg-indigo-400 transition-colors duration-150 h-full sticky top-0 z-20" // Adjusted width
-              onMouseDown={startResizing}
-              title="Resize Sidebar"
-          />
+  // Main App Layout (using basic table for layout - apply new styles)
+  // Apply the main container table style here, mimicking the AuthView structure
+  return (
+    <Router>
+      <table
+        className="main-container-table" // Apply the main container style
+        style={{ width: '95%', maxWidth: '1200px' }} // Adjust width for app view
+        cellPadding="0"
+        cellSpacing="0"
+      >
+        <tbody>
+          <tr>
+            <td className="header-cell"> {/* Re-use header style */}
+               <h1 className="main-title">Profile Matching Tool</h1> {/* App title */}
+               <span style={{ color: '#FF0000', fontWeight: 'bold' }}>The Future of Data Analysis! (Maybe)</span>
+            </td>
+          </tr>
+          <tr>
+            {/* Main content row */}
+            <td>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <tbody>
+                        <tr>
+                            {/* Sidebar Area (fixed width, apply retro styles) */}
+                            <td style={{ width: '220px', verticalAlign: 'top', borderRight: '3px ridge #FFFF00', padding: '10px', backgroundColor: '#000080' }}> {/* Match container style */}
+                              {/* Removed H1 from here */}
+                              <FileImport
+                                onFileImport={handleFileImport}
+                                authToken={authToken}
+                                handleLogout={handleLogout} // Pass handleLogout
+                              />
+                              <hr />
+                              <button
+                                onClick={() => openAnalysisView()}
+                                disabled={!datasetId}
+                                title="LLM Analysis"
+                                style={{ width: '100%', marginBottom: '10px' }} // Basic button styling
+                              >
+                                LLM Analysis
+                              </button>
+                              <hr />
 
-          {/* Main Content Area */}
-          <main className="flex-1 p-6 overflow-y-auto relative bg-transparent">
-            {/* Suggestions Portal Target */}
-            <div id="suggestions-portal" className="relative z-30"></div>
+                              {isAuthenticated && (
+                                <SavedSessions
+                                   authToken={authToken}
+                                   currentAppState={currentAppState}
+                                   onLoadSession={handleLoadSession}
+                                   handleLogout={handleLogout} // Pass handleLogout
+                                />
+                              )}
 
-            {/* Welcome View */}
-            <div className={`absolute inset-6 transition-opacity duration-300 ease-in-out ${currentView === 'welcome' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
-               <WelcomeMessage />
-            </div>
+                              {/* Bottom Controls */}
+                              <div style={{ marginTop: '20px', borderTop: '1px solid #FFFF00', paddingTop: '10px' }}>
+                                 {!isAuthenticated && (
+                                     <button onClick={switchToAuthView} style={{ width: '100%', marginBottom: '5px' }}>
+                                       Login / Register
+                                     </button>
+                                 )}
+                                 {isAuthenticated && (
+                                     <button onClick={handleLogout} style={{ width: '100%', color: 'yellow', backgroundColor: 'red', borderColor: 'darkred' }}>
+                                       Logout
+                                     </button>
+                                 )}
+                              </div>
+                            </td>
 
-            {/* Dashboard View */}
-            <div className={`transition-opacity duration-300 ease-in-out ${currentView === 'dashboard' ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-              {currentView === 'dashboard' && datasetId && (
-                <div className="space-y-6"> {/* Added wrapper for spacing */}
-                  <DataOverview
-                      datasetAttributes={datasetAttributes}
-                      datasetName={currentDatasetName}
-                      searchCriteria={searchCriteria}
-                      datasetId={datasetId}
-                      authToken={authToken}
-                      darkMode={darkMode}
-                      handleLogout={handleLogout}
-                  />
-                  {/* Use SearchBar instead of SearchBuilder */}
-                  <SearchBar
-                    datasetAttributes={datasetAttributes.map(attr => attr.originalName)} // Pass only names
-                    onSearch={handleSearch} // Initial search trigger
-                    initialCriteria={searchCriteria} // Pass current criteria for display/removal
-                    datasetId={datasetId}
-                    authToken={authToken}
-                    handleLogout={handleLogout}
-                  />
-                  {/* Pass sorting/pagination state and handlers to ResultsDashboard */}
-                  <ResultsDashboard
-                    searchResults={searchResults} // Contains matches AND pagination data
-                    searchCriteria={searchCriteria}
-                    searchWeights={searchWeights} // Pass the weights map
-                    datasetAttributes={datasetAttributes} // Pass full attribute objects
-                    isSearching={isSearching}
-                    // Sorting Props
-                    sortBy={sortBy}
-                    sortDirection={sortDirection}
-                    onSortChange={handleSortChange}
-                    // Pagination Props
-                    currentPage={currentPage}
-                    pageSize={pageSize}
-                    paginationData={searchResults?.pagination} // Pass pagination data from results
-                    onPageChange={handlePageChange}
-                  />
-                </div>
-              )}
-            </div>
+                            {/* Main Content Area (apply retro styles) */}
+                            <td className="content-cell" style={{ verticalAlign: 'top' }}> {/* Use content-cell style */}
+                              {currentView === 'welcome' && <WelcomeMessage />}
 
-            {/* Analysis View */}
-             <div className={`absolute inset-6 transition-opacity duration-300 ease-in-out ${currentView === 'analysis' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
-              {currentView === 'analysis' && datasetId && (
-                <DataAnalysisPage
-                  datasetId={datasetId}
-                  initialQuery={analysisQuery}
-                  messages={analysisMessages}
-                  setMessages={setAnalysisMessages}
-                  setQuery={setAnalysisQuery}
-                  onCloseAnalysis={closeAnalysisView}
-                  authToken={authToken}
-                  handleLogout={handleLogout}
-                  // Pass down auth status and view switcher
-                  isAuthenticated={isAuthenticated}
-                  switchToAuthView={switchToAuthView}
-                />
-              )}
-            </div>
+                              {currentView === 'dashboard' && datasetId && (
+                                <div>
+                                  <DataOverview
+                                      datasetAttributes={datasetAttributes}
+                                      datasetName={currentDatasetName}
+                                      searchCriteria={searchCriteria} // Pass criteria for display if needed
+                                      datasetId={datasetId}
+                                      authToken={authToken}
+                                      handleLogout={handleLogout} // Pass handleLogout
+                                  />
+                                <hr />
+                                <SearchBar
+                                  datasetAttributes={datasetAttributes} // Pass the full array of objects
+                                  onSearch={handleSearch}
+                                  initialCriteria={searchCriteria}
+                                  // Removed datasetId, authToken, handleLogout as they might not be needed in simplified SearchBar
+                                  />
+                                   <hr />
+                                  <ResultsDashboard
+                                    searchResults={searchResults}
+                                    searchCriteria={searchCriteria}
+                                    searchWeights={searchWeights}
+                                    datasetAttributes={datasetAttributes}
+                                    isSearching={isSearching}
+                                    sortBy={sortBy}
+                                    sortDirection={sortDirection}
+                                    onSortChange={handleSortChange}
+                                    currentPage={currentPage}
+                                    pageSize={pageSize}
+                                    paginationData={searchResults?.pagination}
+                                    onPageChange={handlePageChange}
+                                  />
+                                </div>
+                              )}
 
-          </main>
-        </div>
-      )}
+                              {currentView === 'analysis' && datasetId && (
+                                <DataAnalysisPage
+                                  datasetId={datasetId}
+                                  // Removed initialQuery, setQuery as they might be handled internally now
+                                  messages={analysisMessages}
+                                  setMessages={setAnalysisMessages}
+                                  onCloseAnalysis={closeAnalysisView}
+                                  authToken={authToken}
+                                  handleLogout={handleLogout}
+                                  isAuthenticated={isAuthenticated}
+                                  switchToAuthView={switchToAuthView}
+                                />
+                              )}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </td>
+          </tr>
+           <tr>
+               <td style={{ textAlign: 'center', padding: '5px', fontSize: '10px', color: '#AAAAAA', borderTop: '1px solid #FFFF00' }}>
+                   Powered by React & Retro Vibes | Last Render: {new Date().toLocaleTimeString()}
+               </td>
+           </tr>
+        </tbody>
+      </table>
     </Router>
   );
 }

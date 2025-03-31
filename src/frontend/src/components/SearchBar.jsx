@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import WeightAdjustmentModal from './WeightAdjustmentModal';
-import { MagnifyingGlassIcon, AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
+import { MagnifyingGlassIcon, AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline'; // Keep icons for now, style later
 import { debounce } from 'lodash-es';
 
 // Define supported operators
@@ -18,11 +18,13 @@ const parseInput = (input, attributes) => {
     let attributeEndIndex = -1;
 
     // Sort attributes by length descending to match longest first (e.g., "Video Category" before "Video")
-    const sortedAttributes = [...attributes].sort((a, b) => b.length - a.length);
+    // Ensure attributes is an array of objects with originalName
+    const sortedAttributes = [...(attributes || [])].sort((a, b) => b.originalName.length - a.originalName.length);
 
-    for (const attr of sortedAttributes) {
-        if (trimmedInput.startsWith(attr)) {
-            matchedAttribute = attr;
+    for (const attrObj of sortedAttributes) {
+        const attr = attrObj.originalName; // Use originalName for matching
+        if (trimmedInput.toLowerCase().startsWith(attr.toLowerCase())) { // Case-insensitive match
+            matchedAttribute = attr; // Store the original casing
             attributeEndIndex = attr.length;
             break; // Found the longest matching attribute
         }
@@ -41,11 +43,10 @@ const parseInput = (input, attributes) => {
     const sortedOperators = [...SUPPORTED_OPERATORS].sort((a, b) => b.length - a.length);
 
     for (const op of sortedOperators) {
-        if (remainingInput.startsWith(op)) {
+        if (remainingInput.toLowerCase().startsWith(op.toLowerCase())) { // Case-insensitive match
             // Check if the character after the operator is a space or end of string
-            // This prevents matching "contains" within "containsMoreText"
             if (remainingInput.length === op.length || remainingInput[op.length] === ' ') {
-                matchedOperator = op;
+                matchedOperator = op; // Store the canonical operator casing
                 operatorEndIndex = op.length;
                 break; // Found the longest matching operator
             }
@@ -67,6 +68,7 @@ const parseInput = (input, attributes) => {
 };
 
 
+// Renamed props to match expected usage from App.jsx if needed, added datasetAttributes
 function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, authToken, handleLogout }) {
   const [inputValue, setInputValue] = useState('');
   const [suggestions, setSuggestions] = useState([]);
@@ -83,7 +85,9 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
   const inputRef = useRef(null);
   const suggestionsRef = useRef(null);
   const portalRoot = document.getElementById('suggestions-portal');
+  // Ensure attributes is the array of objects with originalName
   const attributes = datasetAttributes || [];
+  const attributeNames = attributes.map(a => a.originalName); // Get just the names for parsing/suggestions
 
   useEffect(() => {
     setSelectedCriteria(initialCriteria || []);
@@ -94,66 +98,59 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
     setCurrentOperator('');
   }, [initialCriteria]);
 
+  // Initialize attributeWeights from initialCriteria or defaults
+   useEffect(() => {
+       const initialWeights = {};
+       const uniqueAttrs = new Set(attributes.map(a => a.originalName));
+       uniqueAttrs.forEach(attr => {
+           // Find weight from initialCriteria if present, otherwise default
+           const criteriaWeight = initialCriteria?.find(c => c.attribute === attr)?.weight;
+           initialWeights[attr] = criteriaWeight ?? 5; // Default to 5 if not found
+       });
+       // Also include weights from criteria for attributes perhaps not in datasetAttributes (less likely but safe)
+       initialCriteria?.forEach(c => {
+           if (!(c.attribute in initialWeights)) {
+               initialWeights[c.attribute] = c.weight ?? 5;
+           }
+       });
+       setAttributeWeights(initialWeights);
+   }, [initialCriteria, attributes]); // Re-run if attributes list changes too
+
+
   const fetchValueSuggestions = useCallback(
     debounce(async (attributeName, operator, searchTerm) => {
-      // Only fetch if attribute, operator, datasetId are valid, and searchTerm is not empty
-      // Note: We allow fetching even if authToken is null
-      if (!datasetId || !attributeName || !operator || searchTerm === undefined) { // Check searchTerm explicitly
+      // Only fetch if attribute, operator, and datasetId are valid, and searchTerm is not empty
+      if (!datasetId || !attributeName || !operator || !searchTerm) {
         setSuggestions([]);
         setIsLoadingSuggestions(false);
         return;
       }
       setIsLoadingSuggestions(true);
-      console.log(`[SearchBar] Fetching suggestions for "${attributeName}" with term "${searchTerm}". Auth token present: ${!!authToken}`);
-
-      // Prepare fetch options, conditionally adding Authorization header
-      const fetchOptions = {
-          method: 'GET', // Explicitly GET
-          headers: {},
-      };
-      if (authToken) {
-          fetchOptions.headers['Authorization'] = `Bearer ${authToken}`;
-      }
-
       try {
-        const apiUrl = `/api/suggest/values?datasetId=${encodeURIComponent(datasetId)}&attributeName=${encodeURIComponent(attributeName)}&searchTerm=${encodeURIComponent(searchTerm)}`;
-        const response = await fetch(apiUrl, fetchOptions);
-
+        const headers = { ...(authToken && { 'Authorization': `Bearer ${authToken}` }) }; // Add auth header if token exists
+        const response = await fetch(`/api/suggest/values?datasetId=${encodeURIComponent(datasetId)}&attributeName=${encodeURIComponent(attributeName)}&searchTerm=${encodeURIComponent(searchTerm)}`, { headers });
         if (!response.ok) {
-          // If no auth token was sent, a 401/403 might be expected, don't treat as critical error for suggestions
-          if (!authToken && (response.status === 401 || response.status === 403)) {
-              console.warn(`[SearchBar] Suggestion fetch failed (expectedly?) without auth token: ${response.status}`);
-              setSuggestions([]); // Clear suggestions as they are unavailable
-          } else {
-              // Throw error for other failures or if auth token *was* sent and failed
-              const errorData = await response.json().catch(() => ({}));
-              throw new Error(`HTTP error! status: ${response.status} - ${errorData.error || response.statusText}`);
+          if (response.status === 401 || response.status === 403) {
+            console.warn('Suggestion fetch failed due to invalid/expired token.');
+            if (handleLogout) handleLogout(); // Trigger logout if auth fails
           }
-        } else {
-            // Only process data if response is ok
-            const data = await response.json();
-            setSuggestions(data.suggestions.map(val => ({
-                type: 'value',
-                value: val,
-                display: String(val).replace(
-                     new RegExp(`(${searchTerm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'i'),
-                     '<mark class="bg-yellow-200 dark:bg-yellow-600 rounded">$1</mark>'
-                )
-            })));
+          throw new Error(`Failed to fetch suggestions: ${response.statusText}`);
         }
+        const data = await response.json();
+        // Simple display for retro theme, no highlighting for now
+        setSuggestions(data.suggestions.map(val => ({
+            type: 'value',
+            value: val,
+            display: String(val) // Just display the value directly
+        })));
       } catch (error) {
         console.error("Error fetching value suggestions:", error);
-        setSuggestions([]); // Clear suggestions on error
-        // Check for auth error ONLY if a token was provided, then trigger logout
-        if (authToken && (error.message.includes('401') || error.message.includes('403'))) {
-            console.warn('[SearchBar] Auth error with token detected during suggestions fetch, logging out.');
-            if (handleLogout) handleLogout();
-        }
+        setSuggestions([]);
       } finally {
         setIsLoadingSuggestions(false);
       }
     }, 300), // 300ms debounce delay
-    [datasetId, authToken, handleLogout] // Dependencies remain the same
+    [datasetId, authToken, handleLogout] // Dependencies for useCallback
   );
 
   const handleInputChange = (e) => {
@@ -162,12 +159,11 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
     setHighlightedIndex(-1); // Reset highlight
     setInputError(false); // Clear error on input change
 
-    const trimmedValue = value.trimStart(); // Keep trailing space if user adds one intentionally
+    const trimmedValue = value.trimStart();
     const lastSpaceIndex = trimmedValue.lastIndexOf(' ');
 
-    // Determine context based on structure "Attribute Operator Value"
     // Try parsing first to see if we have a complete structure already
-    const parsedForContext = parseInput(trimmedValue, attributes);
+    const parsedForContext = parseInput(trimmedValue, attributes); // Pass attribute objects
 
     if (parsedForContext) {
         // Potentially entering value part
@@ -184,7 +180,11 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
         const potentialAttr = trimmedValue.substring(0, lastSpaceIndex).trim();
         const potentialOpOrVal = trimmedValue.substring(lastSpaceIndex + 1);
 
-        if (attributes.includes(potentialAttr)) {
+        // Check if potentialAttr matches any attribute name (case-insensitive)
+        const matchedAttrObj = attributes.find(a => a.originalName.toLowerCase() === potentialAttr.toLowerCase());
+
+        if (matchedAttrObj) {
+            const correctCaseAttr = matchedAttrObj.originalName;
             // Attribute is valid, now check if the next part is an operator
             const potentialOp = potentialOpOrVal.toLowerCase();
             const matchingOperators = SUPPORTED_OPERATORS.filter(op => op.toLowerCase().startsWith(potentialOp));
@@ -192,22 +192,18 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
             if (matchingOperators.length > 0 && !potentialOpOrVal.includes(' ')) {
                  // Suggest operators if the part after attribute looks like a start of an operator
                  setInputState('operator');
-                 setCurrentAttribute(potentialAttr); // Store the valid attribute
+                 setCurrentAttribute(correctCaseAttr); // Store the valid attribute (correct casing)
                  setCurrentOperator(''); // Reset operator
                  setSuggestions(matchingOperators.map(op => ({
                      type: 'operator',
                      value: op,
-                     display: op.replace(
-                         new RegExp(`^(${potentialOp.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'i'),
-                         '<mark class="bg-yellow-200 dark:bg-yellow-600 rounded">$1</mark>'
-                     )
+                     display: op // Simple display
                  })));
                  setIsLoadingSuggestions(false);
             } else {
                  // Assume entering value if attribute is valid but next part isn't a starting operator
-                 // Or if the potential operator part contains spaces (likely part of value)
                  setInputState('value');
-                 setCurrentAttribute(potentialAttr);
+                 setCurrentAttribute(correctCaseAttr);
                  // Try to infer operator if only one possibility makes sense based on last word
                  const words = trimmedValue.split(' ');
                  let inferredOperator = '';
@@ -217,15 +213,12 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
                         inferredOperator = lastWord;
                         setCurrentOperator(inferredOperator);
                         const valuePart = words[words.length - 1]; // The very last part
-                        fetchValueSuggestions(potentialAttr, inferredOperator, valuePart);
+                        fetchValueSuggestions(correctCaseAttr, inferredOperator, valuePart);
                     } else {
-                        // Cannot reliably determine operator, clear suggestions
-                        setSuggestions([]);
-                        setIsLoadingSuggestions(false);
+                        setSuggestions([]); setIsLoadingSuggestions(false);
                     }
                  } else {
-                     setSuggestions([]);
-                     setIsLoadingSuggestions(false);
+                     setSuggestions([]); setIsLoadingSuggestions(false);
                  }
             }
         } else {
@@ -234,16 +227,13 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
             setCurrentAttribute('');
             setCurrentOperator('');
             const searchTerm = trimmedValue.toLowerCase();
-            const matches = attributes
+            const matches = attributeNames // Use names array for filtering
                 .filter(a => a.toLowerCase().includes(searchTerm))
                 .slice(0, 10);
             setSuggestions(matches.map(a => ({
                 type: 'attribute',
                 value: a,
-                display: a.replace(
-                    new RegExp(`(${searchTerm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'i'),
-                    '<mark class="bg-yellow-200 dark:bg-yellow-600 rounded">$1</mark>'
-                )
+                display: a // Simple display
             })));
             setIsLoadingSuggestions(false);
         }
@@ -253,16 +243,13 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
         setCurrentAttribute('');
         setCurrentOperator('');
         const searchTerm = trimmedValue.toLowerCase();
-        const matches = attributes
+        const matches = attributeNames // Use names array for filtering
             .filter(a => a.toLowerCase().includes(searchTerm))
             .slice(0, 10);
         setSuggestions(matches.map(a => ({
             type: 'attribute',
             value: a,
-            display: a.replace(
-                new RegExp(`(${searchTerm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'i'),
-                '<mark class="bg-yellow-200 dark:bg-yellow-600 rounded">$1</mark>'
-            )
+            display: a // Simple display
         })));
         setIsLoadingSuggestions(false);
     }
@@ -293,12 +280,21 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
     } else if (suggestion.type === 'value') {
       // Ensure we have attribute and operator stored from the input context
       if (currentAttribute && currentOperator) {
-        setSelectedCriteria([...selectedCriteria, {
+        const newCriterion = {
           attribute: currentAttribute,
           operator: currentOperator,
           value: suggestion.value
-          // Removed weight: 5 - Weights are now per-attribute
-        }]);
+          // Weight is handled by attributeWeights map, not per criterion anymore
+        };
+        // Avoid adding duplicates
+        const exists = selectedCriteria.some(c =>
+            c.attribute === newCriterion.attribute &&
+            c.operator === newCriterion.operator &&
+            String(c.value) === String(newCriterion.value)
+        );
+        if (!exists) {
+            setSelectedCriteria([...selectedCriteria, newCriterion]);
+        }
         setInputValue(''); // Clear input
         setSuggestions([]);
         setInputState('attribute'); // Reset state
@@ -306,15 +302,22 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
         setCurrentOperator('');
       } else {
           console.warn("Could not add criterion: Attribute or Operator context missing.");
-          // Maybe try parsing the input again as a fallback?
+          // Fallback parsing attempt (less reliable now)
           const parsed = parseInput(inputValue.substring(0, inputValue.lastIndexOf(suggestion.value)), attributes);
           if (parsed) {
-               setSelectedCriteria([...selectedCriteria, {
+               const newCriterion = {
                   attribute: parsed.attribute,
                   operator: parsed.operator,
                   value: suggestion.value,
-                  weight: 5
-               }]);
+               };
+               const exists = selectedCriteria.some(c =>
+                   c.attribute === newCriterion.attribute &&
+                   c.operator === newCriterion.operator &&
+                   String(c.value) === String(newCriterion.value)
+               );
+               if (!exists) {
+                   setSelectedCriteria([...selectedCriteria, newCriterion]);
+               }
                setInputValue('');
                setSuggestions([]);
                setInputState('attribute');
@@ -335,6 +338,7 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
     if (highlightedIndex >= 0 && suggestionsRef.current) {
       const highlightedItem = suggestionsRef.current.children[highlightedIndex];
       if (highlightedItem) {
+        // Basic scroll into view, might need refinement for retro look
         highlightedItem.scrollIntoView({ block: 'nearest' });
       }
     }
@@ -356,31 +360,47 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
     // Enter to confirm search criteria ONLY if input is valid and no suggestion selected
     else if (e.key === 'Enter' && highlightedIndex === -1) {
        e.preventDefault();
-       const parsed = parseInput(inputValue, attributes);
+       const parsed = parseInput(inputValue, attributes); // Pass attribute objects
        if (parsed) {
-         setSelectedCriteria([...selectedCriteria, {
+         const newCriterion = {
            attribute: parsed.attribute,
            operator: parsed.operator,
            value: parsed.value
-           // Removed weight: 5 - Weights are now per-attribute
-         }]);
+         };
+         const exists = selectedCriteria.some(c =>
+             c.attribute === newCriterion.attribute &&
+             c.operator === newCriterion.operator &&
+             String(c.value) === String(newCriterion.value)
+         );
+         if (!exists) {
+             setSelectedCriteria([...selectedCriteria, newCriterion]);
+         }
          setInputValue('');
          setSuggestions([]);
          setInputState('attribute');
          setCurrentAttribute('');
          setCurrentOperator('');
          setInputError(false); // Clear error on successful parse
-       } else {
+       } else if (inputValue.trim() !== '') { // Only show error if input is not empty
            console.warn(`Invalid input format: "${inputValue}". Use "Attribute Operator Value".`);
            setInputError(true); // Set error state
        }
-     }
+    } else if (e.key === 'Escape') { // Escape to clear suggestions
+        setSuggestions([]);
+        setHighlightedIndex(-1);
+    }
   };
+
+   const removeCriterion = (indexToRemove) => {
+     setSelectedCriteria(selectedCriteria.filter((_, index) => index !== indexToRemove));
+   };
 
   const handleSearch = () => {
     if (selectedCriteria.length > 0) {
       // Pass both criteria and the attribute weights map
       onSearch({ criteria: selectedCriteria, weights: attributeWeights });
+    } else {
+        alert("Please add at least one search criterion."); // Simple alert for retro feel
     }
   };
 
@@ -389,122 +409,159 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
   useEffect(() => {
     if (inputRef.current && suggestions.length > 0 && portalRoot) {
       const rect = inputRef.current.getBoundingClientRect();
-      // Adjust position calculation if portalRoot has offset parents or transforms
       const portalRect = portalRoot.getBoundingClientRect();
       setDropdownStyle({
         position: 'absolute',
-        top: `${rect.bottom - portalRect.top}px`, // Position relative to portal
-        left: `${rect.left - portalRect.left}px`, // Position relative to portal
+        top: `${rect.bottom - portalRect.top + 2}px`, // Position below input, relative to portal
+        left: `${rect.left - portalRect.left}px`,
         width: `${rect.width}px`,
-        zIndex: 50, // Ensure dropdown is above other elements
+        zIndex: 100, // High z-index
       });
     }
-  }, [suggestions.length, portalRoot]); // Re-calculate when suggestions appear/disappear or portal is available
+  }, [suggestions.length, portalRoot]); // Re-calculate when suggestions appear/disappear
 
 
-  // Component for the suggestions dropdown content
+  // Component for the suggestions dropdown content - Retro styled
   const SuggestionsDropdown = (
     <div
       ref={suggestionsRef}
-      style={dropdownStyle}
-      className="absolute w-full max-h-60 overflow-y-auto mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg z-50 animate-fade-in-fast"
+      style={{
+          ...dropdownStyle,
+          border: '2px outset #C0C0C0',
+          backgroundColor: '#FFFFFF', // White background
+          maxHeight: '200px', // Limit height
+          overflowY: 'auto',
+          boxShadow: '3px 3px 5px rgba(0,0,0,0.4)',
+      }}
     >
-      {isLoadingSuggestions && <div className="px-3 py-2 text-gray-500 dark:text-gray-400 text-sm">Loading...</div>}
+      {isLoadingSuggestions && <div style={{ padding: '5px', color: '#000080', fontSize: '11px', fontStyle: 'italic' }}>Loading...</div>}
       {!isLoadingSuggestions && suggestions.map((suggestion, index) => (
         <div
           key={`${suggestion.type}-${suggestion.value}-${index}`} // Ensure key uniqueness
-          className={`px-3 py-2 cursor-pointer text-gray-800 dark:text-gray-200 transition-colors duration-150 ease-in-out text-sm ${
-            index === highlightedIndex
-              ? 'bg-indigo-100 dark:bg-gray-700' // Highlight color
-              : 'hover:bg-gray-100 dark:hover:bg-gray-600' // Hover color
-          }`}
+          style={{
+              padding: '4px 8px',
+              cursor: 'pointer',
+              color: '#000000',
+              fontSize: '12px',
+              backgroundColor: index === highlightedIndex ? '#000080' : '#FFFFFF', // Highlight with navy
+              color: index === highlightedIndex ? '#FFFFFF' : '#000000', // White text on highlight
+          }}
           onClick={() => handleSuggestionSelect(suggestion)}
-          // Use dangerouslySetInnerHTML only if suggestion.display contains HTML (like highlighting)
-          dangerouslySetInnerHTML={suggestion.display.includes('<mark') ? { __html: suggestion.display } : undefined}
+          onMouseEnter={() => setHighlightedIndex(index)} // Highlight on mouse enter
         >
-          {!suggestion.display.includes('<mark') ? suggestion.display : null}
+          {/* Simple text display */}
+          {suggestion.display}
         </div>
       ))}
        {!isLoadingSuggestions && suggestions.length === 0 && inputState !== 'attribute' && inputValue.trim() !== '' && (
-           <div className="px-3 py-2 text-gray-500 dark:text-gray-400 text-sm">No suggestions</div>
+           <div style={{ padding: '5px', color: '#555555', fontSize: '11px', fontStyle: 'italic' }}>No suggestions</div>
        )}
     </div>
   );
 
+  // --- Retro Styles ---
+   const containerStyle = {
+     border: '3px ridge #00FF00', // Lime green ridge border
+     padding: '15px',
+     marginBottom: '15px',
+     backgroundColor: '#C0C0C0', // Silver background
+   };
 
-  // Define button styles based on reference
-  const baseButtonClasses = "inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-900"; // Adjusted dark offset
-  const primaryButtonStyle = "bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500 dark:bg-indigo-500 dark:hover:bg-indigo-600 dark:focus:ring-indigo-400"; // Primary indigo
-  const secondaryButtonStyle = "bg-gray-200 hover:bg-gray-300 text-gray-800 focus:ring-indigo-500 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 dark:focus:ring-gray-500";
-  const disabledClasses = "disabled:opacity-50 disabled:cursor-not-allowed";
+   const criteriaTagStyle = {
+     display: 'inline-flex',
+     alignItems: 'center',
+     border: '1px solid #000080', // Navy border
+     borderRadius: '3px',
+     padding: '2px 6px',
+     margin: '2px',
+     fontSize: '11px',
+     backgroundColor: '#E0E0E0', // Light grey background
+     color: '#000000',
+   };
+
+   const removeButtonStyle = {
+     marginLeft: '8px',
+     fontSize: '10px',
+     padding: '0 3px',
+     color: 'red',
+     border: '1px outset red',
+     cursor: 'pointer',
+     background: '#FFDAB9', // Peach background
+     fontWeight: 'bold',
+   };
+
+   const inputStyle = {
+       // Use styles from index.css by default, add error border if needed
+       border: inputError ? '2px solid red' : undefined,
+   };
 
 
   return (
-    <div className="flex flex-col w-full mb-6 border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-800 shadow-sm transition-shadow duration-300 ease-in-out"> {/* Standard background */}
+    <div style={containerStyle}>
+       <h3 className="form-title" style={{ color: '#0000FF', textShadow: '1px 1px yellow' }}>Build Your Search Query!</h3>
+
       {/* Selected Criteria Tags */}
       {selectedCriteria.length > 0 && (
-        <div className="flex flex-wrap mb-3 gap-2">
-          {selectedCriteria.map((criteria, index) => (
-            <span
-              key={index}
-              className="inline-flex items-center bg-indigo-100 dark:bg-gray-700 border border-indigo-200 dark:border-gray-600 rounded-full px-3 py-1 text-xs font-medium text-indigo-800 dark:text-gray-200 shadow-sm"
-            >
-              {/* Display format: Attribute Operator Value */}
-              {criteria.attribute} <strong className="mx-1">{criteria.operator}</strong> {String(criteria.value)}
-              <button
-                type="button"
-                aria-label={`Remove ${criteria.attribute} ${criteria.operator} ${criteria.value}`}
-                className="ml-1.5 -mr-1 flex-shrink-0 h-4 w-4 rounded-full inline-flex items-center justify-center text-indigo-500 hover:text-indigo-700 hover:bg-indigo-200/70 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:bg-indigo-500/20 focus:text-indigo-700 dark:focus:bg-gray-600/30 dark:focus:text-gray-200 transition-all duration-150 ease-in-out"
-                onClick={() => setSelectedCriteria(
-                  selectedCriteria.filter((_, i) => i !== index)
-                )}
-              >
-                <svg className="h-2.5 w-2.5" stroke="currentColor" fill="none" viewBox="0 0 8 8">
-                  <path strokeLinecap="round" strokeWidth="1.5" d="M1 1l6 6m0-6L1 7" />
-                </svg>
-              </button>
-            </span>
-          ))}
+        <div style={{ marginBottom: '10px', border: '1px solid black', padding: '5px', backgroundColor: '#E0E0E0' }}>
+           <strong style={{ color: '#000080' }}>Current Criteria:</strong>
+           <div style={{ marginTop: '5px', display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+              {selectedCriteria.map((criteria, index) => (
+                <span key={index} style={criteriaTagStyle}>
+                  <span style={{ color: '#006400' }}>{criteria.attribute}</span>
+                  <strong style={{ margin: '0 4px', color: '#8B0000' }}>{criteria.operator}</strong>
+                  <span style={{ color: '#00008B' }}>{String(criteria.value)}</span>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${criteria.attribute} ${criteria.operator} ${criteria.value}`}
+                    style={removeButtonStyle}
+                    onClick={() => removeCriterion(index)}
+                  >
+                    X
+                  </button>
+                </span>
+              ))}
+           </div>
         </div>
       )}
 
       {/* Search Input */}
-      <div className="relative w-full"> {/* Added relative positioning for potential inline error messages */}
+      <div style={{ position: 'relative', marginBottom: '10px' }}> {/* Relative positioning for suggestions */}
         <input
           ref={inputRef}
           type="text"
           value={inputValue}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          placeholder="Attribute Operator Value (e.g., Age >= 30)" // Updated placeholder
-          className={`w-full p-3 border rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:border-transparent outline-none transition-colors duration-200 ease-in-out shadow-sm ${
-            inputError
-              ? 'border-red-500 dark:border-red-400 focus:ring-red-500' // Error state
-              : 'border-gray-300 dark:border-gray-600 focus:ring-indigo-500' // Normal state
-          }`}
+          placeholder="Attribute Operator Value (e.g., Age >= 30)"
+          style={{ ...inputStyle, width: '100%', padding: '8px' }} // Ensure width and padding
+          className="input-retro" // Assuming a base class for retro inputs
         />
-
-        {/* Render Suggestions Dropdown via Portal if portalRoot exists */}
+        {/* Render Suggestions Dropdown via Portal */}
         {portalRoot && suggestions.length > 0 && createPortal(SuggestionsDropdown, portalRoot)}
-        {/* Fallback: Render directly if portalRoot doesn't exist (though it should) */}
-        {!portalRoot && suggestions.length > 0 && SuggestionsDropdown}
       </div>
+       {inputError && <p style={{ color: 'red', fontSize: '10px', fontWeight: 'bold', marginTop: '-5px', marginBottom: '5px' }}>Invalid format. Use "Attribute Operator Value".</p>}
+
 
       {/* Action Buttons */}
-      <div className="flex mt-4 space-x-3">
+      <div style={{ display: 'flex', marginTop: '10px', gap: '10px' }}>
         <button
           onClick={handleSearch}
           disabled={selectedCriteria.length === 0}
-          className={`${baseButtonClasses} ${primaryButtonStyle} ${disabledClasses}`}
+          className="button" // Use base retro button class
+          style={{ flexGrow: 1, padding: '10px', fontSize: '14px', fontWeight: 'bold' }} // Lime green is default
         >
-           <MagnifyingGlassIcon className="h-4 w-4 mr-2"/> Search
+           <MagnifyingGlassIcon style={{ height: '1em', width: '1em', marginRight: '5px', display: 'inline-block', verticalAlign: 'middle' }}/>
+           SEARCH NOW!
         </button>
         {selectedCriteria.length > 0 && (
           <button
             onClick={() => setShowWeightAdjuster(true)}
-            className={`${baseButtonClasses} ${secondaryButtonStyle} ${disabledClasses}`}
+            className="button" // Use base retro button class
+            style={{ backgroundColor: '#FFFF00', borderColor: '#AAAA00', color: '#000000', flexShrink: 0, padding: '10px' }} // Yellow button
+            title="Adjust Attribute Weights"
           >
-             <AdjustmentsHorizontalIcon className="h-4 w-4 mr-2"/> Adjust Weights
+             <AdjustmentsHorizontalIcon style={{ height: '1em', width: '1em', marginRight: '5px', display: 'inline-block', verticalAlign: 'middle' }}/>
+             Weights
           </button>
         )}
       </div>
@@ -512,9 +569,9 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
       {/* Weight Adjustment Modal */}
       {showWeightAdjuster && (
         <WeightAdjustmentModal
-          selectedCriteria={selectedCriteria} // Still needed to derive unique attributes in modal
-          initialAttributeWeights={attributeWeights} // Pass current attribute weights
-          onWeightsChange={setAttributeWeights} // Update the attributeWeights state directly
+          selectedCriteria={selectedCriteria}
+          initialAttributeWeights={attributeWeights}
+          onWeightsChange={setAttributeWeights}
           onClose={() => setShowWeightAdjuster(false)}
         />
       )}
@@ -522,25 +579,30 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
   );
 }
 
+// Update PropTypes to match expected props
 SearchBar.propTypes = {
-  datasetAttributes: PropTypes.arrayOf(PropTypes.string),
+  datasetAttributes: PropTypes.arrayOf(PropTypes.shape({
+      originalName: PropTypes.string.isRequired,
+      // Add other properties if they exist, e.g., type, sanitizedName
+  })).isRequired, // Make it required if suggestions depend on it
   onSearch: PropTypes.func.isRequired,
   initialCriteria: PropTypes.arrayOf(PropTypes.shape({
-      attribute: PropTypes.string.isRequired, // Made required
-      operator: PropTypes.string.isRequired, // Added operator, made required
-      value: PropTypes.any.isRequired,       // Made required
-      weight: PropTypes.number,
+      attribute: PropTypes.string.isRequired,
+      operator: PropTypes.string.isRequired,
+      value: PropTypes.any.isRequired,
+      weight: PropTypes.number, // Keep weight for initializing weights map
   })),
-  datasetId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  authToken: PropTypes.string,
-  handleLogout: PropTypes.func.isRequired,
+  datasetId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]), // Needed for suggestions
+  authToken: PropTypes.string, // Needed for suggestions API
+  handleLogout: PropTypes.func, // Needed for suggestions API error handling
 };
 
 SearchBar.defaultProps = {
-  datasetAttributes: [],
+  datasetAttributes: [], // Default to empty array
   initialCriteria: [],
   datasetId: null,
   authToken: null,
+  handleLogout: () => {}, // Provide a default no-op function
 };
 
 

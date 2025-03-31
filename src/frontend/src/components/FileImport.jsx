@@ -1,45 +1,37 @@
 import React, { useState, useCallback } from 'react';
-import PropTypes from 'prop-types'; // Import PropTypes
-import Papa from 'papaparse';
-import { DocumentArrowUpIcon, CheckCircleIcon, ExclamationTriangleIcon, FolderOpenIcon } from '@heroicons/react/24/outline'; // Added FolderOpenIcon
+import PropTypes from 'prop-types';
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 
-
-// Accept isCollapsed, authToken, and handleLogout props
-function FileImport({ onFileImport, isCollapsed, authToken, handleLogout }) { // Added handleLogout
+// Updated FileImport component for new retro theme
+function FileImport({ onFileImport, authToken, handleLogout }) {
   const [file, setFile] = useState(null);
   const [fileName, setFileName] = useState('No file chosen');
-  const [parseError, setParseError] = useState(null);
-  const [fileSizeError, setFileSizeError] = useState(null);
+  const [error, setError] = useState(null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  // Define handleUpload BEFORE handleFileChange because handleFileChange depends on it
-  // Modified handleUpload to accept file directly
-  // Wrapped in useCallback to satisfy useEffect dependency linting
+
   const handleUpload = useCallback(async (fileToUpload) => {
     if (fileToUpload && !isUploading) {
       console.log('Uploading file to backend:', fileToUpload.name);
       setIsUploading(true);
-      setParseError(null);
+      setError(null);
       setUploadSuccess(false);
-      setFileName(fileToUpload.name); // Ensure filename state is updated
-      setFile(fileToUpload); // Ensure file state is updated
+      setFileName(fileToUpload.name);
+      setFile(fileToUpload);
 
       const formData = new FormData();
       formData.append('file', fileToUpload);
 
       try {
-        // Add Authorization header to the fetch request
         const headers = {};
         if (authToken) {
             headers['Authorization'] = `Bearer ${authToken}`;
         }
-        // Note: Don't set Content-Type for FormData, browser does it correctly with boundary
 
         const response = await fetch('/api/import', {
           method: 'POST',
-          headers: headers, // Add the headers object
+          headers: headers,
           body: formData,
         });
 
@@ -51,27 +43,23 @@ function FileImport({ onFileImport, isCollapsed, authToken, handleLogout }) { //
         }
 
         console.log('Backend upload success:', result);
-        // Pass the new metadata structure to the parent component
-        // The backend now returns { datasetId, columnsMetadata }
         if (result.datasetId && result.columnsMetadata) {
             onFileImport({
                 datasetId: result.datasetId,
                 columnsMetadata: result.columnsMetadata,
-                originalFileName: fileToUpload.name // Pass the original name for display/reference
+                originalFileName: fileToUpload.name
             });
             setUploadSuccess(true);
         } else {
-            // Handle cases where the expected metadata is missing in the response
             console.error('Backend response missing expected metadata:', result);
             throw new Error('Invalid response received from server after upload.');
         }
 
-      } catch (error) {
-        console.error('Upload/Parsing error:', error.message);
-        setParseError(error.message);
+      } catch (err) {
+        console.error('Upload/Parsing error:', err.message);
+        setError(err.message);
         setUploadSuccess(false);
-        // Check for auth error and trigger logout
-        if (error.message.includes('401') || error.message.includes('403')) {
+        if (err.message.includes('401') || err.message.includes('403')) {
             if (handleLogout) handleLogout();
         }
       } finally {
@@ -81,148 +69,98 @@ function FileImport({ onFileImport, isCollapsed, authToken, handleLogout }) { //
     } else {
       console.log('No file selected or upload already in progress.');
     }
-  }, [isUploading, onFileImport]); // Added dependencies
+  }, [isUploading, onFileImport, authToken, handleLogout]);
 
   const handleFileChange = useCallback((event) => {
     if (event.target.files && event.target.files[0]) {
       const selectedFile = event.target.files[0];
       setIsUploading(false);
+      setUploadSuccess(false);
+      setError(null);
+
       if (selectedFile.size > MAX_FILE_SIZE) {
-        setFileSizeError('File size exceeds the limit (100MB).');
+        setError('File size exceeds the limit (100MB).');
         setFile(null);
         setFileName('No file chosen');
-        setParseError(null);
-        setUploadSuccess(false);
       } else {
         setFile(selectedFile);
         setFileName(selectedFile.name);
-        setParseError(null);
-        setFileSizeError(null);
-        setUploadSuccess(false);
-        // Automatically trigger upload after selecting a valid file
-        handleUpload(selectedFile); // Pass the selected file directly
+        handleUpload(selectedFile);
       }
     }
-     // Reset the input value so the same file can be selected again
      event.target.value = null;
-  }, [onFileImport, handleUpload]); // Added handleUpload dependency
+  }, [handleUpload]);
 
-  const containerClasses = `
-    p-4 border rounded-lg mb-6 shadow-md
-    bg-indigo-100/60 dark:bg-gray-700/60  /* Light: indigo-100 tint */
-    border-gray-200 dark:border-gray-600/80
-    transition-all duration-300 ease-in-out
-    flex flex-col items-center justify-center text-center
-    ${isCollapsed ? 'min-h-[auto] py-2' : 'min-h-[200px]'} /* Adjust height when collapsed */
-    ${fileSizeError || parseError ? 'border-red-400 dark:border-red-500 bg-red-50/80 dark:bg-red-900/30' : ''}
-    ${uploadSuccess ? 'border-green-400 dark:border-green-500 bg-green-50/80 dark:bg-green-900/30' : ''}
-  `;
+  // Basic container styling - use inline styles for simple cases or specific overrides
+  const containerStyle = {
+    border: '3px ridge #FFFF00', // Match main container border style
+    padding: '10px',
+    marginBottom: '15px',
+    backgroundColor: '#000080', // Match main container background
+    textAlign: 'center',
+    color: '#FFFFFF', // White text for this container
+  };
 
-  // Common button classes using the subtle dark gray style
-  const baseButtonClasses = "inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2";
-  const activeStyle = "bg-gray-700 text-gray-100 hover:bg-gray-600 focus:ring-gray-500 dark:bg-gray-600 dark:text-gray-100 dark:hover:bg-gray-500 dark:focus:ring-gray-400 dark:focus:ring-offset-gray-900"; // Primary action style
-  const disabledClasses = "disabled:opacity-50 disabled:cursor-not-allowed";
-
-
-  // --- Render Collapsed View ---
-  if (isCollapsed) {
-    // Render only the button-like label when collapsed
-    return (
-      <>
-        <label
-          htmlFor="file-upload"
-          // Use button classes, ensure centering, remove margin bottom from containerClasses
-          className={`${baseButtonClasses} ${activeStyle} cursor-pointer w-full flex items-center justify-center h-10`} // Use fixed height h-10, remove py
-          title={`Selected: ${fileName}`} // Show filename on hover
-        >
-          {/* Show status icon or default - USE h-6 w-6 */}
-          {isUploading ? (
-             <svg className="animate-spin h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-             </svg>
-          ) : uploadSuccess ? (
-            <CheckCircleIcon className="h-6 w-6 text-green-400" />
-          ) : fileSizeError || parseError ? (
-            <ExclamationTriangleIcon className="h-6 w-6 text-red-400" />
-          ) : (
-            <FolderOpenIcon className="h-6 w-6 text-gray-100" />
-          )}
-        </label>
-        <input
-          id="file-upload"
-          type="file"
-          onChange={handleFileChange}
-          accept=".csv,.xls,.xlsx"
-          className="hidden"
-        />
-      </>
-    );
+  // Apply error/success styles conditionally by changing border/background
+  if (error) {
+    containerStyle.borderColor = 'red';
+    containerStyle.backgroundColor = '#8B0000'; // Dark red background for error
+  } else if (uploadSuccess) {
+    containerStyle.borderColor = '#00FF00'; // Lime green border for success
+    containerStyle.backgroundColor = '#006400'; // Dark green background for success
   }
 
-  // --- Render Expanded View ---
   return (
-    <div className={containerClasses.trim()}>
-      <div className="mb-4">
-        <label
-          htmlFor="file-upload"
-          className={`${baseButtonClasses} ${activeStyle} cursor-pointer ring-2 ring-transparent hover:ring-primary-700 hover:ring-offset-2 dark:hover:ring-offset-gray-900`}
-        >
-          Choose File
-        </label>
-        <input
-          id="file-upload"
-          type="file"
-          onChange={handleFileChange}
-          accept=".csv,.xls,.xlsx"
-          className="hidden"
-        />
+    <div style={containerStyle}>
+      {/* Use a simpler heading, styled by parent or default */}
+      <h4 style={{ marginTop: 0, marginBottom: '10px', color: '#FFFF00', fontFamily: 'Impact', textShadow: '1px 1px #FF00FF' }}>Import Dataset</h4>
+      {/* Basic file input - should inherit from index.css */}
+      <input
+        id="file-upload-retro"
+        type="file"
+        onChange={handleFileChange}
+        accept=".csv,.xls,.xlsx"
+        disabled={isUploading}
+        style={{
+            display: 'block',
+            margin: '0 auto 10px auto',
+            width: '90%', // Make it wider
+            // Let index.css handle border, padding, background, color
+        }}
+      />
+      <div style={{ marginBottom: '10px', fontSize: '11px', fontStyle: 'italic', color: '#CCCCCC' }}>
+        Selected: {fileName}
       </div>
-      <div className="mb-3 text-sm text-gray-600 dark:text-gray-300 truncate w-full px-2" title={fileName}>
-        Selected: <span className="font-medium text-gray-800 dark:text-gray-100">{fileName}</span>
-      </div>
-      {fileSizeError && (
-        <div className="mb-3 text-sm text-red-600 dark:text-red-400 flex items-center justify-center">
-            <ExclamationTriangleIcon className="h-4 w-4 mr-1"/> {fileSizeError}
+
+      {/* Status Messages */}
+      {error && (
+        <div style={{ color: '#FF8C00', fontWeight: 'bold', marginBottom: '10px', fontSize: '11px' }}>
+          !! ERROR !! {error}
         </div>
       )}
-      {parseError && (
-        <div className="mb-3 text-sm text-red-600 dark:text-red-400 flex items-center justify-center">
-            <ExclamationTriangleIcon className="h-4 w-4 mr-1"/> Error: {parseError}
-        </div>
-      )}
-      {/* Removed explicit Upload button - upload happens on file change */}
-      {/* <button ... /> */}
       {isUploading && (
-           <div className="mt-3 text-sm text-gray-600 dark:text-gray-400 flex items-center justify-center">
-               <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-               </svg>
-               Uploading...
+           <div style={{ color: '#00FFFF', fontWeight: 'bold', marginBottom: '10px', fontSize: '11px' }}>
+               Uploading... Please Wait! <span className="blink">***</span>
            </div>
       )}
       {uploadSuccess && !isUploading && (
-        <div className="mt-3 text-sm text-green-600 dark:text-green-400 flex items-center justify-center">
-            <CheckCircleIcon className="h-4 w-4 mr-1"/> File uploaded!
+        <div style={{ color: '#00FF00', fontWeight: 'bold', marginBottom: '10px', fontSize: '11px' }}>
+            File uploaded successfully! Dataset ready.
         </div>
       )}
     </div>
   );
 }
 
-// Add PropTypes
+// Simplified PropTypes
 FileImport.propTypes = {
   onFileImport: PropTypes.func.isRequired,
-  isCollapsed: PropTypes.bool,
-  authToken: PropTypes.string, // authToken is optional but should be a string if provided
-  handleLogout: PropTypes.func.isRequired, // handleLogout is required
+  authToken: PropTypes.string,
+  handleLogout: PropTypes.func.isRequired,
 };
 
-// Add defaultProps
 FileImport.defaultProps = {
-  isCollapsed: false,
-  authToken: null, // Default authToken to null
+  authToken: null,
 };
 
 
