@@ -16,14 +16,15 @@ interface ResultsTableProps {
   onMatchClick?: (data: ResultData) => void;
 }
 
-// Updated ResultsTable to show only essential columns + Details button
+// Updated ResultsTable to match HTML example styling
 function ResultsTable({ results = [], datasetAttributes = [], onMatchClick }: ResultsTableProps) {
 
   if (!results || results.length === 0) {
-    return <div style={{ textAlign: 'center', padding: '20px', color: '#CCCCCC' }}>No results to display in table.</div>;
+    // Use a more subtle message, styling inherited from main-content-cell
+    return <div style={{ textAlign: 'center', padding: '20px', color: '#666666', fontStyle: 'italic' }}>No results to display.</div>;
   }
 
-  // Headers now only include essential info + Actions
+  // Headers remain the same
   const headers = ['Match %', 'Profile ID', 'Actions'];
 
   const handleDetailsClick = (e: React.MouseEvent, result: ResultData) => {
@@ -34,7 +35,8 @@ function ResultsTable({ results = [], datasetAttributes = [], onMatchClick }: Re
   };
 
   return (
-    <table border={1} cellPadding={5} cellSpacing={0} style={{ width: 'auto', margin: '0 auto' /* Center table */ }} className="results-table-retro">
+    // Apply results-table class, remove inline styles
+    <table className="results-table">
       <thead>
         <tr>
           {headers.map(header => (
@@ -48,14 +50,11 @@ function ResultsTable({ results = [], datasetAttributes = [], onMatchClick }: Re
           const matchPercent = typeof result.matchPercentage === 'number'
             ? `${result.matchPercentage.toFixed(1)}%`
             : '-';
-          const profileId = result.profileData?.original_row_index ?? '-';
+          // Attempt to find a common ID field, fallback to index
+          const profileId = result.profileData?.id ?? result.profileData?.profile_id ?? result.profileData?.original_row_index ?? '-';
 
-          // No longer need row click handler here, button handles it
           return (
-            <tr
-              key={key}
-              // Removed onClick, onMouseEnter, onMouseLeave from row
-            >
+            <tr key={key}>
               {/* Match Percentage */}
               <td style={{ textAlign: 'center', fontWeight: 'bold' }}>{matchPercent}</td>
               {/* Profile ID */}
@@ -65,8 +64,8 @@ function ResultsTable({ results = [], datasetAttributes = [], onMatchClick }: Re
                 {onMatchClick && (
                   <button
                     onClick={(e) => handleDetailsClick(e, result)}
-                    className="button" // Use standard button style
-                    style={{ fontSize: '11px', padding: '2px 6px', backgroundColor: '#FFFF00', borderColor: '#AAAA00' }} // Yellow button
+                    // Apply button classes from CSS
+                    className="button button-cyan details-button"
                   >
                     Details
                   </button>

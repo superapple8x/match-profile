@@ -1,4 +1,4 @@
-/* --- 90s/00s Maximalist Styles --- */
+/* --- 90s/00s Maximalist Styles (Provided by User) --- */
 
 /* Tiled background using CSS gradients for a retro pattern */
 body {
@@ -14,8 +14,16 @@ body {
   padding: 15px; /* Padding around the main table */
 }
 
-/* Main container table - applied to #root > table in App.jsx */
-/* .main-container-table { ... } */ /* Style applied directly in App.jsx for now */
+/* Main container table - applied via class */
+.main-container-table {
+    width: 95%; /* Use percentage */
+    max-width: 900px; /* Adjust max width as needed */
+    margin: 10px auto;
+    border: 5px ridge #FFFF00; /* Bright Yellow ridge border */
+    background-color: #000080; /* Navy blue background */
+    padding: 0;
+    border-collapse: collapse; /* Collapse borders */
+}
 
 /* Header cell style (can be applied where needed) */
 .header-cell {
@@ -29,12 +37,19 @@ body {
 /* Main title style (can be applied where needed) */
 .main-title {
   font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif; /* Classic chunky font */
-  font-size: 32px; /* BIG */
+  font-size: 36px; /* Adjusted Size */
   color: #FF00FF; /* Bright Magenta */
   letter-spacing: 2px;
   text-shadow: 2px 2px #00FFFF; /* Cyan shadow */
   margin: 0;
 }
+.subtitle { /* Added subtitle style */
+     font-family: "Comic Sans MS", cursive, sans-serif;
+     font-size: 14px;
+     color: #0000FF; /* Blue */
+     font-weight: bold;
+}
+
 
 /* Blinking text effect */
 @keyframes blink {
@@ -46,184 +61,368 @@ body {
 .blink {
   animation: blink 1s linear infinite;
   font-weight: bold;
-  color: #FFFF00; /* Blinking yellow */
+  /* Color applied inline or via specific class */
 }
 
 /* Horizontal rule styling */
-hr {
+hr.retro-hr { /* Use class for specificity */
   height: 3px;
   border: none;
-  background-color: #00FF00; /* Lime green */
+  background-color: #00FF00; /* Lime green default */
   color: #00FF00; /* For older IE */
-  margin: 10px 0;
+  margin: 15px 0; /* More margin */
 }
+hr.cyan { background-color: #00FFFF; color: #00FFFF; }
+hr.magenta { background-color: #FF00FF; color: #FF00FF; }
+hr.yellow { background-color: #FFFF00; color: #FFFF00; }
 
-/* Tab area styling using table cells */
-.tabs-table {
-  width: 100%;
-  border-collapse: collapse; /* Remove spacing between cells */
-  margin-bottom: 10px;
-  background-color: #444444; /* Dark gray tab background */
-}
-.tab-button-cell {
-  border: 2px outset #888888;
-  padding: 8px;
-  text-align: center;
-  cursor: pointer;
-  font-weight: bold;
-  color: #FFFFFF;
-  background-color: #666666; /* Default tab color */
-}
-.tab-button-cell.active {
-  border-style: inset;
-  background-color: #0055AA; /* Brighter blue for active tab */
-  color: #FFFF00; /* Yellow text for active tab */
-}
-.tab-button-cell:hover {
-   background-color: #888888; /* Simple hover effect */
-}
 
-/* Content area */
-.content-cell {
+/* Tab area styling - Not used in this specific layout, kept for reference */
+.tabs-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; background-color: #444444; }
+.tab-button-cell { border: 2px outset #888888; padding: 8px; text-align: center; cursor: pointer; font-weight: bold; color: #FFFFFF; background-color: #666666; }
+.tab-button-cell.active { border-style: inset; background-color: #0055AA; color: #FFFF00; }
+.tab-button-cell:hover { background-color: #888888; }
+
+/* --- Layout Cells (Refined) --- */
+.sidebar-cell {
+    width: 220px; /* Fixed width */
+    vertical-align: top;
+    padding: 15px;
+    background-color: #000055; /* Darker navy */
+    border-right: 4px groove #FF00FF; /* Magenta groove border */
+    color: #FFFF00; /* Yellow text for readability */
+}
+.main-content-cell {
+  vertical-align: top;
   padding: 15px;
   background-color: #EEEEEE; /* Light gray content background */
   color: #000000; /* Black text for content */
-  border-top: 3px groove #FF0000; /* Red groove border */
+}
+.footer-cell {
+    padding: 10px;
+    text-align: center;
+    font-size: 10px;
+    color: #CCCCCC; /* Lighter text */
+    background-color: #333333; /* Dark gray footer */
+    border-top: 3px solid #FFFF00; /* Yellow border */
+}
+.footer-cell a { color: #FFFF00; }
+
+
+/* --- Section Titles (Refined) --- */
+.section-title {
+    font-family: Impact, sans-serif;
+    font-size: 24px;
+    color: #008000; /* Dark Green */
+    margin: 0 0 15px 0; /* Increased bottom margin */
+    border: 3px ridge #00FF00; /* Lime Ridge Border */
+    background-color: #C0C0C0; /* Silver background */
+    padding: 5px 10px;
+    text-align: center;
+    text-shadow: 1px 1px #FFFF00; /* Yellow shadow */
+}
+ .sidebar-section-title { /* Specific style for sidebar */
+    font-family: "Comic Sans MS", cursive, sans-serif;
+    font-size: 18px;
+    font-weight: bold;
+    color: #FF00FF; /* Magenta */
+    text-align: center;
+    margin-bottom: 10px;
+    border: 2px dashed #FFFF00; /* Yellow dashed border */
+    background-color: #000080; /* Navy background */
+    padding: 4px;
 }
 
-/* Form styling */
-.form-title {
-  font-family: "Comic Sans MS", cursive, sans-serif; /* The infamous Comic Sans */
-  font-size: 20px;
-  color: #FF0000; /* Red heading */
-  margin-top: 0;
-  margin-bottom: 15px;
-  text-align: center;
-  font-weight: bold;
+
+/* --- Form & Input Styling (Refined) --- */
+.form-section { /* Wrapper for form areas */
+     border: 3px groove #00FFFF; /* Cyan groove */
+     background-color: #D0D0D0; /* Slightly darker gray */
+     padding: 15px; /* More padding */
+     margin-bottom: 15px;
+     /* Removed animation and opacity */
 }
 
-.form-table {
-  margin: 0 auto; /* Center form table */
-  background-color: #D0D0D0; /* Slightly darker gray for form bg */
-  padding: 10px;
-  border: 1px solid #000000;
+.form-table { /* Used inside sections */
+  margin: 0 auto;
+  background: none; /* Remove default bg */
+  border: none; /* Remove default border */
+  width: 100%; /* Take full width of container */
 }
 .form-table td {
- padding: 5px;
+   padding: 5px;
+   border: none; /* Remove default cell borders */
+   color: #000000; /* Ensure black text */
+   vertical-align: middle; /* Align vertically */
 }
 .form-table label {
   font-weight: bold;
   color: #000080; /* Navy label text */
-  font-size: 13px; /* Slightly larger label */
+  font-size: 13px;
+  padding-right: 5px; /* Space after label */
 }
+/* Input field styling */
 input[type="text"],
 input[type="password"],
-input[type="email"] { /* Added email */
-  width: 180px; /* Default width */
-  padding: 3px;
-  border: 1px solid #000000; /* Simple black border */
+input[type="email"],
+select { /* Added select */
+  width: 100%; /* Full width within table cell */
+  padding: 4px; /* Increased padding */
+  border: 2px inset #808080; /* Standard inset */
   font-size: 12px;
   background-color: #FFFFFF;
   color: #000000;
-  margin-left: 5px; /* Space from label */
+  margin-left: 0; /* Remove default margin */
   box-sizing: border-box; /* Include padding/border in width */
+  font-family: Arial, Helvetica, sans-serif; /* Consistent font */
 }
-
+input[type="file"] { /* Specific style for file input */
+     border: none;
+     background: none;
+     padding: 0;
+     color: inherit; /* Inherit sidebar text color */
+}
 /* General Input styling (override for specific types above) */
 input, select, textarea, button {
-    font-family: Arial, Helvetica, sans-serif; /* Consistent font */
+    font-family: Arial, Helvetica, sans-serif;
     font-size: 12px;
     border: 2px outset #888888; /* Default outset border */
     background-color: #C0C0C0; /* Default silver background */
     color: #000000; /* Default black text */
     padding: 3px 5px; /* Default padding */
+    vertical-align: middle; /* Align nicely */
 }
 input:active, select:active, textarea:active, button:active {
     border-style: inset; /* Inset border when active */
 }
+input:focus, select:focus, textarea:focus {
+     outline: 2px solid #FF00FF; /* Magenta focus outline */
+     outline-offset: 1px;
+}
 input[disabled], select[disabled], textarea[disabled], button[disabled] {
-    color: #666666; /* Gray text when disabled */
-    background-color: #AAAAAA;
+    color: #666666 !important; /* Gray text when disabled */
+    background-color: #AAAAAA !important;
+    border-color: #666666 !important;
     cursor: not-allowed;
+    opacity: 0.7;
 }
 
 
-/* Buttons - more colorful! */
-.button {
+/* --- Button Styling (Refined & Consistent) --- */
+.button { /* Base style for all buttons */
   font-family: Arial, Helvetica, sans-serif;
-  font-size: 14px; /* Larger button text */
+  font-size: 12px; /* Consistent base size */
   font-weight: bold;
-  padding: 6px 18px;
-  background-color: #00FF00; /* LIME GREEN button */
-  border: 3px outset #00AA00; /* Darker green border */
+  padding: 5px 15px; /* Consistent padding */
+  border: 3px outset #888888; /* Default border */
   cursor: pointer;
-  color: #000000; /* Black text */
+  color: #000000; /* Default black text */
+  background-color: #C0C0C0; /* Default Silver */
+  text-align: center;
+  white-space: nowrap;
 }
-.button:active {
-  border-style: inset;
-  background-color: #00DD00; /* Slightly lighter green when pressed */
+.button:active:not([disabled]) { border-style: inset; }
+.button:hover:not([disabled]) { filter: brightness(1.1); } /* Basic hover */
+
+/* Color Variants */
+.button-green { background-color: #00FF00; border-color: #00AA00; }
+.button-green:active:not([disabled]) { background-color: #00DD00; }
+.button-magenta { background-color: #FF00FF; border-color: #AA00AA; }
+.button-magenta:active:not([disabled]) { background-color: #DD00DD; }
+.button-cyan { background-color: #00FFFF; border-color: #00AAAA; }
+.button-cyan:active:not([disabled]) { background-color: #00DDDD; }
+.button-yellow { background-color: #FFFF00; border-color: #AAAA00; }
+.button-yellow:active:not([disabled]) { background-color: #DDDD00; }
+.button-red { background-color: #FF0000; border-color: #AA0000; color: #FFFF00; } /* Red with yellow text */
+.button-red:active:not([disabled]) { background-color: #DD0000; }
+.button-blue { background-color: #0000FF; border-color: #0000AA; color: #FFFFFF;} /* Blue with white text */
+.button-blue:active:not([disabled]) { background-color: #0000DD;}
+/* Size Variants */
+.button-large { font-size: 16px; padding: 8px 25px; font-family: Impact, sans-serif; letter-spacing: 1px; }
+.button-small { font-size: 10px; padding: 1px 6px; border-width: 2px; }
+/* Full width variant */
+.button-full { display: block; width: 100%; margin-bottom: 5px; box-sizing: border-box; }
+
+/* --- Link Styling --- */
+a { color: #00FFFF; text-decoration: underline; font-weight: bold; }
+a:visited { color: #FF00FF; }
+a:hover { color: #FFFF00; background-color: #000055; } /* Add hover bg */
+a:active { color: #FF0000; } /* Added active state */
+
+/* --- Specific Component Styles (Refined) --- */
+/* Criteria List */
+.criteria-list-box {
+    margin-bottom: 15px; border: 3px inset #00FFFF; padding: 10px;
+    background-color: #000000; /* Black background */ color: #FFFFFF; /* White text */
+    min-height: 40px; max-height: 120px; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: #FF00FF #555555;
 }
-.button-register { /* Different color for register */
-   background-color: #FF00FF; /* MAGENTA button */
-   border-color: #AA00AA;
+.criteria-list-box strong { /* "Current Criteria:" label */
+    font-family: "Times New Roman", Times, serif; font-size: 14px; color: #FFFF00; /* Yellow */
+    display: block; margin-bottom: 5px; border-bottom: 1px dashed #FF00FF; padding-bottom: 3px;
 }
- .button-register:active {
-   background-color: #DD00DD;
+.criteria-list-box ul { list-style: none; margin: 0; padding: 0; }
+.criteria-list-box li {
+    margin: 4px 0; font-family: "Courier New", Courier, monospace; font-size: 11px;
+    color: #00FF00; /* Lime green criteria text */ display: flex; justify-content: space-between;
+    align-items: center; background-color: #222222; padding: 3px 6px; border: 1px solid #555555;
+}
+.remove-button { /* Tiny Red X Button */
+     font-family: Arial, Helvetica, sans-serif !important; /* Override */
+     font-size: 10px !important;
+     font-weight: bold !important;
+     padding: 0px 5px !important;
+     line-height: 1 !important;
+     margin-left: 10px !important;
+     background-color: #FF0000 !important;
+     border: 2px outset #AA0000 !important;
+     color: #FFFFFF !important;
+     cursor: pointer !important;
+     /* Reset base button styles that might interfere */
+     text-align: center !important;
+     white-space: nowrap !important;
+     display: inline-block !important; /* Ensure it behaves like a button */
+     width: auto !important; /* Override full width if applied */
+}
+.remove-button:active { border-style: inset !important; background-color: #DD0000 !important; }
+
+/* Results Table */
+.results-table {
+     width: 100%; margin-top: 10px; border: 3px ridge #0000FF; /* Blue ridge border */
+     background-color: #FFFFFF; color: #000000;
+     border-collapse: collapse; /* Ensure borders collapse */
+}
+.results-table th, .results-table td {
+     border: 1px solid #808080; padding: 6px; /* More padding */
+     text-align: left; vertical-align: middle; /* Middle align */
+     font-size: 11px; /* Smaller table text */
+}
+.results-table th {
+     background-color: #C0C0C0; /* Silver header */ font-weight: bold;
+     font-size: 12px; /* Slightly larger header text */
+     color: #000000;
+     border-bottom: 2px solid #000000; /* Stronger bottom border */
+}
+.results-table tr:nth-child(even) { background-color: #F0F0F0; } /* Zebra striping */
+.results-table tr:hover { background-color: #FFFFCC; } /* Hover effect */
+.results-table .details-button { /* Style for Details button in table */
+    font-size: 10px !important; padding: 1px 8px !important;
+}
+
+/* Dashboard Controls (Active Criteria, Sort, Pagination) */
+.dashboard-controls {
+     background-color: #000055; /* Dark Navy */
+     border: 3px groove #FFFF00; /* Yellow groove */
+     padding: 10px;
+     color: #FFFF00; /* Yellow text */
+     margin-bottom: 10px;
+}
+ .dashboard-controls label, .dashboard-controls span {
+     font-weight: bold;
+     color: #00FFFF; /* Cyan labels */
+     margin-right: 5px;
+     vertical-align: middle; /* Align labels */
+ }
+ .dashboard-controls select { /* Style dropdown */
+     width: auto; /* Auto width */
+     min-width: 100px;
+     margin-right: 10px;
+     border-width: 2px; /* Match other inputs */
+     vertical-align: middle;
+ }
+ .dashboard-controls .button { /* Style buttons */
+     margin: 0 5px;
+     vertical-align: middle;
+ }
+ .dashboard-controls .pagination-info {
+     color: #FFFFFF; /* White text */
+     margin: 0 10px;
+     font-style: italic;
+     vertical-align: middle;
+ }
+ .dashboard-controls .active-criteria-item { /* Style for criteria display */
+    background-color: #000000;
+    color: #00FF00;
+    padding: 2px 5px;
+    border: 1px solid #00FF00;
+    font-family: monospace;
+    font-size: 11px;
+    margin: 0 3px 3px 0; /* Spacing */
+    display: inline-block; /* Allow multiple on one line */
  }
 
-/* Links */
-a {
-  color: #00FFFF; /* Cyan links */
-  text-decoration: underline;
-  font-weight: bold;
-}
-a:visited {
-  color: #FF00FF; /* Magenta visited links */
-}
-a:hover {
-  color: #FFFF00; /* Yellow hover */
-}
 
 /* Fake Hit Counter / Banner */
 .fake-graphic {
-  border: 1px dashed #FFFF00;
-  padding: 5px;
-  margin-top: 15px;
-  text-align: center;
-  font-family: monospace;
-  font-size: 10px;
-  color: #CCCCCC;
-  background-color: #222222;
+  border: 1px dashed #FFFF00; padding: 5px; margin-top: 15px; text-align: center;
+  font-family: monospace; font-size: 10px; color: #CCCCCC; background-color: #222222;
 }
 
-/* Hide inactive tab content */
-.tab-content { display: none; }
-.tab-content.active { display: block; }
+/* Utility */
+.text-center { text-align: center; }
+.mt-1 { margin-top: 5px; }
+.mt-2 { margin-top: 10px; }
+.mb-1 { margin-bottom: 5px; }
+.mb-2 { margin-bottom: 10px; }
 
-.center-align { text-align: center; padding-top: 10px; }
-.small-text { font-size: 11px; color: #333333; text-align: center; margin-top: 15px; }
-
-/* Basic table styling (overrides previous simple one) */
-table {
-  border-collapse: collapse; /* Collapse borders by default */
-  border: 1px solid #808080; /* Default simple border */
-  background-color: #FFFFFF; /* Default white background */
-  color: #000000; /* Default black text */
-  font-size: 12px; /* Match body font size */
-  margin-bottom: 10px; /* Space below tables */
+/* Animations for Bling */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
-
-th, td {
-  border: 1px solid #808080; /* Default cell borders */
-  padding: 4px;
-  text-align: left;
-  vertical-align: top; /* Align top by default */
-}
-
-th {
-  background-color: #C0C0C0; /* Silver header */
+.spin {
+  display: inline-block; /* Needed for transform */
+  animation: spin 2s linear infinite;
+  /* Color applied inline */
   font-weight: bold;
-  color: #000000;
+  margin: 0 5px;
 }
 
-/* --- End 90s/00s Maximalist Styles --- */
+
+/* --- Animated Search Guide --- */
+@keyframes slide-in-guide {
+  from { transform: translateX(-110%); opacity: 0; } /* Start off-screen left */
+  to { transform: translateX(0); opacity: 1; } /* Slide to final position */
+}
+
+.search-guide {
+  position: relative; /* Keep it in flow */
+  background-color: #FFFF00; /* Bright yellow background */
+  color: #0000FF; /* Blue text */
+  padding: 5px 10px;
+  border: 3px outset #FF00FF; /* Magenta border */
+  font-family: "Comic Sans MS", cursive, sans-serif; /* Fun font */
+  font-size: 14px;
+  font-weight: bold;
+  text-align: center;
+  margin-bottom: 10px; /* Space below the guide */
+  overflow: hidden; /* Hide text until it slides in */
+  white-space: nowrap; /* Prevent wrapping */
+  opacity: 0; /* Start hidden */
+  z-index: 10; /* Ensure it's above other elements if needed */
+}
+
+.search-guide.blinking {
+  /* Slide in (1.5s), then blink 10 times (1s duration * 10 = 10s) after 1.5s slide-in delay */
+  /* Use 'forwards' on both to retain end state */
+  animation: slide-in-guide 1.5s ease-out forwards, blink 1s linear 1.5s 10 forwards;
+}
+
+.search-guide.hidden {
+  display: none; /* Hide after animation */
+}
+/* --- End Animated Search Guide --- */
+
+
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-8px); }
+  60% { transform: translateY(-4px); }
+}
+.bounce {
+  display: inline-block; /* Needed for transform */
+  animation: bounce 1.5s infinite;
+  /* Color applied inline */
+  font-weight: bold;
+  margin: 0 5px;
+}

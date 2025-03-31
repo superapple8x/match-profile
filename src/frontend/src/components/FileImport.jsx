@@ -85,69 +85,73 @@ function FileImport({ onFileImport, authToken, handleLogout }) {
       } else {
         setFile(selectedFile);
         setFileName(selectedFile.name);
+        // Trigger upload immediately after selection
         handleUpload(selectedFile);
       }
     }
+     // Reset input value to allow re-uploading the same file
      event.target.value = null;
   }, [handleUpload]);
 
-  // Basic container styling - use inline styles for simple cases or specific overrides
-  const containerStyle = {
-    border: '3px ridge #FFFF00', // Match main container border style
+  // Container styling - Keep dynamic border/background for status
+  const statusContainerStyle = {
+    border: '3px ridge #FFFF00', // Default border
     padding: '10px',
     marginBottom: '15px',
-    backgroundColor: '#000080', // Match main container background
     textAlign: 'center',
-    color: '#FFFFFF', // White text for this container
+    // Base background/text color inherited from .sidebar-cell
   };
 
   // Apply error/success styles conditionally by changing border/background
   if (error) {
-    containerStyle.borderColor = 'red';
-    containerStyle.backgroundColor = '#8B0000'; // Dark red background for error
+    statusContainerStyle.borderColor = 'red';
+    statusContainerStyle.backgroundColor = '#8B0000'; // Dark red background for error
   } else if (uploadSuccess) {
-    containerStyle.borderColor = '#00FF00'; // Lime green border for success
-    containerStyle.backgroundColor = '#006400'; // Dark green background for success
+    statusContainerStyle.borderColor = '#00FF00'; // Lime green border for success
+    statusContainerStyle.backgroundColor = '#006400'; // Dark green background for success
   }
 
   return (
-    <div style={containerStyle}>
-      {/* Use a simpler heading, styled by parent or default */}
-      <h4 style={{ marginTop: 0, marginBottom: '10px', color: '#FFFF00', fontFamily: 'Impact', textShadow: '1px 1px #FF00FF' }}>Import Dataset</h4>
-      {/* Basic file input - should inherit from index.css */}
+    // Apply dynamic status styles to this outer div
+    <div style={statusContainerStyle}>
+      {/* Apply sidebar-section-title */}
+      <div className="sidebar-section-title">Import Dataset</div>
+      {/* Hidden actual file input */}
       <input
         id="file-upload-retro"
         type="file"
         onChange={handleFileChange}
         accept=".csv,.xls,.xlsx"
         disabled={isUploading}
-        style={{
-            display: 'block',
-            margin: '0 auto 10px auto',
-            width: '90%', // Make it wider
-            // Let index.css handle border, padding, background, color
-        }}
+        style={{ display: 'none' }} // Hide the actual input
       />
-      <div style={{ marginBottom: '10px', fontSize: '11px', fontStyle: 'italic', color: '#CCCCCC' }}>
-        Selected: {fileName}
+      {/* Visible "Browse" button that triggers the hidden input */}
+      <button
+        type="button"
+        className="button button-green button-full"
+        onClick={() => document.getElementById('file-upload-retro')?.click()} // Trigger hidden input
+        disabled={isUploading}
+      >
+          Browse...
+      </button>
+      {/* Status display area */}
+      <div style={{ fontSize: '10px', marginTop: '5px', border: '1px dashed #00FFFF', padding: '3px', backgroundColor: '#000080' }}>
+        Selected: {fileName} <br />
+        Status:
+        {/* Status Messages */}
+        {error && (
+          <span style={{ color: '#FF8C00', fontWeight: 'bold' }}> !! ERROR !! {error}</span>
+        )}
+        {isUploading && (
+             <span style={{ color: '#00FFFF', fontWeight: 'bold' }}> Uploading... <span className="blink">***</span></span>
+        )}
+        {uploadSuccess && !isUploading && (
+          <span style={{ color: '#00FF00', fontWeight: 'bold' }}> Uploaded Successfully!</span>
+        )}
+        {!error && !isUploading && !uploadSuccess && (
+            <span style={{ color: '#CCCCCC', fontStyle: 'italic' }}> Idle</span>
+        )}
       </div>
-
-      {/* Status Messages */}
-      {error && (
-        <div style={{ color: '#FF8C00', fontWeight: 'bold', marginBottom: '10px', fontSize: '11px' }}>
-          !! ERROR !! {error}
-        </div>
-      )}
-      {isUploading && (
-           <div style={{ color: '#00FFFF', fontWeight: 'bold', marginBottom: '10px', fontSize: '11px' }}>
-               Uploading... Please Wait! <span className="blink">***</span>
-           </div>
-      )}
-      {uploadSuccess && !isUploading && (
-        <div style={{ color: '#00FF00', fontWeight: 'bold', marginBottom: '10px', fontSize: '11px' }}>
-            File uploaded successfully! Dataset ready.
-        </div>
-      )}
     </div>
   );
 }
@@ -162,6 +166,5 @@ FileImport.propTypes = {
 FileImport.defaultProps = {
   authToken: null,
 };
-
 
 export default FileImport;

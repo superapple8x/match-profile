@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'; // Removed useCallback as it's not used directly here anymore
+import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import DataOverviewWindow from './DataOverviewWindow'; // Import the new window component
 
@@ -96,41 +96,26 @@ function DataOverview({ datasetId, datasetName, datasetAttributes, authToken, ha
   } else if (!statsData) {
       // Could happen if fetch completed but returned no data (e.g., empty dataset)
       buttonText = "Overview Unavailable";
-      buttonDisabled = true; // Or allow opening to show "No data" message? Let's disable for now.
+      buttonDisabled = true;
   }
 
 
   return (
-    // Use content-cell style for consistency within the main app layout
-    // Add position: relative to allow absolute positioning of the window within this container
-    <div className="content-cell" style={{ marginBottom: '15px', position: 'relative' }}>
-      {/* Use form-title style for the main heading */}
-      <h3 className="form-title" style={{ color: '#00FF00', textShadow: '1px 1px #FF00FF', display: 'inline-block', marginRight: '15px' }}>
-        DATASET: {datasetName || 'Unnamed Dataset'}
-      </h3>
+    // Use a wrapper div styled like the example's top section
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', backgroundColor: '#D0D0D0', padding: '10px', border: '2px solid #0000FF', position: 'relative' }}>
+      {/* Dataset Name - styled inline for simplicity */}
+      <span style={{ fontWeight: 'bold', color: '#000080' }}>
+        DATASET: <span style={{ color: '#FF0000' }}>{datasetName || 'Unnamed Dataset'}</span>
+      </span>
 
       {/* Button to open the overview window */}
       <button
         onClick={openOverviewWindow}
         disabled={buttonDisabled}
-        className="button" // Use standard retro button style
-        style={{ backgroundColor: '#00FFFF', borderColor: '#00AAAA', color: '#000000' }} // Cyan button
+        className="button button-blue" // Apply blue button style
       >
         {buttonText}
       </button>
-
-      <hr /> {/* Use global HR style */}
-
-      {/* Display loading/error status briefly below the button */}
-      {isLoading && <p style={{ color: '#FFFF00', fontSize: '11px' }}><span className="blink">Loading...</span></p>}
-      {error && !statsData && <p style={{ color: 'red', fontSize: '11px', fontWeight: 'bold' }}>Error loading stats.</p>}
-      {!isLoading && !error && statsData && (
-          <p style={{ color: '#FFFFFF', fontSize: '11px' }}>
-              Profiles: <span style={{ color: '#00FF00' }}>{statsData.totalRows?.toLocaleString() ?? 'N/A'}</span> |
-              Attributes: <span style={{ color: '#00FF00' }}>{datasetAttributes?.length ?? 'N/A'}</span>
-          </p>
-      )}
-
 
       {/* Conditionally render the DataOverviewWindow */}
       {isOverviewWindowOpen && (statsData || error) && ( // Ensure data or error exists before rendering window
@@ -138,7 +123,6 @@ function DataOverview({ datasetId, datasetName, datasetAttributes, authToken, ha
           datasetName={datasetName}
           statsData={statsData} // Pass the fetched stats data
           datasetAttributes={datasetAttributes}
-          // darkMode={false} // Pass darkMode if available/needed
           onClose={closeOverviewWindow}
         />
       )}

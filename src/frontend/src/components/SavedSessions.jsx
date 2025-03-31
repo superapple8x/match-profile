@@ -73,6 +73,7 @@ function SavedSessions({ authToken, currentAppState, onLoadSession, handleLogout
             searchCriteria: currentAppState.searchCriteria,
             analysisQuery: currentAppState.analysisQuery,
             analysisMessages: currentAppState.analysisMessages,
+            weights: currentAppState.weights, // Include weights
         };
         console.log("Saving session payload:", payload);
 
@@ -167,49 +168,50 @@ function SavedSessions({ authToken, currentAppState, onLoadSession, handleLogout
   // --- Render Logic ---
 
   return (
-    // Container matching FileImport style
-    <div style={{ border: '3px ridge #FFFF00', padding: '10px', marginBottom: '15px', backgroundColor: '#000080', color: '#FFFFFF' }}>
-      <h4 style={{ marginTop: 0, marginBottom: '10px', color: '#FFFF00', fontFamily: 'Impact', textShadow: '1px 1px #FF00FF' }}>Saved Sessions</h4>
+    // Container styles inherited from .sidebar-cell
+    <div>
+      {/* Apply sidebar-section-title */}
+      <div className="sidebar-section-title">Saved Sessions</div>
 
-      {/* Save Button - Use .button class */}
+      {/* Save Button - Apply button classes */}
       <button
         onClick={handleSaveClick}
         disabled={!authToken || !currentAppState?.datasetId || actionLoading === 'save'}
-        className="button" // Use the green button style
-        style={{ width: '100%', marginBottom: '10px' }}
+        className="button button-yellow button-full" // Yellow, full width
       >
         {actionLoading === 'save' ? 'Saving...' : 'Save Current Session'}
       </button>
 
-      {/* Error Message */}
-      {error && <p style={{ color: '#FF8C00', fontSize: '11px', marginBottom: '10px', fontWeight: 'bold' }}>Error: {error}</p>}
+      {/* Error Message - Use sidebar text color */}
+      {error && <p style={{ color: '#FF8C00', fontSize: '11px', marginTop: '5px', fontWeight: 'bold' }}>Error: {error}</p>}
 
       {/* Session List */}
       {isLoading ? (
-        <p style={{ fontStyle: 'italic', color: '#CCCCCC', fontSize: '11px' }}>Loading sessions...</p>
+        <p style={{ fontStyle: 'italic', fontSize: '11px', marginTop: '5px' }}>Loading sessions...</p>
       ) : sessions.length === 0 ? (
-        <p style={{ fontSize: '11px', color: '#CCCCCC' }}>No saved sessions found.</p>
+        <p style={{ fontSize: '11px', marginTop: '5px' }}>No saved sessions found.</p>
       ) : (
-        // Use a basic div for the list container
-        <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #FFFF00', backgroundColor: '#000033', padding: '5px' }}>
+        // List container styling from example
+        <div style={{ border: '1px solid #FFFF00', padding: '5px', marginTop: '5px', maxHeight: '150px', overflowY: 'auto', backgroundColor: '#000080' }}>
           {sessions.map((session) => (
-            <div key={session.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px dotted #FFFF00' }}>
+            // List item styling from example
+            <div key={session.id} style={{ marginBottom: '3px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               {/* Details */}
               <div style={{ flexGrow: 1, marginRight: '10px', overflow: 'hidden' }}>
-                <span style={{ fontWeight: 'bold', fontSize: '11px', color: '#FFFFFF', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={session.session_name}>
+                <span style={{ fontSize: '11px', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={session.session_name}>
                   {session.session_name}
                 </span>
                 <span style={{ fontSize: '10px', color: '#AAAAAA' }}>
                   DS: {session.dataset_id?.length > 8 ? session.dataset_id.substring(0, 8) + '...' : session.dataset_id || 'N/A'} | {new Date(session.updated_at).toLocaleDateString()}
                 </span>
               </div>
-              {/* Actions - Use basic buttons inheriting styles */}
+              {/* Actions - Apply button classes */}
               <div style={{ flexShrink: 0 }}>
                 <button
                   onClick={() => handleLoadClick(session.id)}
                   disabled={!!actionLoading}
                   title="Load Session"
-                  style={{ fontSize: '10px', padding: '1px 3px', marginRight: '3px', color: '#000000', backgroundColor: '#00FFFF', borderColor: '#00AAAA' }} // Cyan button
+                  className="button button-green button-small" // Green, small
                 >
                   {actionLoading === `load-${session.id}` ? '...' : 'Load'}
                 </button>
@@ -217,7 +219,7 @@ function SavedSessions({ authToken, currentAppState, onLoadSession, handleLogout
                   onClick={() => handleDeleteClick(session.id)}
                    disabled={!!actionLoading}
                   title="Delete Session"
-                  style={{ fontSize: '10px', padding: '1px 3px', color: '#FFFFFF', backgroundColor: '#FF0000', borderColor: '#AA0000' }} // Red button
+                  className="button button-red button-small" // Red, small
                 >
                    {actionLoading === `delete-${session.id}` ? '...' : 'Del'}
                 </button>
@@ -230,7 +232,7 @@ function SavedSessions({ authToken, currentAppState, onLoadSession, handleLogout
   );
 }
 
-// Simplified PropTypes
+// Updated PropTypes to include weights
 SavedSessions.propTypes = {
   authToken: PropTypes.string,
   currentAppState: PropTypes.shape({
@@ -238,6 +240,7 @@ SavedSessions.propTypes = {
     searchCriteria: PropTypes.any,
     analysisQuery: PropTypes.string,
     analysisMessages: PropTypes.array,
+    weights: PropTypes.object, // Added weights
   }),
   onLoadSession: PropTypes.func.isRequired,
   handleLogout: PropTypes.func.isRequired,
