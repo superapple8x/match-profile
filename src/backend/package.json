@@ -4,23 +4,34 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "start:prod": "pm2 start index.js -i max --no-daemon",
+    "stop:prod": "pm2 stop index.js",
+    "logs:prod": "pm2 logs"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "bcryptjs": "^3.0.2",
+    "compression": "^1.8.0",
     "cors": "^2.8.5",
     "csv-parser": "^3.0.0",
     "dockerode": "^4.0.4",
     "dotenv": "^16.4.7",
     "express": "^4.18.2",
+    "express-rate-limit": "^7.5.0",
+    "express-validator": "^7.2.1",
+    "file-type": "^20.4.1",
     "fuse.js": "^7.1.0",
+    "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
+    "node-cache": "^5.1.2",
     "openai": "^4.89.1",
     "pg": "^8.11.3",
+    "pm2": "^5.4.2",
+    "winston": "^3.17.0",
     "xlsx": "^0.18.5"
   }
 }

@@ -10,6 +10,22 @@ const path = require('path'); // Need path module
 const authMiddleware = require('../middleware/authMiddleware'); // Import auth middleware
 const optionalAuthMiddleware = require('../middleware/optionalAuthMiddleware'); // Import optional auth middleware
 const { query, pool: dbPool } = require('../config/db'); // Import query function and the instantiated pool
+const { body, query: queryValidator, param, validationResult } = require('express-validator'); // Import validation functions
+const logger = require('../config/logger'); // Import logger
+const { fileTypeFromBuffer } = require('file-type'); // Import file-type
+const cache = require('../services/cacheService'); // Import cache service
+
+// --- Validation Middleware ---
+// Middleware to handle validation errors from express-validator
+const validateRequest = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    // Log validation errors
+    logger.warn('Validation failed for request', { url: req.originalUrl, errors: errors.array() });
+    return res.status(400).json({ errors: errors.array() });
+  }
+  next();
+};
 
 // --- Helper Functions ---
 
@@ -47,30 +63,90 @@ function inferColumnType(value) {
   return 'TEXT'; // Default to TEXT
 }
 
+// --- Metadata Caching Helper ---
+async function getMetadataWithCache(datasetId) {
+  const cacheKey = `metadata_${datasetId}`;
+  let metadata = cache.get(cacheKey);
+
+  if (metadata) {
+    logger.debug(`[Cache] HIT for metadata: ${cacheKey}`);
+    return metadata; // Return cached data
+  }
+
+  logger.debug(`[Cache] MISS for metadata: ${cacheKey}. Fetching from DB.`);
+  // Fetch from DB if not in cache
+  const metadataSql = `
+    SELECT db_table_name, columns_metadata, user_id AS owner_id
+    FROM dataset_metadata
+    WHERE id = $1;
+  `;
+  const metadataResult = await query(metadataSql, [datasetId]);
+
+  if (metadataResult.rows.length === 0) {
+    return null; // Indicate not found
+  }
+
+  // Prepare metadata object (ensure columns_metadata is parsed)
+  const dbRow = metadataResult.rows[0];
+  metadata = {
+    db_table_name: dbRow.db_table_name,
+    columns_metadata: typeof dbRow.columns_metadata === 'string'
+      ? JSON.parse(dbRow.columns_metadata)
+      : dbRow.columns_metadata,
+    owner_id: dbRow.owner_id
+  };
+
+  // Store in cache (using default TTL from cacheService)
+  cache.set(cacheKey, metadata);
+  logger.debug(`[Cache] SET metadata: ${cacheKey}`);
+
+  return metadata;
+}
+// --- End Metadata Caching Helper ---
+
 // --- End Helper Functions ---
 
 
 // Define the base upload directory path (No longer used for saving uploads)
 // const BASE_UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 
+// Multer file filter based on reported MIME type (less secure than magic number check, but an extra layer)
+const fileFilter = (req, file, cb) => {
+  const allowedMimeTypes = [
+    'text/csv',
+    'application/vnd.ms-excel', // .xls
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+    'application/csv' // Another common CSV type
+  ];
+  if (allowedMimeTypes.includes(file.mimetype)) {
+    cb(null, true); // Accept file
+  } else {
+    logger.warn(`[Import] Multer rejected file upload due to invalid reported MIME type`, { originalFileName: file.originalname, reportedMime: file.mimetype });
+    // Pass an error to multer - this will be caught by multer's error handling
+    // The message will be available in the error object in the route handler if needed,
+    // but typically we just send a generic 400 or rely on the magic number check later.
+    cb(new Error(`Unsupported file type reported by client: ${file.mimetype}.`), false); // Reject file
+  }
+};
+
 // Multer setup for file uploads
 const upload = multer({
   storage: multer.memoryStorage(), // Store files in memory
   limits: {
-    fileSize: 100 * 1024 * 1024, // 100 MB limit
-  }
+    fileSize: 100 * 1024 * 1024, // 100 MB limit - Adjust as needed
+  },
+  fileFilter: fileFilter // Add the filter
 });
 
 // File import endpoint - Use optionalAuthMiddleware
 router.post('/import', optionalAuthMiddleware, upload.single('file'), async (req, res) => { // Use optional auth
-  console.log('--- /api/import request received ---');
+  logger.info('--- /api/import request received ---');
   try {
     // User ID might be null if request is anonymous
     const userId = req.user?.id || null;
-    console.log(`[Import] User ID: ${userId === null ? 'Anonymous' : userId}`);
-    // Removed the strict check that returned 401 if !userId
+    logger.info(`[Import] User ID: ${userId === null ? 'Anonymous' : userId}`);
 
-    console.log('req.file received:', req.file ? `Name: ${req.file.originalname}, Size: ${req.file.size}` : 'No file object');
+    logger.info('[Import] req.file received:', { name: req.file?.originalname, size: req.file?.size });
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
@@ -80,17 +156,54 @@ router.post('/import', optionalAuthMiddleware, upload.single('file'), async (req
     const originalFileName = req.file.originalname;
     // Keep safeFileName for potential use in table naming, but don't create paths
     const safeFileName = path.basename(originalFileName).replace(/[^a-zA-Z0-9._-]/g, '_');
-    console.log(`[Import] Processing file: ${originalFileName} (Sanitized: ${safeFileName})`);
+    logger.info(`[Import] Processing file: ${originalFileName} (Sanitized: ${safeFileName})`);
 
     // --- Filesystem saving removed ---
 
     let parsedData = [];
 
-    // Handle different file types (using the buffer as before)
+    // --- File Type Validation (Revised) ---
+    // Get the MIME type reported by multer (based on Content-Type header)
+    const reportedMimeType = req.file.mimetype;
+    const isReportedCsv = ['text/csv', 'application/csv'].includes(reportedMimeType);
+    const isReportedExcel = [
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ].includes(reportedMimeType);
+
+    let fileTypeCheckPassed = false;
+    let actualMimeType = reportedMimeType; // Assume reported is correct initially
+
+    if (isReportedCsv) {
+        // For CSV, trust the reported type for now and let the parser handle errors.
+        fileTypeCheckPassed = true;
+        logger.info(`[Import] File reported as CSV (${reportedMimeType}). Proceeding to parse.`);
+    } else if (isReportedExcel) {
+        // For Excel, verify using magic numbers as it's more reliable.
+        const detectedType = await fileTypeFromBuffer(fileBuffer);
+        if (detectedType && (detectedType.mime === 'application/vnd.ms-excel' || detectedType.mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
+            fileTypeCheckPassed = true;
+            actualMimeType = detectedType.mime; // Use the detected type
+            logger.info(`[Import] Detected Excel file MIME type: ${actualMimeType}`);
+        } else {
+            const detectedMime = detectedType ? detectedType.mime : 'unknown';
+            logger.warn(`[Import] Rejected Excel file upload. Reported MIME: ${reportedMimeType}, Detected MIME: ${detectedMime}`, { originalFileName });
+            return res.status(400).json({ error: `Invalid Excel file format detected. Reported: ${reportedMimeType}, Detected: ${detectedMime}.` });
+        }
+    }
+
+    if (!fileTypeCheckPassed) {
+        // This path is reached if the reported type wasn't CSV or Excel, or if Excel magic number check failed.
+        logger.warn(`[Import] Rejected file upload due to unsupported reported MIME type`, { originalFileName, reportedMimeType });
+        return res.status(400).json({ error: `Unsupported file type reported by client: ${reportedMimeType}. Allowed: CSV, XLS, XLSX.` });
+    }
+    // --- End File Type Validation ---
+
+    // Handle different file types based on the validated/actual MIME type
     const textDecoder = new TextDecoder('utf-8');
-    // Use safeFileName to check extension
-    if (safeFileName.endsWith('.csv')) {
-      console.log(`Parsing CSV file: ${safeFileName}`);
+    // Use detected MIME type instead of filename extension
+    if (actualMimeType === 'text/csv' || actualMimeType === 'application/csv') {
+      logger.info(`[Import] Parsing CSV file: ${safeFileName}`);
       try { // Add try/catch specifically around the promise/stream
         await new Promise((resolve, reject) => {
           require('stream').Readable.from(fileBuffer)
@@ -100,42 +213,41 @@ router.post('/import', optionalAuthMiddleware, upload.single('file'), async (req
               parsedData.push(row);
             })
             .on('end', () => {
-              console.log('CSV parsing complete');
+              logger.info('[Import] CSV parsing complete');
               resolve();
             })
             .on('error', (error) => {
-              console.error('CSV stream error:', error); // Log stream-specific error
+              logger.error('[Import] CSV stream error', { error }); // Log stream-specific error
               reject(error); // Reject the promise on stream error
             });
         });
       } catch (csvError) {
-         console.error("Caught error during CSV stream processing:", csvError);
+         logger.error("[Import] Caught error during CSV stream processing", { error: csvError });
          // Re-throw to be caught by the main handler's catch block
          throw new Error(`CSV Processing failed: ${csvError.message}`);
       }
-    // Use safeFileName to check extension
-    } else if (safeFileName.endsWith('.xlsx') || safeFileName.endsWith('.xls')) {
-      console.log(`Parsing Excel file: ${safeFileName}`);
+    // Use detected MIME type instead of filename extension
+    } else if (actualMimeType === 'application/vnd.ms-excel' || actualMimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+      logger.info(`[Import] Parsing Excel file: ${safeFileName}`);
       try { // Add try/catch for excel parsing
         const workbook = xlsx.read(fileBuffer); // Read directly from buffer for xlsx
         const sheetName = workbook.SheetNames[0];
         parsedData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
-        console.log('Excel parsing complete');
+        logger.info('[Import] Excel parsing complete');
       } catch (excelError) {
-          console.error("Caught error during Excel processing:", excelError);
+          logger.error("[Import] Caught error during Excel processing", { error: excelError });
           throw new Error(`Excel Processing failed: ${excelError.message}`);
       }
-    } else {
-      throw new Error('Unsupported file type');
     }
+    // No 'else' needed here as fileTypeCheckPassed ensures we only handle allowed types
 
     // --- Database Interaction Logic ---
     if (!parsedData || parsedData.length === 0) {
-      console.log('[Import] Parsed data is empty, skipping database operations.');
+      logger.warn('[Import] Parsed data is empty, skipping database operations.');
       return res.status(400).json({ error: 'No data found in the uploaded file.' });
     }
 
-    console.log(`[Import] Parsed ${parsedData.length} rows. Starting database processing.`);
+    logger.info(`[Import] Parsed ${parsedData.length} rows. Starting database processing.`);
 
     // 1. Determine Columns and Types & Sanitize
     // Trim original column names before processing
@@ -151,14 +263,14 @@ router.post('/import', optionalAuthMiddleware, upload.single('file'), async (req
           }
       }
       const type = inferColumnType(sampleValue);
-      console.log(`[Import] Column: "${originalName}" -> Sanitized: "${sanitizedName}", Type: ${type}`);
+      logger.debug(`[Import] Column: "${originalName}" -> Sanitized: "${sanitizedName}", Type: ${type}`);
       return { originalName, sanitizedName, type };
     });
 
     // Check for duplicate sanitized names (though sanitizeDbIdentifier tries to avoid this)
     const sanitizedNames = columnsMetadata.map(c => c.sanitizedName);
     if (new Set(sanitizedNames).size !== sanitizedNames.length) {
-        console.error('[Import] Duplicate sanitized column names detected after sanitization:', sanitizedNames);
+        logger.error('[Import] Duplicate sanitized column names detected after sanitization', { sanitizedNames });
         throw new Error('Failed to generate unique column names for the database table.');
     }
 
@@ -167,7 +279,7 @@ router.post('/import', optionalAuthMiddleware, upload.single('file'), async (req
     // Use 'anonymous' in table name if userId is null
     const userPart = userId ? `user_${userId}` : 'anonymous';
     const dbTableName = sanitizeDbIdentifier(`dataset_${userPart}_${timestamp}_${safeFileName}`);
-    console.log(`[Import] Generated DB Table Name: ${dbTableName}`);
+    logger.info(`[Import] Generated DB Table Name: ${dbTableName}`);
 
     // --- Overwrite Logic: Check for and clean up existing dataset with the same identifier ---
     // Adjust query based on whether userId is null
@@ -198,20 +310,21 @@ router.post('/import', optionalAuthMiddleware, upload.single('file'), async (req
             const oldMetadataId = existingResult.rows[0].id;
             const oldDbTableName = existingResult.rows[0].db_table_name;
             const userIdentifierLog = userId ? `user ${userId}` : 'anonymous user';
-            console.log(`[Import] Found existing dataset metadata (ID: ${oldMetadataId}) for "${originalFileName}" and ${userIdentifierLog}. Table: "${oldDbTableName}". Proceeding with overwrite.`);
+            logger.info(`[Import] Found existing dataset metadata (ID: ${oldMetadataId}) for "${originalFileName}" and ${userIdentifierLog}. Table: "${oldDbTableName}". Proceeding with overwrite.`);
 
-            // Delete old metadata
+            // Delete old metadata AND invalidate cache
             const deleteMetadataSql = `DELETE FROM dataset_metadata WHERE id = $1;`;
             await query(deleteMetadataSql, [oldMetadataId]);
-            console.log(`[Import] Deleted old metadata record (ID: ${oldMetadataId}).`);
+            cache.del(`metadata_${oldMetadataId}`); // Invalidate cache
+            logger.info(`[Import] Deleted old metadata record (ID: ${oldMetadataId}) and invalidated cache.`);
 
             // Drop old table
             const dropTableSql = `DROP TABLE IF EXISTS "${oldDbTableName}";`; // Ensure table name is quoted
             await query(dropTableSql);
-            console.log(`[Import] Dropped old database table "${oldDbTableName}".`);
+            logger.info(`[Import] Dropped old database table "${oldDbTableName}".`);
         }
     } catch (cleanupError) {
-        console.error('[Import] Error during cleanup of existing dataset:', cleanupError);
+        logger.error('[Import] Error during cleanup of existing dataset', { error: cleanupError });
         // Decide if this error should prevent the import. For now, we'll let it proceed,
         // but it might leave orphaned tables if dropping fails.
         // Consider throwing an error here if cleanup is critical:
@@ -232,12 +345,13 @@ router.post('/import', optionalAuthMiddleware, upload.single('file'), async (req
         .join(', ');
       // Add the new column definition
       const createTableSql = `CREATE TABLE "${dbTableName}" (id SERIAL PRIMARY KEY, original_row_index INTEGER, ${createTableColumns});`;
-      console.log(`[Import] Executing CREATE TABLE: ${createTableSql}`);
+      logger.info(`[Import] Executing CREATE TABLE for ${dbTableName}`); // Don't log full SQL by default
+      logger.debug(`[Import] CREATE TABLE SQL: ${createTableSql}`);
       await dbClient.query(createTableSql);
-      console.log(`[Import] Table "${dbTableName}" created successfully.`);
+      logger.info(`[Import] Table "${dbTableName}" created successfully.`);
 
       // 4. Insert Data (Include original_row_index)
-      console.log(`[Import] Preparing to insert ${parsedData.length} rows into "${dbTableName}"...`);
+      logger.info(`[Import] Preparing to insert ${parsedData.length} rows into "${dbTableName}"...`);
       // Add original_row_index to columns and placeholders
       const insertColumns = `"original_row_index", ${columnsMetadata.map(col => `"${col.sanitizedName}"`).join(', ')}`;
       const valuePlaceholders = columnsMetadata.map((_, index) => `$${index + 2}`).join(', '); // Start from $2
@@ -277,7 +391,7 @@ router.post('/import', optionalAuthMiddleware, upload.single('file'), async (req
         // console.log(`[Import] Inserting values:`, finalValues); // DEBUG log
         await dbClient.query(insertSql, finalValues);
       }
-      console.log(`[Import] Successfully inserted ${parsedData.length} rows.`);
+      logger.info(`[Import] Successfully inserted ${parsedData.length} rows.`);
 
       // 5. Store Metadata (Add original_row_index to metadata if needed for reference, though maybe not necessary)
       // For now, we don't strictly need to add it to columns_metadata JSON,
@@ -288,16 +402,16 @@ router.post('/import', optionalAuthMiddleware, upload.single('file'), async (req
         RETURNING id;
       `;
       const metadataValues = [userId, originalFileName, dbTableName, JSON.stringify(columnsMetadata)];
-      console.log('[Import] Storing metadata:', { userId, originalFileName, dbTableName });
+      logger.info('[Import] Storing metadata', { userId, originalFileName, dbTableName });
       const metadataResult = await dbClient.query(metadataSql, metadataValues);
       const datasetId = metadataResult.rows[0].id;
-      console.log(`[Import] Metadata stored successfully. Dataset ID: ${datasetId}`);
+      logger.info(`[Import] Metadata stored successfully. Dataset ID: ${datasetId}`);
 
       await dbClient.query('COMMIT'); // Commit transaction
-      console.log('[Import] Transaction committed.');
+      logger.info('[Import] Transaction committed.');
 
       // 6. Update API Response
-      console.log(`[Import] Sending success response for dataset ID: ${datasetId}`);
+      logger.info(`[Import] Sending success response for dataset ID: ${datasetId}`);
       res.status(200).json({
         message: 'File processed and data stored successfully.',
         datasetId: datasetId,
@@ -306,23 +420,23 @@ router.post('/import', optionalAuthMiddleware, upload.single('file'), async (req
 
     } catch (dbError) {
       await dbClient.query('ROLLBACK'); // Rollback transaction on error
-      console.error('[Import] Database error during import, transaction rolled back:', dbError);
+      logger.error('[Import] Database error during import, transaction rolled back', { error: dbError });
       // Attempt to drop the table if creation succeeded but insertion/metadata failed
       try {
-          console.log(`[Import] Attempting to drop potentially created table "${dbTableName}" due to error.`);
+          logger.warn(`[Import] Attempting to drop potentially created table "${dbTableName}" due to error.`);
           await query(`DROP TABLE IF EXISTS "${dbTableName}";`); // Use original query function for cleanup
-          console.log(`[Import] Cleanup successful for table "${dbTableName}".`);
+          logger.info(`[Import] Cleanup successful for table "${dbTableName}".`);
       } catch (cleanupError) {
-          console.error(`[Import] Error during table cleanup for "${dbTableName}":`, cleanupError);
+          logger.error(`[Import] Error during table cleanup for "${dbTableName}"`, { error: cleanupError });
       }
       throw new Error(`Database operation failed: ${dbError.message}`); // Re-throw to be caught by outer handler
     } finally {
       dbClient.release(); // Release the client back to the pool
-      console.log('[Import] Database client released.');
+      logger.debug('[Import] Database client released.');
     }
 
   } catch (error) {
-    console.error("--- Error during file import ---:", error); // Add marker for easier log searching
+    logger.error("--- Error during file import ---", { error }); // Add marker for easier log searching
     // Ensure a JSON error response is always sent, even if dbClient wasn't defined
     res.status(500).json({ error: 'Failed to process file', details: error.message });
   }
@@ -343,19 +457,32 @@ router.get('/export/csv', (req, res) => {
     res.status(200).send(csv);
 
   } catch (error) {
-    console.error("Error during CSV export:", error);
+    logger.error("Error during CSV export", { error });
     res.status(500).json({ error: 'Failed to export data', details: error.message });
   }
 });
 
 // Match profiles endpoint - Modified for DB querying and optional auth
-router.post('/match', optionalAuthMiddleware, async (req, res) => { // Use optionalAuthMiddleware, made async
-  console.log('--- /api/match request received ---');
+// Define validation rules for /match endpoint
+const matchValidationRules = [
+  body('datasetId', 'Dataset ID is required').notEmpty(), // Add .isInt() if applicable
+  body('criteria', 'Criteria must be an array').isArray(),
+  // Optional fields with validation
+  body('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
+  body('pageSize').optional().isInt({ min: 1 }).withMessage('PageSize must be a positive integer'),
+  body('sortBy').optional().isString().trim().escape(),
+  body('sortDirection').optional().isIn(['ASC', 'DESC', 'asc', 'desc']).withMessage('SortDirection must be ASC or DESC').toUpperCase(),
+  // Basic checks for weights and matchingRules (can be enhanced)
+  body('weights').optional().isObject(),
+  body('matchingRules').optional().isObject()
+];
+
+router.post('/match', optionalAuthMiddleware, matchValidationRules, validateRequest, async (req, res) => { // Use optionalAuthMiddleware, made async
+  logger.info('--- /api/match request received ---');
   try {
     // User ID might be null if request is anonymous
     const userId = req.user?.id || null;
-    console.log(`[Match] Requesting User ID: ${userId === null ? 'Anonymous' : userId}`);
-    // Removed the strict check that returned 401 if !userId
+    logger.info(`[Match] Requesting User ID: ${userId === null ? 'Anonymous' : userId}`);
 
     // 1. Get data from request body (Updated: Expect 'criteria' instead of 'searchCriteria')
     const {
@@ -369,48 +496,31 @@ router.post('/match', optionalAuthMiddleware, async (req, res) => { // Use optio
         sortDirection = 'ASC' // Default sort direction
     } = req.body;
 
-    console.log('[Match] Received:', { datasetId, criteria, weights, matchingRules, page, pageSize, sortBy, sortDirection }); // Updated log
+    // Use validated and potentially defaulted values
+    const pageNum = parseInt(req.body.page || 1, 10);
+    const pageSizeNum = parseInt(req.body.pageSize || 20, 10);
+    const upperSortDirection = req.body.sortDirection || 'ASC'; // Default handled by validation/logic below
 
-    // Validate required fields (using 'criteria')
-    if (!datasetId || !criteria || !Array.isArray(criteria)) { // Allow empty criteria for browsing/sorting all data
-        return res.status(400).json({ error: 'Missing or invalid datasetId or criteria.' }); // Updated error message
-    }
+    logger.info('[Match] Received (validated):', { datasetId, criteria, weights, matchingRules, page: pageNum, pageSize: pageSizeNum, sortBy, sortDirection: upperSortDirection });
 
-    // Validate pagination parameters
-    const pageNum = parseInt(page, 10);
-    const pageSizeNum = parseInt(pageSize, 10);
-    if (isNaN(pageNum) || pageNum < 1 || isNaN(pageSizeNum) || pageSizeNum < 1) {
-        return res.status(400).json({ error: 'Invalid page or pageSize parameters. Must be positive integers.' });
-    }
+    // Old validation removed - handled by express-validator
 
-    // Validate sort direction
-    const validSortDirections = ['ASC', 'DESC'];
-    const upperSortDirection = sortDirection.toUpperCase();
-    if (!validSortDirections.includes(upperSortDirection)) {
-        return res.status(400).json({ error: 'Invalid sortDirection. Must be ASC or DESC.' });
-    }
+    // 2. Fetch dataset metadata using cache helper
+    const metadata = await getMetadataWithCache(datasetId);
 
-    // 2. Fetch dataset metadata by ID only first
-    const metadataSql = `
-      SELECT db_table_name, columns_metadata, user_id AS owner_id
-      FROM dataset_metadata
-      WHERE id = $1;
-    `;
-    const metadataResult = await query(metadataSql, [datasetId]);
-
-    if (metadataResult.rows.length === 0) {
+    if (!metadata) {
       return res.status(404).json({ error: 'Dataset metadata not found.' });
     }
 
     // 2.1 Check Authorization: Authenticated users can only access their own datasets. Anonymous users can only access anonymous datasets.
-    const ownerId = metadataResult.rows[0].owner_id;
+    const ownerId = metadata.owner_id;
     if (ownerId !== userId) { // This covers both cases: (ownerId=null, userId=123) and (ownerId=123, userId=null) and (ownerId=123, userId=456)
-        console.warn(`[Match] Authorization failed: User ${userId} attempted to access dataset ${datasetId} owned by user ${ownerId}.`);
+        logger.warn(`[Match] Authorization failed: User ${userId} attempted to access dataset ${datasetId} owned by user ${ownerId}.`);
         return res.status(403).json({ error: 'Access denied to this dataset.' });
     }
 
-    const { db_table_name: dbTableName, columns_metadata: columnsMetadata } = metadataResult.rows[0];
-    console.log(`[Match] Found metadata. DB Table: ${dbTableName}`);
+    const { db_table_name: dbTableName, columns_metadata: columnsMetadata } = metadata;
+    logger.info(`[Match] Found metadata. DB Table: ${dbTableName}`);
 
     // 3. Create originalToSanitizedMap and validate criteria attributes
     const originalToSanitizedMap = {};
@@ -458,7 +568,7 @@ router.post('/match', optionalAuthMiddleware, async (req, res) => { // Use optio
         queryFragment = `"${sanitizedColName}" ${operator}`;
       } else if (rawValue === undefined || rawValue === null) {
          // Skip criteria if value is missing for operators that require it
-         console.warn(`[Match] Missing value for attribute "${attribute}" with operator "${operator}". Skipping criterion.`);
+         logger.warn(`[Match] Missing value for attribute "${attribute}" with operator "${operator}". Skipping criterion.`);
          return;
       }
       // Standard handling for operators requiring a value
@@ -471,7 +581,7 @@ router.post('/match', optionalAuthMiddleware, async (req, res) => { // Use optio
                throw new Error(`Value for IN/NOT IN must be an array.`);
              }
              if (rawValue.length === 0) {
-                  console.warn(`[Match] Empty array provided for IN/NOT IN for attribute "${attribute}". Skipping criterion.`);
+                  logger.warn(`[Match] Empty array provided for IN/NOT IN for attribute "${attribute}". Skipping criterion.`);
                   return; // Skip if array is empty
              }
              // Coerce array elements based on column type from rawValue
@@ -488,7 +598,7 @@ router.post('/match', optionalAuthMiddleware, async (req, res) => { // Use optio
              }).filter(item => item !== null && (typeof item === 'boolean' || !isNaN(item) || colType === 'TEXT')); // Simplified filter
 
              if (value.length === 0) {
-                  console.warn(`[Match] Array became empty after type coercion for IN/NOT IN for attribute "${attribute}". Skipping criterion.`);
+                  logger.warn(`[Match] Array became empty after type coercion for IN/NOT IN for attribute "${attribute}". Skipping criterion.`);
                   return; // Skip if array is empty after coercion
              }
              const placeholders = value.map(() => `$${paramIndex++}`).join(', ');
@@ -521,7 +631,7 @@ router.post('/match', optionalAuthMiddleware, async (req, res) => { // Use optio
             queryParams.push(value); // Push the coerced value
           }
         } catch (error) {
-           console.warn(`[Match] Error processing criterion for attribute "${attribute}" (Value: "${rawValue}", Operator: "${operator}", Type: ${colType}): ${error.message}. Skipping criterion.`);
+           logger.warn(`[Match] Error processing criterion for attribute "${attribute}" (Value: "${rawValue}", Operator: "${operator}", Type: ${colType}): ${error.message}. Skipping criterion.`);
            return; // Skip this criterion on error
         }
       }
@@ -540,12 +650,12 @@ router.post('/match', optionalAuthMiddleware, async (req, res) => { // Use optio
         if (validDbColumns.hasOwnProperty(sanitizedSortBy)) {
              // Use the validated upperSortDirection
             orderByClause = `ORDER BY "${sanitizedSortBy}" ${upperSortDirection}`;
-            console.log(`[Match] Applying sorting: ${orderByClause}`);
+            logger.info(`[Match] Applying sorting: ${orderByClause}`);
         } else {
-            console.warn(`[Match] Invalid sortBy column specified: ${sortBy}. Defaulting to ID sort.`);
+            logger.warn(`[Match] Invalid sortBy column specified: ${sortBy}. Defaulting to ID sort.`);
         }
     } else if (sortBy) {
-         console.warn(`[Match] sortBy column "${sortBy}" not found in dataset metadata. Defaulting to ID sort.`);
+         logger.warn(`[Match] sortBy column "${sortBy}" not found in dataset metadata. Defaulting to ID sort.`);
     }
 
     // 4.2 Build LIMIT and OFFSET clauses
@@ -557,14 +667,16 @@ router.post('/match', optionalAuthMiddleware, async (req, res) => { // Use optio
 
     // 4.3 Construct the main SELECT query with filtering, sorting, and pagination
     const selectSql = `SELECT * FROM "${dbTableName}" ${whereClause} ${orderByClause} ${limitClause} ${offsetClause};`;
-    console.log(`[Match] Executing SQL: ${selectSql}`);
-    console.log('[Match] Query Params:', queryParams);
+    logger.info(`[Match] Executing SQL for ${dbTableName}`); // Don't log full SQL by default
+    logger.debug(`[Match] SQL: ${selectSql}`);
+    logger.debug('[Match] Query Params:', queryParams);
 
     // 4.4 Construct and execute the COUNT query (using the same WHERE clause but different params)
     const countParams = queryParams.slice(0, paramIndex - 3); // Exclude LIMIT and OFFSET params
     const countSql = `SELECT COUNT(*) AS total_count FROM "${dbTableName}" ${whereClause};`;
-    console.log(`[Match] Executing Count SQL: ${countSql}`);
-    console.log('[Match] Count Query Params:', countParams);
+    logger.info(`[Match] Executing Count SQL for ${dbTableName}`); // Don't log full SQL by default
+    logger.debug(`[Match] Count SQL: ${countSql}`);
+    logger.debug('[Match] Count Query Params:', countParams);
 
     // Execute both queries
     const [dbResult, countResult] = await Promise.all([
@@ -576,7 +688,7 @@ router.post('/match', optionalAuthMiddleware, async (req, res) => { // Use optio
     const totalItems = parseInt(countResult.rows[0].total_count, 10);
     const totalPages = Math.ceil(totalItems / pageSizeNum);
 
-    console.log(`[Match] Found ${filteredProfiles.length} profiles on page ${pageNum} (Total matching: ${totalItems}).`);
+    logger.info(`[Match] Found ${filteredProfiles.length} profiles on page ${pageNum} (Total matching: ${totalItems}).`);
 
     // Return empty if DB query yields nothing for the current page
     // The total count might still be > 0
@@ -599,7 +711,7 @@ router.post('/match', optionalAuthMiddleware, async (req, res) => { // Use optio
     const engine = new MatchingEngine();
     if (weights) {
         engine.setWeights(weights);
-        console.log('[Match] Applied custom weights:', weights);
+        logger.info('[Match] Applied custom weights:', weights);
     }
 
     // 6. Calculate Scores using the Map
@@ -634,18 +746,26 @@ router.post('/match', optionalAuthMiddleware, async (req, res) => { // Use optio
         pageSize: pageSizeNum
       }
     };
-    console.log(`[Match] Sending ${responseData.matches.length} results for page ${pageNum}/${totalPages} (Total items: ${totalItems}).`);
+    logger.info(`[Match] Sending ${responseData.matches.length} results for page ${pageNum}/${totalPages} (Total items: ${totalItems}).`);
     res.status(200).json(responseData);
 
   } catch (error) {
-    console.error("--- Matching error ---:", error);
+    logger.error("--- Matching error ---", { error });
     res.status(500).json({ error: 'Failed to process matching request', details: error.message });
   }
 });
 
-// --- Get Dataset Content Route ---
-router.get('/datasets/:filename', authMiddleware, async (req, res) => {
-  console.log('--- /api/datasets/:filename request received ---');
+// --- Get Dataset Content Route --- (DEPRECATED - Uses filesystem, not DB)
+// Define validation rules
+const getDatasetValidationRules = [
+  param('filename', 'Filename is required').notEmpty().trim().escape() // Basic validation, more specific checks might be needed
+];
+router.get('/datasets/:filename', authMiddleware, getDatasetValidationRules, validateRequest, async (req, res) => {
+  logger.warn('--- Deprecated /api/datasets/:filename endpoint called ---'); // Log warning
+  // NOTE: This route appears deprecated as it reads from the filesystem (BASE_UPLOAD_DIR)
+  // which was removed in the /import logic. It should likely be removed or updated
+  // to fetch data from the database based on a dataset ID instead of filename.
+  // For now, keeping the logic but logging a warning.
   try {
     const userId = req.user?.id;
     if (!userId) {
@@ -659,7 +779,7 @@ router.get('/datasets/:filename', authMiddleware, async (req, res) => {
         return res.status(400).json({ error: 'Invalid filename provided.' });
     }
 
-    console.log(`User ${userId} requesting dataset: ${safeRequestedFilename}`);
+    logger.info(`[Get Dataset] User ${userId} requesting dataset: ${safeRequestedFilename}`);
 
     const userUploadDir = path.join(BASE_UPLOAD_DIR, `user_${userId}`);
     const filePath = path.join(userUploadDir, safeRequestedFilename);
@@ -667,20 +787,20 @@ router.get('/datasets/:filename', authMiddleware, async (req, res) => {
     // Check if file exists
     try {
       await fs.access(filePath); // Check accessibility
-      console.log(`File found at: ${filePath}`);
+      logger.info(`[Get Dataset] File found at: ${filePath}`);
     } catch (accessError) {
-      console.warn(`File not found or inaccessible for user ${userId}: ${filePath}`);
+      logger.warn(`[Get Dataset] File not found or inaccessible for user ${userId}: ${filePath}`);
       return res.status(404).json({ error: 'Dataset file not found.' });
     }
 
     // Read the file content
     const fileBuffer = await fs.readFile(filePath);
-    console.log(`File read successfully: ${safeRequestedFilename}`);
+    logger.info(`[Get Dataset] File read successfully: ${safeRequestedFilename}`);
 
     // Parse the file content (similar logic to /import)
     let parsedData = [];
     if (safeRequestedFilename.endsWith('.csv')) {
-      console.log(`Parsing retrieved CSV: ${safeRequestedFilename}`);
+      logger.info(`[Get Dataset] Parsing retrieved CSV: ${safeRequestedFilename}`);
       await new Promise((resolve, reject) => {
         require('stream').Readable.from(fileBuffer)
           .pipe(csv())
@@ -689,7 +809,7 @@ router.get('/datasets/:filename', authMiddleware, async (req, res) => {
           .on('error', reject);
       });
     } else if (safeRequestedFilename.endsWith('.xlsx') || safeRequestedFilename.endsWith('.xls')) {
-      console.log(`Parsing retrieved Excel: ${safeRequestedFilename}`);
+      logger.info(`[Get Dataset] Parsing retrieved Excel: ${safeRequestedFilename}`);
       const workbook = xlsx.read(fileBuffer);
       const sheetName = workbook.SheetNames[0];
       parsedData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
@@ -698,43 +818,44 @@ router.get('/datasets/:filename', authMiddleware, async (req, res) => {
       throw new Error('Unsupported file type encountered during retrieval.');
     }
 
-    console.log(`Successfully parsed retrieved file ${safeRequestedFilename}. Records: ${parsedData.length}`);
+    logger.info(`[Get Dataset] Successfully parsed retrieved file ${safeRequestedFilename}. Records: ${parsedData.length}`);
     res.status(200).json({ data: parsedData, fileName: safeRequestedFilename });
 
   } catch (error) {
-    console.error("--- Error retrieving dataset content ---:", error);
+    logger.error("--- Error retrieving dataset content ---", { error });
     res.status(500).json({ error: 'Failed to retrieve dataset content', details: error.message });
   }
 });
 
 // --- Value Suggestions Endpoint ---
-router.get('/suggest/values', optionalAuthMiddleware, async (req, res) => { // Use optional auth
-  console.log('--- /api/suggest/values request received ---');
+// Define validation rules
+const suggestValuesValidationRules = [
+  queryValidator('datasetId', 'datasetId is required').notEmpty(), // Add .isInt() if applicable
+  queryValidator('attributeName', 'attributeName is required').notEmpty().trim().escape(),
+  queryValidator('searchTerm', 'searchTerm is required').notEmpty().trim().escape() // Escape to prevent XSS if reflected
+];
+
+router.get('/suggest/values', optionalAuthMiddleware, suggestValuesValidationRules, validateRequest, async (req, res) => { // Use optional auth
+  logger.info('--- /api/suggest/values request received ---');
   try {
     // User ID might be null if request is anonymous
     const userId = req.user?.id || null;
-    console.log(`[Suggest] Requesting User ID: ${userId === null ? 'Anonymous' : userId}`);
+    logger.info(`[Suggest] Requesting User ID: ${userId === null ? 'Anonymous' : userId}`);
 
+    // Use validated query parameters
     const { datasetId, attributeName, searchTerm } = req.query;
-    console.log('[Suggest] Params:', { datasetId, attributeName, searchTerm });
+    logger.info('[Suggest] Params (validated):', { datasetId, attributeName, searchTerm });
 
-    if (!datasetId || !attributeName || searchTerm === undefined) {
-      return res.status(400).json({ error: 'Missing required query parameters: datasetId, attributeName, searchTerm.' });
+    // Old validation removed
+
+    // 1. Fetch dataset metadata using cache helper
+    const metadata = await getMetadataWithCache(datasetId);
+
+    if (!metadata) {
+      return res.status(404).json({ error: 'Dataset metadata not found.' });
     }
 
-    // 1. Fetch dataset metadata by ID only
-    const metadataSql = `
-      SELECT db_table_name, columns_metadata, user_id AS owner_id FROM dataset_metadata
-      WHERE id = $1;
-    `;
-    const metadataResult = await query(metadataSql, [datasetId]);
-
-    if (metadataResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Dataset metadata not found.' }); // Changed error message
-      return res.status(404).json({ error: 'Dataset metadata not found or access denied.' });
-    }
-
-    const { db_table_name: dbTableName, columns_metadata: columnsMetadata } = metadataResult.rows[0];
+    const { db_table_name: dbTableName, columns_metadata: columnsMetadata } = metadata;
 
     // Find the sanitized name for the requested attribute
     const attributeMeta = columnsMetadata.find(col => col.originalName === attributeName);
@@ -755,51 +876,53 @@ router.get('/suggest/values', optionalAuthMiddleware, async (req, res) => { // U
     `;
     const queryParams = [`%${searchTerm}%`]; // Add wildcards for ILIKE
 
-    console.log(`[Suggest] SQL: ${suggestSql}`);
-    console.log('[Suggest] Params:', queryParams);
+    logger.info(`[Suggest] Executing SQL for ${dbTableName}`); // Don't log full SQL by default
+    logger.debug(`[Suggest] SQL: ${suggestSql}`);
+    logger.debug('[Suggest] Params:', queryParams);
 
     const suggestionsResult = await query(suggestSql, queryParams);
 
     // Extract the values
     const suggestedValues = suggestionsResult.rows.map(row => row[sanitizedColName]);
-    console.log('[Suggest] Found values:', suggestedValues);
+    logger.info('[Suggest] Found values:', { count: suggestedValues.length });
+    logger.debug('[Suggest] Values:', suggestedValues); // Log actual values only at debug level
 
     res.status(200).json({ suggestions: suggestedValues });
 
   } catch (error) {
-    console.error("--- Value suggestion error ---:", error);
+    logger.error("--- Value suggestion error ---", { error });
     res.status(500).json({ error: 'Failed to fetch value suggestions', details: error.message });
   }
 });
 
 // --- Dataset Statistics Endpoint ---
-router.get('/datasets/:datasetId/stats', optionalAuthMiddleware, async (req, res) => { // Use optional auth
-  console.log('--- /api/datasets/:datasetId/stats request received ---');
+// Define validation rules
+const datasetIdValidationRule = [
+  param('datasetId', 'Dataset ID must be a positive integer').isInt({ min: 1 })
+];
+
+router.get('/datasets/:datasetId/stats', optionalAuthMiddleware, datasetIdValidationRule, validateRequest, async (req, res) => { // Use optional auth
+  logger.info('--- /api/datasets/:datasetId/stats request received ---');
   try {
     // User ID might be null if request is anonymous
     const userId = req.user?.id || null;
-    console.log(`[Stats] Requesting User ID: ${userId === null ? 'Anonymous' : userId}`);
+    logger.info(`[Stats] Requesting User ID: ${userId === null ? 'Anonymous' : userId}`);
 
+    // Use validated param
     const { datasetId } = req.params;
-    console.log('[Stats] Params:', { datasetId });
+    logger.info('[Stats] Params (validated):', { datasetId });
 
-    if (!datasetId) {
-      return res.status(400).json({ error: 'Missing required parameter: datasetId.' });
+    // Old validation removed
+
+    // 1. Fetch dataset metadata using cache helper
+    const metadata = await getMetadataWithCache(datasetId);
+
+    if (!metadata) {
+      return res.status(404).json({ error: 'Dataset metadata not found.' });
     }
 
-    // 1. Fetch dataset metadata by ID only
-    const metadataSql = `
-      SELECT db_table_name, columns_metadata, user_id AS owner_id FROM dataset_metadata
-      WHERE id = $1;
-    `;
-    const metadataResult = await query(metadataSql, [datasetId]);
-
-    if (metadataResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Dataset metadata not found.' }); // Changed error message
-    }
-
-    const { db_table_name: dbTableName, columns_metadata: columnsMetadata } = metadataResult.rows[0];
-    console.log(`[Stats] Found metadata for table: ${dbTableName}`);
+    const { db_table_name: dbTableName, columns_metadata: columnsMetadata } = metadata;
+    logger.info(`[Stats] Found metadata for table: ${dbTableName}`);
 
     // 2. Calculate Statistics
     const stats = {
@@ -813,7 +936,7 @@ router.get('/datasets/:datasetId/stats', optionalAuthMiddleware, async (req, res
     const countSql = `SELECT COUNT(*) AS total FROM "${dbTableName}";`;
     const countResult = await query(countSql);
     stats.totalRows = parseInt(countResult.rows[0].total, 10);
-    console.log(`[Stats] Total rows: ${stats.totalRows}`);
+    logger.info(`[Stats] Total rows: ${stats.totalRows}`);
 
     // Calculate stats for each relevant column
     for (const colMeta of columnsMetadata) {
@@ -844,7 +967,7 @@ router.get('/datasets/:datasetId/stats', optionalAuthMiddleware, async (req, res
               STDDEV("${sanitizedColName}") AS stddev
             FROM "${dbTableName}";
           `;
-          console.log(`[Stats] Querying numeric stats for: ${sanitizedColName}`);
+          logger.debug(`[Stats] Querying numeric stats for: ${sanitizedColName}`);
           const numericResult = await query(numericSql);
           if (numericResult.rows.length > 0) {
                const row = numericResult.rows[0];
@@ -868,7 +991,7 @@ router.get('/datasets/:datasetId/stats', optionalAuthMiddleware, async (req, res
                     FROM "${dbTableName}"
                     WHERE "${sanitizedColName}" IS NOT NULL;
                 `;
-                console.log(`[Stats] Querying percentiles for: ${sanitizedColName}`);
+                logger.debug(`[Stats] Querying percentiles for: ${sanitizedColName}`);
                 const percentileResult = await query(percentileSql);
                 if (percentileResult.rows.length > 0) {
                     const pRow = percentileResult.rows[0];
@@ -931,7 +1054,7 @@ router.get('/datasets/:datasetId/stats', optionalAuthMiddleware, async (req, res
                    }
                }
                stats.numericStats[originalColName].histogram = histogramData;
-               console.log(`[Stats] Calculated histogram for ${sanitizedColName}: ${histogramData.length} buckets`);
+               logger.debug(`[Stats] Calculated histogram for ${sanitizedColName}: ${histogramData.length} buckets`);
                // --- End Histogram Calculation ---
           }
         } else if (colType === 'TEXT') {
@@ -944,7 +1067,7 @@ router.get('/datasets/:datasetId/stats', optionalAuthMiddleware, async (req, res
             ORDER BY count DESC
             LIMIT 5;
           `;
-          console.log(`[Stats] Querying categorical stats for: ${sanitizedColName}`);
+          logger.debug(`[Stats] Querying categorical stats for: ${sanitizedColName}`);
           const categoricalResult = await query(categoricalSql);
           stats.categoricalStats[originalColName] = categoricalResult.rows.map(row => ({
             value: row[sanitizedColName],
@@ -955,7 +1078,7 @@ router.get('/datasets/:datasetId/stats', optionalAuthMiddleware, async (req, res
 
       } catch (columnStatError) {
         // Log error for specific column but continue with others
-        console.error(`[Stats] Error calculating stats for column "${sanitizedColName}":`, columnStatError.message);
+        logger.error(`[Stats] Error calculating stats for column "${sanitizedColName}"`, { error: columnStatError });
         // Ensure columnDetails entry still exists even if stats calculation failed
         if (!stats.columnDetails[originalColName]) {
             stats.columnDetails[originalColName] = { type: colType, nullCount: nullCount }; // Use potentially calculated nullCount
@@ -963,48 +1086,48 @@ router.get('/datasets/:datasetId/stats', optionalAuthMiddleware, async (req, res
       }
     }
 
-    console.log('[Stats] Statistics calculation complete.');
+    logger.info('[Stats] Statistics calculation complete.');
     res.status(200).json(stats);
 
   } catch (error) {
-    console.error("--- Dataset statistics error ---:", error);
+    logger.error("--- Dataset statistics error ---", { error });
     res.status(500).json({ error: 'Failed to fetch dataset statistics', details: error.message });
   }
 });
 
 // --- Get Dataset Metadata Endpoint ---
-router.get('/datasets/:datasetId/metadata', authMiddleware, async (req, res) => {
-  console.log('--- /api/datasets/:datasetId/metadata request received ---');
+// Use the same validation rule as /stats
+router.get('/datasets/:datasetId/metadata', authMiddleware, datasetIdValidationRule, validateRequest, async (req, res) => {
+  logger.info('--- /api/datasets/:datasetId/metadata request received ---');
   try {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(401).json({ error: 'Authentication required.' });
-    }
+    const userId = req.user?.id; // Auth middleware ensures this exists
+    // No need for !userId check due to authMiddleware
 
     const { datasetId } = req.params;
     // Validate datasetId is a number
     const numericDatasetId = parseInt(datasetId, 10);
     if (isNaN(numericDatasetId)) {
-        console.error(`[Metadata] Invalid dataset ID format received: ${datasetId}`);
+        logger.error(`[Metadata] Invalid dataset ID format received: ${datasetId}`); // Should be caught by validation now
         return res.status(400).json({ error: 'Invalid dataset ID format.' });
     }
-    console.log(`[Metadata] User ${userId} requesting metadata for dataset ID: ${numericDatasetId}`);
+    logger.info(`[Metadata] User ${userId} requesting metadata for dataset ID: ${numericDatasetId}`);
 
-    // Fetch dataset metadata from the database
-    const metadataSql = `
-      SELECT dataset_identifier, columns_metadata
-      FROM dataset_metadata
-      WHERE id = $1 AND user_id = $2;
-    `;
-    const metadataResult = await query(metadataSql, [numericDatasetId, userId]);
+    // Fetch dataset metadata using cache helper (adjusting for user check)
+    const metadata = await getMetadataWithCache(numericDatasetId);
 
-    if (metadataResult.rows.length === 0) {
-      console.warn(`[Metadata] Metadata not found for ID ${numericDatasetId} and user ${userId}`);
+    // Check if found and if owner matches the requesting user
+    if (!metadata || metadata.owner_id !== userId) {
+      logger.warn(`[Metadata] Metadata not found or access denied for ID ${numericDatasetId} and user ${userId}`);
       return res.status(404).json({ error: 'Dataset metadata not found or access denied.' });
     }
 
-    const { dataset_identifier: originalFileName, columns_metadata: columnsMetadata } = metadataResult.rows[0];
-    console.log(`[Metadata] Found metadata for ID ${numericDatasetId}: FileName: ${originalFileName}`);
+    const { db_table_name: dbTableName, columns_metadata: columnsMetadata } = metadata; // Use cached metadata
+    // We need the original filename, which isn't in the cached object currently.
+    // Let's re-query just for that if needed, or ideally add it to the cached object.
+    // For now, let's re-query just for the identifier.
+    const identifierResult = await query('SELECT dataset_identifier FROM dataset_metadata WHERE id = $1', [numericDatasetId]);
+    const originalFileName = identifierResult.rows.length > 0 ? identifierResult.rows[0].dataset_identifier : 'unknown';
+    logger.info(`[Metadata] Found metadata for ID ${numericDatasetId}: FileName: ${originalFileName}`);
 
     // Ensure columnsMetadata is parsed if stored as JSON string (it should be JSONB now, but good practice)
     const parsedColumnsMetadata = typeof columnsMetadata === 'string' ? JSON.parse(columnsMetadata) : columnsMetadata;
@@ -1015,7 +1138,7 @@ router.get('/datasets/:datasetId/metadata', authMiddleware, async (req, res) => 
     });
 
   } catch (error) {
-    console.error("--- Dataset metadata retrieval error ---:", error);
+    logger.error("--- Dataset metadata retrieval error ---", { error });
     res.status(500).json({ error: 'Failed to fetch dataset metadata', details: error.message });
   }
 });

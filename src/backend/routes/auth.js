@@ -1,22 +1,54 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { body, validationResult } = require('express-validator'); // Import validation functions
 const db = require('../config/db'); // Import the database query function
+const logger = require('../config/logger'); // Import logger
 
 const router = express.Router();
 
 // IMPORTANT: Use a strong, secret key from environment variables in production!
-const JWT_SECRET = process.env.JWT_SECRET || 'your-default-very-secret-key';
+const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h'; // Token expiration time
 
-// --- Registration Route ---
-router.post('/register', async (req, res) => {
-  const { username, password } = req.body;
-
-  // Basic validation
-  if (!username || !password) {
-    return res.status(400).json({ message: 'Username and password are required.' });
+// --- Critical Security Check ---
+if (!JWT_SECRET) {
+  const errorMsg = 'FATAL ERROR: JWT_SECRET environment variable is not set.';
+  logger.error(errorMsg);
+  // In production, prevent the application from starting without a secret
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(errorMsg);
+  } else {
+    logger.warn('JWT_SECRET is not set. Using a default insecure secret for development ONLY.');
+    // Assign the weak default ONLY if not in production and it was missing
+    JWT_SECRET = 'your-default-very-secret-key-dev-only';
   }
+}
+// --- End Security Check ---
+
+// --- Validation Middleware ---
+// Middleware to handle validation errors from express-validator
+const validateRequest = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    // Log validation errors
+    logger.warn('Validation failed for request', { url: req.originalUrl, errors: errors.array() });
+    return res.status(400).json({ errors: errors.array() });
+  }
+  next();
+};
+
+// --- Registration Route ---
+// Define validation rules for registration
+const registerValidationRules = [
+  body('username', 'Username is required').notEmpty().trim().escape(),
+  body('password', 'Password is required').notEmpty(),
+  body('password', 'Password must be at least 8 characters long').isLength({ min: 8 })
+];
+
+router.post('/register', registerValidationRules, validateRequest, async (req, res) => {
+  // Validation handled by middleware, access validated data via req.body
+  const { username, password } = req.body;
 
   try {
     // Check if username already exists
@@ -35,7 +67,7 @@ router.post('/register', async (req, res) => {
       [username, passwordHash]
     );
 
-    console.log(`User registered: ${newUser.rows[0].username}`);
+    logger.info(`User registered: ${newUser.rows[0].username}`);
     // Don't send password hash back
     res.status(201).json({
         message: 'User registered successfully.',
@@ -47,19 +79,22 @@ router.post('/register', async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Registration error:', err);
+    logger.error('Registration error:', { error: err });
     res.status(500).json({ message: 'Internal server error during registration.' });
   }
 });
 
 // --- Login Route ---
-router.post('/login', async (req, res) => {
-  const { username, password } = req.body;
+// --- Login Route ---
+// Define validation rules for login
+const loginValidationRules = [
+  body('username', 'Username is required').notEmpty().trim().escape(),
+  body('password', 'Password is required').notEmpty()
+];
 
-  // Basic validation
-  if (!username || !password) {
-    return res.status(400).json({ message: 'Username and password are required.' });
-  }
+router.post('/login', loginValidationRules, validateRequest, async (req, res) => {
+  // Validation handled by middleware
+  const { username, password } = req.body;
 
   try {
     // Find user by username
@@ -91,14 +126,20 @@ router.post('/login', async (req, res) => {
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN },
       (err, token) => {
-        if (err) throw err;
-        console.log(`User logged in: ${user.username}`);
+        if (err) {
+            logger.error('JWT signing error during login', { error: err, username: user.username });
+            // Throwing here will be caught by the outer catch block
+            throw err;
+        }
+        logger.info(`User logged in: ${user.username}`);
         res.json({ token }); // Send token to client
       }
     );
 
   } catch (err) {
-    console.error('Login error:', err);
+    // Avoid logging sensitive info like username in case of error if possible
+    logger.error('Login error:', { error: err });
+    // Send a generic error message unless it's a specific known issue
     res.status(500).json({ message: 'Internal server error during login.' });
   }
 });
