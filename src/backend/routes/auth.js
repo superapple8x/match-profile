@@ -8,7 +8,7 @@ const logger = require('../config/logger'); // Import logger
 const router = express.Router();
 
 // IMPORTANT: Use a strong, secret key from environment variables in production!
-const JWT_SECRET = process.env.JWT_SECRET;
+let JWT_SECRET = process.env.JWT_SECRET; // Use let to allow reassignment in dev
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h'; // Token expiration time
 
 // --- Critical Security Check ---
@@ -38,6 +38,79 @@ const validateRequest = (req, res, next) => {
   next();
 };
 
+// --- JSDoc Definitions for Swagger ---
+
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     UserCredentials:
+ *       type: object
+ *       required:
+ *         - username
+ *         - password
+ *       properties:
+ *         username:
+ *           type: string
+ *           description: The user's desired username.
+ *           example: johndoe
+ *         password:
+ *           type: string
+ *           description: The user's password (min 8 characters).
+ *           format: password
+ *           example: S3cureP@ssw0rd
+ *     UserResponse:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: integer
+ *           description: The unique ID of the registered user.
+ *           example: 1
+ *         username:
+ *           type: string
+ *           description: The username of the registered user.
+ *           example: johndoe
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *           description: The timestamp when the user was created.
+ *     AuthToken:
+ *       type: object
+ *       properties:
+ *         token:
+ *           type: string
+ *           description: JWT token for authenticated requests.
+ *           example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjp7ImlkIjoxLCJ1c2VybmFtZSI6ImpvaG5kb2UifSwiaWF0IjoxNjE2MjM5MDIyLCJleHAiOjE2MTYyNDI2MjJ9.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+ *     ErrorResponse:
+ *       type: object
+ *       properties:
+ *         message:
+ *           type: string
+ *           description: A message describing the error.
+ *           example: Invalid credentials.
+ *         errors:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               type:
+ *                 type: string
+ *                 example: field
+ *               value:
+ *                 type: string
+ *                 example: my short pw
+ *               msg:
+ *                 type: string
+ *                 example: Password must be at least 8 characters long
+ *               path:
+ *                 type: string
+ *                 example: password
+ *               location:
+ *                 type: string
+ *                 example: body
+ *           description: An array of validation errors (present on status 400).
+ */
+
 // --- Registration Route ---
 // Define validation rules for registration
 const registerValidationRules = [
@@ -46,6 +119,57 @@ const registerValidationRules = [
   body('password', 'Password must be at least 8 characters long').isLength({ min: 8 })
 ];
 
+/**
+ * @swagger
+ * /auth/register:
+ *   post:
+ *     summary: Register a new user
+ *     tags: [Auth]
+ *     description: Creates a new user account with a username and password.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UserCredentials'
+ *     responses:
+ *       '201':
+ *         description: User registered successfully.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: User registered successfully.
+ *                 user:
+ *                   $ref: '#/components/schemas/UserResponse'
+ *       '400':
+ *         description: Validation error (e.g., missing fields, password too short).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       '409':
+ *         description: Username already exists.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *               properties:
+ *                 message:
+ *                   example: Username already exists.
+ *       '500':
+ *         description: Internal server error during registration.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *               properties:
+ *                 message:
+ *                   example: Internal server error during registration.
+ */
 router.post('/register', registerValidationRules, validateRequest, async (req, res) => {
   // Validation handled by middleware, access validated data via req.body
   const { username, password } = req.body;
@@ -85,13 +209,57 @@ router.post('/register', registerValidationRules, validateRequest, async (req, r
 });
 
 // --- Login Route ---
-// --- Login Route ---
 // Define validation rules for login
 const loginValidationRules = [
   body('username', 'Username is required').notEmpty().trim().escape(),
   body('password', 'Password is required').notEmpty()
 ];
 
+/**
+ * @swagger
+ * /auth/login:
+ *   post:
+ *     summary: Log in a user
+ *     tags: [Auth]
+ *     description: Authenticates a user with username and password, returning a JWT token upon success.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UserCredentials'
+ *     responses:
+ *       '200':
+ *         description: Login successful, JWT token returned.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AuthToken'
+ *       '400':
+ *         description: Validation error (e.g., missing fields).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       '401':
+ *         description: Invalid credentials (username or password incorrect).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *               properties:
+ *                 message:
+ *                   example: Invalid credentials.
+ *       '500':
+ *         description: Internal server error during login.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *               properties:
+ *                 message:
+ *                   example: Internal server error during login.
+ */
 router.post('/login', loginValidationRules, validateRequest, async (req, res) => {
   // Validation handled by middleware
   const { username, password } = req.body;

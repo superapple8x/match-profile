@@ -99,13 +99,17 @@ This guide provides a comprehensive, step-by-step walkthrough for setting up and
     exit
     ```
 
-4.  **Initialize the Database Schema:** The database schema is automatically initialized when the backend server starts. It reads the SQL commands from `src/backend/db/schema.sql`. If you need to re-initialize the schema, you can manually run this file using `psql`:
+4.  **Initialize/Migrate the Database Schema:** The database schema is no longer initialized automatically or via a raw SQL file. Database schema changes are managed using `node-pg-migrate`.
 
-    ```bash
-    psql -U postgres -d profile_matching -f src/backend/db/schema.sql
-    ```
-
-    If you are not using the default PostgreSQL user, adjust the `-U` parameter accordingly. If you set a password for the `postgres` user, you may be prompted for it.
+    *   Navigate to the backend directory:
+        ```bash
+        cd src/backend
+        ```
+    *   Run the migrations to set up or update the schema:
+        ```bash
+        npm run db:migrate:up
+        ```
+    *   This command reads the configuration from `db-migrate-config.js` (which uses the `.env` file for connection details) and applies any pending migrations found in the `migrations/` directory. You should run this command after cloning the repository for the first time and whenever new database migrations are added.
 
 ## Configuring the Backend
 
@@ -147,8 +151,13 @@ The backend requires environment variables for LLM configuration and database co
     DB_USER=postgres # Default: postgres
     DB_HOST=localhost # Default: localhost
     DB_NAME=profile_matching # Default: profile_matching
-    DB_PASSWORD= # Default: (empty string)
+    DB_PASSWORD=your_db_password # Default: (empty string) - Set your actual password here
     DB_PORT=5432 # Default: 5432
+
+    # JWT Configuration (Required for Authentication)
+    # Generate a strong, random secret (e.g., using openssl rand -hex 32)
+    JWT_SECRET=your_strong_random_jwt_secret_here
+    JWT_EXPIRES_IN=1h # Optional: Default is 1 hour
     ```
 
     *   **LLM Configuration:**
@@ -157,6 +166,8 @@ The backend requires environment variables for LLM configuration and database co
         *   You can optionally change the model names (e.g., `DEEPSEEK_CODE_MODEL`).
     *   **PostgreSQL Configuration:**
         *   These variables control how the backend connects to your PostgreSQL database. The defaults should work if you have a local PostgreSQL instance running with the default settings.
+     *   **JWT Configuration:**
+         *   `JWT_SECRET` is crucial for security. Generate a strong random string and paste it here. While the backend provides a default for non-production environments if this is missing, setting it explicitly is highly recommended.
 
 ## Running the Application
 
@@ -168,6 +179,7 @@ You need to run both the backend and frontend servers concurrently. Open two sep
 
         ```bash
         cd src/backend
+        npm install # Install dependencies (run this after cloning or pulling changes)
         ```
 
     *   Then, start the server:
@@ -176,7 +188,10 @@ You need to run both the backend and frontend servers concurrently. Open two sep
         npm start
         ```
 
-    *   This will typically start the Express server on `http://localhost:3001`. Keep this terminal running. The first time the LLM analysis feature is used, it may take a minute to build the necessary Docker image (`python-analysis-sandbox`).
+    *   This command uses `node index.js` directly, suitable for basic development. Keep this terminal running.
+    *   Alternatively, you can use `pm2` for more robust process management locally (useful for testing restarts, etc.): `npm run start:prod`. Use `pm2 logs` to view logs and `npm run stop:prod` to stop it.
+    *   Logs will be generated in the `src/backend/logs/` directory (`combined.log`, `error.log`).
+    *   The first time the LLM analysis feature is used, it may take a minute to build the necessary Docker image (`python-analysis-sandbox`).
 
 2.  **Start the Frontend Development Server:**
 
@@ -186,6 +201,7 @@ You need to run both the backend and frontend servers concurrently. Open two sep
         cd src/frontend
         ```
 
+    *   Install dependencies if you haven't already: `npm install`
     *   Then, start the Vite development server:
 
         ```bash

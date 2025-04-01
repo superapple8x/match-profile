@@ -21,6 +21,8 @@ const rateLimit = require('express-rate-limit'); // Import express-rate-limit
 const logger = require('./config/logger'); // Import the winston logger
 const { body, validationResult } = require('express-validator'); // Import validation functions
 const compression = require('compression'); // Import compression middleware
+const swaggerUi = require('swagger-ui-express'); // Import Swagger UI
+const swaggerSpec = require('./config/swaggerOptions'); // Import Swagger config
 
 const docker = new Docker();
 const readFileAsync = fsp.readFile;
@@ -42,6 +44,52 @@ try {
 // --- ---
 
 const app = express();
+
+// 2. Analysis Stream Endpoint (GET - SSE) - Defined BEFORE buffering middleware
+app.get('/api/analysis-stream/:analysisId', (req, res) => {
+    const { analysisId } = req.params;
+    logger.info('SSE connection requested.', { analysisId: analysisId });
+
+    const analysisData = activeAnalyses[analysisId];
+
+    if (!analysisData) {
+        logger.warn('Invalid or expired analysis ID.', { analysisId: analysisId });
+        // Ensure SSE headers aren't sent if connection is immediately closed
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: 'Invalid or expired analysis ID' }));
+    }
+
+    // Set headers for SSE *only if* analysis ID is valid
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        // Optional: Add CORS headers if needed, although CORS middleware might handle it
+        'Access-Control-Allow-Origin': '*',
+    });
+
+    // Send initial confirmation
+    sendSseUpdate(res, { status: 'Connected, starting analysis...' });
+
+    // Start the analysis process asynchronously
+    performAnalysis(res, analysisId, analysisData.query, analysisData.datasetId);
+
+    // Keep connection open, but handle client disconnect
+    req.on('close', () => {
+        logger.info('SSE client disconnected.', { analysisId: analysisId });
+        // If analysis data still exists, it means performAnalysis hasn't finished/cleaned up
+        if (activeAnalyses[analysisId]) {
+             logger.info('Cleaning up analysis data due to client disconnect.', { analysisId: analysisId });
+             delete activeAnalyses[analysisId];
+             // TODO: Implement cancellation logic for dockerExecutor if possible/needed
+        }
+        // Ensure the response is ended if not already
+        if (!res.writableEnded) {
+            res.end();
+        }
+    });
+});
+
 const port = process.env.PORT || 3001;
 
 // --- Validation Middleware ---
@@ -78,6 +126,12 @@ app.use((req, res, next) => {
   logger.http(`Request received: ${req.method} ${req.url}`, { ip: req.ip });
   next();
 });
+
+// --- Swagger API Docs ---
+// Serve interactive API documentation using Swagger UI
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+logger.info('Swagger UI available at /api-docs');
+// --- End Swagger API Docs ---
 
 // Mount the file operations routes
 app.use('/api', fileOperationsRoutes);
@@ -355,50 +409,7 @@ app.post('/api/start-analysis', startAnalysisValidationRules, validateRequest, (
     res.json({ analysisId });
 });
 
-// 2. Analysis Stream Endpoint (GET - SSE)
-app.get('/api/analysis-stream/:analysisId', (req, res) => {
-    const { analysisId } = req.params;
-    logger.info('SSE connection requested.', { analysisId: analysisId });
-
-    const analysisData = activeAnalyses[analysisId];
-
-    if (!analysisData) {
-        logger.warn('Invalid or expired analysis ID.', { analysisId: analysisId });
-        // Ensure SSE headers aren't sent if connection is immediately closed
-        res.writeHead(404, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ error: 'Invalid or expired analysis ID' }));
-    }
-
-    // Set headers for SSE *only if* analysis ID is valid
-    res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        // Optional: Add CORS headers if needed, although CORS middleware might handle it
-        'Access-Control-Allow-Origin': '*',
-    });
-
-    // Send initial confirmation
-    sendSseUpdate(res, { status: 'Connected, starting analysis...' });
-
-    // Start the analysis process asynchronously
-    performAnalysis(res, analysisId, analysisData.query, analysisData.datasetId);
-
-    // Keep connection open, but handle client disconnect
-    req.on('close', () => {
-        logger.info('SSE client disconnected.', { analysisId: analysisId });
-        // If analysis data still exists, it means performAnalysis hasn't finished/cleaned up
-        if (activeAnalyses[analysisId]) {
-             logger.info('Cleaning up analysis data due to client disconnect.', { analysisId: analysisId });
-             delete activeAnalyses[analysisId];
-             // TODO: Implement cancellation logic for dockerExecutor if possible/needed
-        }
-        // Ensure the response is ended if not already
-        if (!res.writableEnded) {
-            res.end();
-        }
-    });
-});
+// SSE route handler moved to before middleware definitions
 
 // --- Remove old /api/analyze-data endpoint ---
 // (Code removed)

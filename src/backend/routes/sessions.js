@@ -21,7 +21,147 @@ const validateRequest = (req, res, next) => {
   next();
 };
 
+// --- JSDoc Definitions for Swagger ---
+
+/**
+ * @swagger
+ * tags:
+ *   name: Sessions
+ *   description: API endpoints for managing saved user sessions (search criteria, analysis history). Requires authentication.
+ *
+ * components:
+ *   schemas:
+ *     SessionSummary:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: integer
+ *           description: Unique ID of the saved session.
+ *           example: 5
+ *         session_name:
+ *           type: string
+ *           description: User-defined name for the session.
+ *           example: "Analysis of Q3 Sales Data"
+ *         dataset_id:
+ *           type: string # Or integer depending on how datasetId is stored/used
+ *           description: Identifier of the dataset used in this session.
+ *           example: "42"
+ *         created_at:
+ *           type: string
+ *           format: date-time
+ *           description: Timestamp when the session was first saved.
+ *         updated_at:
+ *           type: string
+ *           format: date-time
+ *           description: Timestamp when the session was last updated.
+ *
+ *     SessionDetail:
+ *       allOf: # Inherits properties from SessionSummary
+ *         - $ref: '#/components/schemas/SessionSummary'
+ *         - type: object
+ *           properties:
+ *             user_id:
+ *               type: integer
+ *               description: ID of the user who owns the session.
+ *               example: 1
+ *             search_criteria:
+ *               type: object # Stored as JSONB in DB
+ *               nullable: true
+ *               description: The search criteria object used for matching. Structure depends on frontend implementation (e.g., array of MatchCriterion).
+ *               example: [{ attribute: "City", operator: "=", value: "London" }]
+ *             analysis_query:
+ *               type: string
+ *               nullable: true
+ *               description: The last natural language query used for LLM analysis.
+ *               example: "Show me the average age per department"
+ *             analysis_messages:
+ *               type: array # Stored as JSONB in DB
+ *               nullable: true
+ *               description: History of messages exchanged during LLM analysis (user queries, bot responses). Structure depends on frontend implementation.
+ *               items:
+ *                 type: object # Example structure, adjust as needed
+ *                 properties:
+ *                   role:
+ *                     type: string
+ *                     enum: [user, bot]
+ *                   content:
+ *                     type: string
+ *                   type: # Optional: Differentiate content types (log, code, stats, summary)
+ *                     type: string
+ *                     enum: [log, code, stats, summary, text]
+ *               example: [{ role: "user", content: "Plot sales by region" }, { role: "bot", type: "code", content: "import matplotlib..." }]
+ *
+ *     SaveSessionRequest:
+ *       type: object
+ *       required:
+ *         - sessionName
+ *         - datasetId
+ *       properties:
+ *         sessionName:
+ *           type: string
+ *           description: Name for the new session.
+ *           example: "Initial exploration - Customer Data"
+ *         datasetId:
+ *           type: string # Or integer
+ *           description: ID of the dataset associated with this session.
+ *           example: "42"
+ *         searchCriteria:
+ *           type: object
+ *           nullable: true
+ *           description: Search criteria object to save.
+ *           example: [{ attribute: "Status", operator: "=", value: "Active" }]
+ *         analysisQuery:
+ *           type: string
+ *           nullable: true
+ *           description: LLM analysis query text to save.
+ *           example: "What is the distribution of sign-up dates?"
+ *         analysisMessages:
+ *           type: array
+ *           nullable: true
+ *           description: LLM analysis message history to save.
+ *           items:
+ *             type: object
+ *           example: [{ role: "user", content: "Analyze churn rate" }]
+ *
+ *   securitySchemes:
+ *      bearerAuth: # Defined here for reference, also in swaggerOptions.js
+ *        type: http
+ *        scheme: bearer
+ *        bearerFormat: JWT
+ */
+
 // --- GET /api/sessions - List saved sessions for the logged-in user ---
+/**
+ * @swagger
+ * /sessions:
+ *   get:
+ *     summary: List saved sessions
+ *     tags: [Sessions]
+ *     description: Retrieves a list of all sessions saved by the currently authenticated user, ordered by last updated time (descending).
+ *     security:
+ *       - bearerAuth: [] # Requires JWT Bearer token
+ *     responses:
+ *       '200':
+ *         description: A list of saved sessions.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/SessionSummary'
+ *       '401':
+ *         description: Unauthorized (Missing, invalid, or expired JWT token).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       '500':
+ *         description: Internal server error while fetching sessions.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.get('/', async (req, res) => {
   const userId = req.user.id; // Get user ID from middleware
 
@@ -47,6 +187,47 @@ const saveSessionValidationRules = [
   body('analysisMessages').optional({ nullable: true }).isArray().withMessage('analysisMessages must be an array or null')
 ];
 
+/**
+ * @swagger
+ * /sessions:
+ *   post:
+ *     summary: Save a new session
+ *     tags: [Sessions]
+ *     description: Saves a new session associated with the authenticated user, including search criteria and analysis history.
+ *     security:
+ *       - bearerAuth: [] # Requires JWT Bearer token
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/SaveSessionRequest'
+ *     responses:
+ *       '201':
+ *         description: Session saved successfully. Returns the details of the newly created session.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SessionDetail' # Return full detail on create
+ *       '400':
+ *         description: Validation error (e.g., missing required fields, invalid data types).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       '401':
+ *         description: Unauthorized (Missing, invalid, or expired JWT token).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       '500':
+ *         description: Internal server error while saving the session.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/', saveSessionValidationRules, validateRequest, async (req, res) => {
   const userId = req.user.id;
   // Use validated data
@@ -69,12 +250,12 @@ router.post('/', saveSessionValidationRules, validateRequest, async (req, res) =
      `INSERT INTO saved_sessions
       (user_id, session_name, search_criteria, analysis_query, analysis_messages, dataset_id)
       VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING id, session_name, dataset_id, created_at, updated_at`,
+      RETURNING *`, // Return all columns for SessionDetail response
      // Pass the stringified versions to the query
      [userId, sessionName, searchCriteriaString, analysisQuery, analysisMessagesString, datasetId]
    );
    logger.info(`Session saved`, { userId, sessionId: result.rows[0].id, sessionName });
-   res.status(201).json(result.rows[0]);
+   res.status(201).json(result.rows[0]); // Return the full session detail
   } catch (err) {
     logger.error(`Error saving session '${sessionName}'`, { userId, error: err });
     res.status(500).json({ message: 'Error saving session.' });
@@ -87,6 +268,58 @@ const sessionIdValidationRule = [
   param('id', 'Session ID must be a positive integer').isInt({ min: 1 })
 ];
 
+/**
+ * @swagger
+ * /sessions/{id}:
+ *   get:
+ *     summary: Load a specific session
+ *     tags: [Sessions]
+ *     description: Retrieves the full details of a specific session saved by the authenticated user.
+ *     security:
+ *       - bearerAuth: [] # Requires JWT Bearer token
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: The ID of the session to retrieve.
+ *         example: 5
+ *     responses:
+ *       '200':
+ *         description: Session details retrieved successfully.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SessionDetail'
+ *       '400':
+ *         description: Validation error (Invalid session ID format).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       '401':
+ *         description: Unauthorized (Missing, invalid, or expired JWT token).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       '404':
+ *         description: Session not found or the user does not have permission to access it.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *               properties:
+ *                 message:
+ *                   example: Session not found or access denied.
+ *       '500':
+ *         description: Internal server error while loading the session.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.get('/:id', sessionIdValidationRule, validateRequest, async (req, res) => {
   const userId = req.user.id;
   // Use validated param
@@ -115,6 +348,54 @@ router.get('/:id', sessionIdValidationRule, validateRequest, async (req, res) =>
 
 // --- DELETE /api/sessions/:id - Delete a specific session ---
 // Use the same validation rule as GET /:id
+/**
+ * @swagger
+ * /sessions/{id}:
+ *   delete:
+ *     summary: Delete a specific session
+ *     tags: [Sessions]
+ *     description: Deletes a specific session saved by the authenticated user.
+ *     security:
+ *       - bearerAuth: [] # Requires JWT Bearer token
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: The ID of the session to delete.
+ *         example: 5
+ *     responses:
+ *       '204':
+ *         description: Session deleted successfully. No content returned.
+ *       '400':
+ *         description: Validation error (Invalid session ID format).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       '401':
+ *         description: Unauthorized (Missing, invalid, or expired JWT token).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       '404':
+ *         description: Session not found or the user does not have permission to delete it.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *               properties:
+ *                 message:
+ *                   example: Session not found or access denied.
+ *       '500':
+ *         description: Internal server error while deleting the session.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.delete('/:id', sessionIdValidationRule, validateRequest, async (req, res) => {
   const userId = req.user.id;
   // Use validated param
