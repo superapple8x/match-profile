@@ -11,7 +11,7 @@ const UPLOAD_DIR = path.join(__dirname, '..', 'uploads'); // Adjust if needed
  * Fetches dataset metadata (table name, column info) from the database.
  *
  * @param {number} datasetId - The numerical ID of the dataset in the database.
- * @returns {Promise<{dbTableName: string, columnsMetadata: Array<{originalName: string, sanitizedName: string, type: string}>}|null>}
+ * @returns {Promise<{dbTableName: string, columnsMetadata: Array<{originalName: string, sanitizedName: string, type: string}>, datasetIdentifier: string}|null>}
  *          A promise that resolves with the dataset metadata or null if not found.
  */
 async function getMetadata(datasetId) {
@@ -27,7 +27,7 @@ async function getMetadata(datasetId) {
   try {
     // Fetch dataset metadata from the database
     const metadataSql = `
-      SELECT db_table_name, columns_metadata
+      SELECT db_table_name, columns_metadata, dataset_identifier -- Use dataset_identifier
       FROM dataset_metadata
       WHERE id = $1;
     `;
@@ -40,7 +40,7 @@ async function getMetadata(datasetId) {
       return null; // Return null if not found
     }
 
-    const { db_table_name: dbTableName, columns_metadata: columnsMetadata } = metadataResult.rows[0];
+    const { db_table_name: dbTableName, columns_metadata: columnsMetadata, dataset_identifier: datasetIdentifier } = metadataResult.rows[0]; // Destructure dataset_identifier
     console.log(`Metadata Service: Found metadata for ID ${numericDatasetId}. Table: ${dbTableName}`);
 
     // Ensure columnsMetadata is parsed if stored as JSON string (it should be JSONB, but good practice)
@@ -48,15 +48,17 @@ async function getMetadata(datasetId) {
       ? JSON.parse(columnsMetadata)
       : columnsMetadata;
 
-    if (!dbTableName || !Array.isArray(parsedColumnsMetadata)) {
-        console.error(`Metadata Service: Invalid metadata structure retrieved for ID ${numericDatasetId}`, metadataResult.rows[0]);
-        throw new Error('Invalid metadata structure in database.');
+    // Add check for datasetIdentifier
+    if (!dbTableName || !Array.isArray(parsedColumnsMetadata) || !datasetIdentifier) {
+        console.error(`Metadata Service: Invalid or incomplete metadata structure retrieved for ID ${numericDatasetId}`, metadataResult.rows[0]);
+        throw new Error('Invalid or incomplete metadata structure in database.');
     }
 
     // Return the essential metadata needed by the analysis process
     return {
       dbTableName,
-      columnsMetadata: parsedColumnsMetadata
+      columnsMetadata: parsedColumnsMetadata,
+      datasetIdentifier // Return the dataset identifier (original filename)
     };
 
   } catch (error) {

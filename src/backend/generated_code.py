@@ -23,36 +23,37 @@ analysis_results = {}
 try:
     df = pd.read_csv('/input/data.csv', encoding='utf-8')
 
-    required_columns = ['Gender', 'Age', 'Blood Type', 'Medical Condition']
-    missing_columns = [col for col in required_columns if col not in df.columns]
-    if missing_columns:
-        analysis_results['error'] = f"Error: Columns {missing_columns} not found in dataset."
-        print(f"Error: Columns {missing_columns} not found in dataset.")
-    else:
-        df['Age_numeric'] = pd.to_numeric(df['Age'], errors='coerce')
-        if df['Age_numeric'].isnull().all():
-            analysis_results['warning'] = "Warning: Column 'Age' could not be treated as numeric."
-            print("Warning: Column 'Age' could not be treated as numeric.")
-        else:
-            filtered_df = df[
-                (df['Gender'] == 'Male') &
-                (df['Age_numeric'] >= 30) &
-                (df['Age_numeric'] <= 50) &
-                (df['Blood Type'] == 'O+')
-            ]
-            if filtered_df.empty:
-                analysis_results['warning'] = "No records found for males aged 30-50 with blood type O+."
-                print("No records found for males aged 30-50 with blood type O+.")
-            else:
-                condition_counts = filtered_df['Medical Condition'].value_counts().to_dict()
-                analysis_results['medical_condition_distribution'] = condition_counts
+    required_col = 'Location'
+    time_col = 'Total Time Spent'
 
-                plt.figure(figsize=(10, 6))
-                sns.countplot(data=filtered_df, y='Medical Condition', order=filtered_df['Medical Condition'].value_counts().index)
-                plt.title('Distribution of Medical Conditions for Males (30-50, O+)')
-                plt.tight_layout()
-                plt.savefig('/output/plot_1.png')
-                plt.close()
+    if required_col not in df.columns:
+        analysis_results['error'] = "Error: Column '" + required_col + "' not found."
+        print("Error: Column '" + required_col + "' not found.")
+    elif time_col not in df.columns:
+        analysis_results['error'] = "Error: Column '" + time_col + "' not found."
+        print("Error: Column '" + time_col + "' not found.")
+    else:
+        df[f'{time_col}_numeric'] = pd.to_numeric(df[time_col], errors='coerce')
+
+        if not df[f'{time_col}_numeric'].isnull().all():
+            location_time = df.groupby(required_col)[f'{time_col}_numeric'].sum()
+            max_location = location_time.idxmax()
+            max_time = location_time.max()
+
+            analysis_results['max_time_location'] = max_location
+            analysis_results['max_time'] = max_time
+
+            plt.figure(figsize=(10, 6))
+            location_time.sort_values(ascending=False).head(10).plot(kind='bar')
+            plt.title('Top 10 Locations by Total Time Spent')
+            plt.xlabel('Location')
+            plt.ylabel('Total Time Spent')
+            plt.tight_layout()
+            plt.savefig('/output/plot_1.png')
+            plt.close()
+        else:
+            analysis_results['warning'] = "Warning: Column '" + time_col + "' could not be treated as numeric."
+            print("Warning: Column '" + time_col + "' could not be treated as numeric.")
 
     final_stats = convert_numpy_types(analysis_results)
     with open('/output/stats.json', 'w') as f:

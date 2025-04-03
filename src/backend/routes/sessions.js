@@ -165,14 +165,21 @@ const validateRequest = (req, res, next) => {
 router.get('/', async (req, res) => {
   const userId = req.user.id; // Get user ID from middleware
 
+  logger.info(`[Sessions GET /] Attempting to fetch sessions for user ${userId}`);
   try {
-    const result = await db.query(
-      'SELECT id, session_name, dataset_id, created_at, updated_at FROM saved_sessions WHERE user_id = $1 ORDER BY updated_at DESC',
-      [userId]
-    );
+    const sql = 'SELECT id, session_name, dataset_id, created_at, updated_at FROM saved_sessions WHERE user_id = $1 ORDER BY updated_at DESC';
+    logger.debug(`[Sessions GET /] Executing SQL: ${sql} with params: [${userId}]`);
+    const result = await db.query(sql, [userId]);
+    logger.info(`[Sessions GET /] Successfully fetched ${result.rows.length} sessions for user ${userId}`);
     res.json(result.rows);
   } catch (err) {
-    logger.error(`Error fetching saved sessions`, { userId, error: err });
+    // Log the specific database error
+    logger.error(`[Sessions GET /] Database error fetching saved sessions for user ${userId}`, {
+        errorMessage: err.message,
+        errorCode: err.code, // PostgreSQL error code (e.g., 42P01 for undefined_table)
+        errorStack: err.stack,
+        userId: userId
+     });
     res.status(500).json({ message: 'Error fetching saved sessions.' });
   }
 });

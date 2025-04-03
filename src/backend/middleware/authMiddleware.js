@@ -22,21 +22,35 @@ if (!JWT_SECRET) {
 // --- End Security Check ---
 
 module.exports = function(req, res, next) {
-  // Get token from header
+  let token = null;
+
+  // 1. Try getting token from Authorization header
   const authHeader = req.header('Authorization');
-
-  // Check if not token
-  if (!authHeader) {
-    return res.status(401).json({ message: 'No token, authorization denied.' });
-  }
-
-  // Check if token is in the correct format 'Bearer <token>'
-  const parts = authHeader.split(' ');
-  if (parts.length !== 2 || parts[0] !== 'Bearer') {
+  if (authHeader) {
+    const parts = authHeader.split(' ');
+    if (parts.length === 2 && parts[0] === 'Bearer') {
+      token = parts[1];
+    } else {
+      // Invalid header format
       return res.status(401).json({ message: 'Token is not valid (Format Error).' });
+    }
   }
 
-  const token = parts[1];
+  // 2. If no header token AND it's the stream route, try query parameter
+  // Check if the path starts with '/api/notebook/stream/'
+  const isStreamRoute = req.originalUrl.startsWith('/api/notebook/stream/');
+
+  if (!token && isStreamRoute && req.query.token) {
+    token = req.query.token;
+    logger.info(`AuthMiddleware: Using token from query parameter for stream route ${req.originalUrl}`);
+  }
+
+  // 3. Check if token was found either way
+  if (!token) {
+    return res.status(401).json({ message: 'No token provided, authorization denied.' });
+  }
+
+  // Token variable now holds the token from either header or query param
 
   try {
     // Verify token

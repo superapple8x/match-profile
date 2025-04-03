@@ -13,6 +13,7 @@ const Papa = require('papaparse'); // Import papaparse for CSV stringifying
 const fileOperationsRoutes = require('./routes/fileOperations');
 const authRoutes = require('./routes/auth'); // Import auth routes
 const sessionRoutes = require('./routes/sessions'); // Import session routes
+const notebookExecutionRoutes = require('./routes/notebookExecution'); // Import notebook routes
 const metadataService = require('./services/metadataService');
 const { getLLMServiceInstance } = require('./llm/llmFactory');
 const dockerExecutor = require('./services/dockerExecutor');
@@ -139,6 +140,8 @@ app.use('/api', fileOperationsRoutes);
 app.use('/api/auth', authRoutes);
 // Mount the session routes (protected by middleware defined within sessions.js)
 app.use('/api/sessions', sessionRoutes);
+// Mount the notebook execution routes
+app.use('/api/notebook', notebookExecutionRoutes);
 
 // --- Helper Function to send SSE updates ---
 function sendSseUpdate(res, data) {
