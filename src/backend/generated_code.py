@@ -36,17 +36,13 @@ try:
         df[f'{time_col}_numeric'] = pd.to_numeric(df[time_col], errors='coerce')
 
         if not df[f'{time_col}_numeric'].isnull().all():
-            location_time = df.groupby(required_col)[f'{time_col}_numeric'].sum()
-            max_location = location_time.idxmax()
-            max_time = location_time.max()
-
-            analysis_results['max_time_location'] = max_location
-            analysis_results['max_time'] = max_time
+            top_countries = df.groupby(required_col)[f'{time_col}_numeric'].sum().nlargest(5)
+            analysis_results['top_countries'] = top_countries.to_dict()
 
             plt.figure(figsize=(10, 6))
-            location_time.sort_values(ascending=False).head(10).plot(kind='bar')
-            plt.title('Top 10 Locations by Total Time Spent')
-            plt.xlabel('Location')
+            top_countries.plot(kind='bar')
+            plt.title('Top 5 Countries with Most Wasted Time')
+            plt.xlabel('Country')
             plt.ylabel('Total Time Spent')
             plt.tight_layout()
             plt.savefig('/output/plot_1.png')

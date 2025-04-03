@@ -21,7 +21,7 @@ class KernelManager extends EventEmitter {
 
   // --- Public Methods ---
 
-  startKernel(sessionId, datasetId) {
+  startKernel(sessionId, datasetId, userId) { // Add userId parameter
     // Return a promise that resolves when the kernel is ready or rejects on error/timeout
     return new Promise(async (resolve, reject) => {
     if (this.kernels[sessionId]) {
@@ -35,6 +35,7 @@ class KernelManager extends EventEmitter {
 
     console.log(`KernelManager: Starting kernel for session ${sessionId}, dataset ${datasetId}`);
     this.kernels[sessionId] = {
+      userId: userId, // Store the userId
       process: null,
       datasetId: datasetId,
       status: 'starting',
@@ -42,6 +43,7 @@ class KernelManager extends EventEmitter {
       lastActivity: Date.now(),
       startupTimer: null,
       idleTimer: null,
+      pendingCode: null, // Ensure pendingCode is initialized
       // executionCallback: null, // Removed for event-based streaming
     };
 

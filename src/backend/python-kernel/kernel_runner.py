@@ -91,9 +91,19 @@ def handle_plots():
             buf.seek(0)
             images_base64.append(base64.b64encode(buf.read()).decode('utf-8'))
             plt.close(fig) # Close the figure to free memory
-    except Exception as e:
-        # Log error during plot handling to original stderr
-        print(f"KERNEL PLOT ERROR: {traceback.format_exc()}", file=original_stderr, flush=True)
+    except Exception:
+        # Send a structured error message back if plot handling fails
+        tb = traceback.format_exc()
+        error_message = {
+            'type': 'error',
+            'message': f"Error handling plot: {str(sys.exc_info()[1])}",
+            'traceback': tb
+        }
+        try:
+            print(json.dumps(error_message), file=original_stdout, flush=True)
+        except Exception as report_err:
+            # Fallback to original stderr if sending JSON fails
+            print(f"KERNEL CRITICAL: Failed to send plot error JSON: {report_err}\nOriginal Traceback:\n{tb}", file=original_stderr, flush=True)
     return images_base64
 
 def execute_code_streaming(code_to_exec):
@@ -156,12 +166,21 @@ if __name__ == "__main__":
             df = pd.read_csv(dataset_path)
             execution_scope['df'] = df # Make df available globally in the exec scope
             # Optional: Send a confirmation back? For now, just load.
-        except Exception as load_error:
-             # If loading fails, print error to stderr (Node.js will see this)
-             # and potentially exit or just continue without df.
-             print(f"KERNEL DATA LOAD ERROR: Failed to load dataset {dataset_path}: {load_error}", file=original_stderr, flush=True)
-             # Decide if kernel should exit on load failure. For now, continue.
-             # sys.exit(1)
+        except Exception:
+            # If loading fails, send a structured error message back
+            tb = traceback.format_exc()
+            error_message = {
+                'type': 'error',
+                'message': f"Failed to load dataset '{os.path.basename(dataset_path)}': {str(sys.exc_info()[1])}",
+                'traceback': tb,
+                'context': 'initial_load' # Add context for the frontend/backend
+            }
+            try:
+                print(json.dumps(error_message), file=original_stdout, flush=True)
+            except Exception as report_err:
+                # Fallback to original stderr if sending JSON fails
+                print(f"KERNEL CRITICAL: Failed to send data load error JSON: {report_err}\nOriginal Traceback:\n{tb}", file=original_stderr, flush=True)
+            # Kernel will still signal ready, but df will be None
 
     # Signal that the kernel is ready (after attempting dataset load)
     print(json.dumps({'type': 'status', 'status': 'ready'}), file=original_stdout, flush=True)

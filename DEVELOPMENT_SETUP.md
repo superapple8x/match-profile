@@ -180,6 +180,8 @@ You need to run both the backend and frontend servers concurrently. Open two sep
         ```bash
         cd src/backend
         npm install # Install dependencies (run this after cloning or pulling changes)
+        # Build the Python kernel Docker image (required for notebook feature)
+        docker build -t python-analysis-sandbox:latest -f python-sandbox/Dockerfile .
         ```
 
     *   Then, start the server:

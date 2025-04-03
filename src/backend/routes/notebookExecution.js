@@ -17,17 +17,24 @@ const checkSessionOwnership = (req, res, next) => {
     return res.status(400).json({ error: 'Session ID is required.' });
   }
 
-  // TODO: Implement proper ownership check. This is a placeholder.
-  // Example: Check if kernelManager.kernels[targetSessionId]?.userId === req.user.id
-  // For now, we assume the session exists and proceed.
-  if (!kernelManager.kernels[targetSessionId]) {
-     // Allow starting even if kernel doesn't exist yet for the /start route
-     if (req.path !== '/start') {
-        return res.status(404).json({ error: `Session ${targetSessionId} not found.` });
-     }
+  // Implement proper ownership check using the stored userId
+  const kernelInfo = kernelManager.kernels[targetSessionId];
+
+  if (!kernelInfo) {
+    // Allow starting even if kernel doesn't exist yet for the /start route
+    if (req.path !== '/start') {
+      return res.status(404).json({ error: `Session ${targetSessionId} not found.` });
+    }
+    // If it's the /start route, we don't need to check ownership yet,
+    // as the kernel doesn't exist. The start route itself will associate the user.
+  } else {
+    // Kernel exists, check ownership
+    if (!req.user || kernelInfo.userId !== req.user.id) { // Added check for req.user existence
+      console.warn(`[Auth Check - Failed] User ${req.user?.id} attempted to access session ${targetSessionId} owned by user ${kernelInfo.userId}`);
+      return res.status(403).json({ error: 'Forbidden: You do not own this session.' });
+    }
+    console.log(`[Auth Check - Success] User ${req.user?.id} accessing session ${targetSessionId}`);
   }
-  // Add more robust check here based on how you link sessions to users
-  console.log(`[Auth Check - Placeholder] User ${req.user?.id} accessing session ${targetSessionId}`);
 
   req.sessionId = targetSessionId; // Attach validated sessionId to request
   next();
@@ -61,7 +68,8 @@ router.post('/start', authMiddleware, async (req, res) => {
     // ---
 
     // Pass the *filename* (string) to startKernel
-    await kernelManager.startKernel(sessionId, datasetFilename);
+    // Pass the *filename* (string) and userId to startKernel
+    await kernelManager.startKernel(sessionId, datasetFilename, req.user.id);
 
     // TODO: Associate sessionId with req.user.id securely if needed beyond manager state
     res.status(200).json({ sessionId });

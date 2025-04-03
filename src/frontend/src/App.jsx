@@ -14,6 +14,7 @@ import {
   ArrowLeftIcon, ChatBubbleLeftRightIcon, SunIcon, MoonIcon, ArrowRightOnRectangleIcon,
   ChevronDoubleLeftIcon, ChevronDoubleRightIcon, Bars3Icon
 } from '@heroicons/react/24/outline';
+import { v4 as uuidv4 } from 'uuid'; // Import uuid
 
 
 // Constants
@@ -88,6 +89,7 @@ function App() {
   const [authToken, setAuthToken] = useState(localStorage.getItem('authToken'));
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('authToken'));
   const [viewMode, setViewMode] = useState('app'); // 'app' or 'auth'
+  const [notebookStates, setNotebookStates] = useState({}); // { [datasetId]: [{ id, code }, ...] }
 
   // --- View Switching Functions ---
   const switchToAuthView = () => setViewMode('auth');
@@ -160,7 +162,7 @@ function App() {
     setAnalysisMessages([]);
     setAnalysisQuery('');
     console.log('User logged out.');
-  }, []); // No dependencies needed if it only uses setters
+  }, [setNotebookStates]); // Added setNotebookStates dependency
 
 
   // --- Search Trigger Function --- (Updated to accept weights)
@@ -330,6 +332,11 @@ function App() {
     setIsAnalysisViewOpen(false);
     setAnalysisMessages([]);
     setAnalysisQuery('');
+    // Initialize notebook state for the new dataset
+    setNotebookStates(prev => ({
+        ...prev,
+        [metadata.datasetId]: [{ id: uuidv4(), code: '' }] // Start with one empty cell
+    }));
   };
 
   // Initial Search Handler (from SearchBar) - Updated to accept { criteria, weights }
@@ -392,6 +399,7 @@ function App() {
     setAnalysisMessages([]);
     setAnalysisQuery('');
     switchToAppView(); // Switch back to app view after successful login
+    setNotebookStates({}); // Clear all notebook states on login
   };
 
 
@@ -458,7 +466,7 @@ function App() {
 
       alert(`Session "${sessionData.session_name}" loaded.`);
 
-  }, [authToken, pageSize, triggerSearch]); // Added pageSize, triggerSearch
+  }, [authToken, pageSize, triggerSearch, setNotebookStates]); // Added setNotebookStates
 
   // State object for saving session (remains the same)
   const currentAppState = {
@@ -474,6 +482,39 @@ function App() {
   const primaryButtonActiveClasses = "bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500 dark:bg-indigo-500 dark:hover:bg-indigo-600 dark:focus:ring-indigo-400 dark:focus:ring-offset-gray-900"; // Adjusted dark focus ring
   const primaryButtonDisabledClasses = "bg-gray-400 dark:bg-gray-700 text-gray-600 dark:text-gray-400 cursor-not-allowed opacity-70";
   const secondaryButtonClasses = "bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-semibold";
+
+  // --- Notebook State Handlers (Lifted to App) ---
+  const handleAddNotebookCell = useCallback((targetDatasetId) => {
+      setNotebookStates(prevStates => ({
+          ...prevStates,
+          [targetDatasetId]: [
+              ...(prevStates[targetDatasetId] || []), // Keep existing cells or empty array
+              { id: uuidv4(), code: '' }
+          ]
+      }));
+  }, [setNotebookStates]);
+
+  const handleDeleteNotebookCell = useCallback((targetDatasetId, cellIdToDelete) => {
+      setNotebookStates(prevStates => {
+          const currentCells = prevStates[targetDatasetId] || [];
+          if (currentCells.length <= 1) {
+              return prevStates; // Keep at least one cell
+          }
+          return {
+              ...prevStates,
+              [targetDatasetId]: currentCells.filter(cell => cell.id !== cellIdToDelete)
+          };
+      });
+  }, [setNotebookStates]);
+
+  const handleNotebookCodeChange = useCallback((targetDatasetId, cellId, newCode) => {
+      setNotebookStates(prevStates => ({
+          ...prevStates,
+          [targetDatasetId]: (prevStates[targetDatasetId] || []).map(cell =>
+              cell.id === cellId ? { ...cell, code: newCode } : cell
+          )
+      }));
+  }, [setNotebookStates]);
 
   // --- Render Logic ---
 
@@ -629,17 +670,24 @@ function App() {
              <div className={`absolute inset-6 transition-opacity duration-300 ease-in-out ${currentView === 'analysis' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
               {currentView === 'analysis' && datasetId && (
                 <DataAnalysisPage
+                  // Pass existing props
                   datasetId={datasetId}
-                  initialQuery={analysisQuery}
+                  // initialQuery={analysisQuery} // No longer needed? Query is internal to DataAnalysisPage
                   messages={analysisMessages}
                   setMessages={setAnalysisMessages}
-                  setQuery={setAnalysisQuery}
+                  // setQuery={setAnalysisQuery} // Query is internal to DataAnalysisPage
                   onCloseAnalysis={closeAnalysisView}
-                  authToken={authToken}
+                  // authToken={authToken} // Not directly needed by DataAnalysisPage? Passed down for API calls within it.
                   handleLogout={handleLogout}
-                  // Pass down auth status and view switcher
                   isAuthenticated={isAuthenticated}
                   switchToAuthView={switchToAuthView}
+                  // Pass notebook state and handlers for the current dataset
+                  notebookCells={notebookStates[datasetId] || []} // Pass cells for current datasetId
+                  onAddNotebookCell={() => handleAddNotebookCell(datasetId)}
+                  onDeleteNotebookCell={(cellId) => handleDeleteNotebookCell(datasetId, cellId)}
+                  onNotebookCodeChange={(cellId, code) => handleNotebookCodeChange(datasetId, cellId, code)}
+                  // Pass setNotebookCells directly for handleEditCode (simpler than another handler)
+                  setNotebookCellsForDataset={(newCells) => setNotebookStates(prev => ({...prev, [datasetId]: newCells}))}
                 />
               )}
             </div>

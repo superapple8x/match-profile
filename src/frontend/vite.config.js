@@ -17,6 +17,7 @@ export default defineConfig({
         changeOrigin: true, // Recommended for virtual hosted sites
         // secure: false, // Uncomment if backend is not HTTPS
         // rewrite: (path) => path.replace(/^\/api/, ''), // Uncomment if backend doesn't expect /api prefix
+        ws: true, // Enable WebSocket proxying (often helps with SSE too)
       }
     }
   }
