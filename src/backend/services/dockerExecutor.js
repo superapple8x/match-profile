@@ -3,6 +3,7 @@ const fs = require('fs').promises; // Use promises for async operations
 const path = require('path');
 const os = require('os');
 const { PassThrough } = require('stream'); // Import PassThrough for log streaming
+const tar = require('tar-fs'); // Required for putArchive
 
 const docker = new Docker();
 
@@ -80,6 +81,7 @@ async function runPythonInSandbox(pythonCode, datasetCsvString) { // Changed dat
     await fs.mkdir(outputDirPath);
     await fs.chmod(outputDirPath, 0o777); // Make output dir writable by container user
     await fs.writeFile(scriptPath, pythonCode);
+    await fs.chmod(scriptPath, 0o644);
 
     // Write the dataset CSV string to the temporary input file
     try {
@@ -104,9 +106,9 @@ async function runPythonInSandbox(pythonCode, datasetCsvString) { // Changed dat
       WorkingDir: '/app',
       HostConfig: {
         Binds: [
-          `${scriptPath}:/app/script.py:ro`,
-          `${inputDataHostPath}:/input/data.csv:ro`,
-          `${outputDirPath}:/output`,
+          // Remove script bind mount - will copy instead
+          `${inputDataHostPath}:/input/data.csv:ro,z`, // Add :z for SELinux
+          `${outputDirPath}:/output:z`, // Add :z for SELinux
         ],
         NetworkMode: 'none',
         Memory: MEMORY_LIMIT_MB * 1024 * 1024,
@@ -142,6 +144,46 @@ async function runPythonInSandbox(pythonCode, datasetCsvString) { // Changed dat
             });
 
             await container.start();
+
+            // Copy the script into the running container
+            try {
+                console.log(`Docker Executor [${executionId}]: Copying script ${scriptPath} to container:/app/script.py`);
+                const tarStream = tar.pack(path.dirname(scriptPath), {
+                    entries: [path.basename(scriptPath)] // Pack only the script file
+                });
+                await container.putArchive(tarStream, {
+                    path: '/app/', // Target directory in container
+                    noOverwriteDirNonDir: false // Allow overwriting if needed (though /app should exist)
+                });
+                console.log(`Docker Executor [${executionId}]: Script copied successfully.`);
+
+                // Ensure the script is executable by the user inside the container
+                const chmodCmd = ['chmod', '755', '/app/script.py'];
+                const exec = await container.exec({
+                    Cmd: chmodCmd,
+                    User: 'root', // Run chmod as root to ensure permissions are set
+                    AttachStdout: true,
+                    AttachStderr: true
+                });
+                const chmodStream = await exec.start({ hijack: true, stdin: false });
+                // Consume the stream to ensure command completes
+                await new Promise((resolveExec, rejectExec) => {
+                    let chmodOutput = '';
+                    chmodStream.on('data', chunk => chmodOutput += chunk.toString());
+                    chmodStream.on('end', () => {
+                        console.log(`Docker Executor [${executionId}]: Chmod command output: ${chmodOutput.trim()}`);
+                        resolveExec();
+                    });
+                    chmodStream.on('error', rejectExec);
+                });
+                 console.log(`Docker Executor [${executionId}]: Set execute permissions on /app/script.py.`);
+
+            } catch (copyError) {
+                 console.error(`Docker Executor [${executionId}]: Failed to copy script into container:`, copyError);
+                 throw new Error(`Failed to copy script into container: ${copyError.message}`);
+            }
+
+
             const status = await container.wait(); // Wait for container to finish
             console.log(`Docker Executor [${executionId}]: Container finished with status code ${status.StatusCode}.`);
             resolve(status);

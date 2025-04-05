@@ -59,6 +59,36 @@ This guide provides a comprehensive, step-by-step walkthrough for setting up and
 
     If you see a list of running containers (or an empty list), Docker is set up correctly. If you get a permission error, double-check that you've logged out and back in.
 
+## Starting and Enabling Services
+
+Before running the application, ensure that Docker and PostgreSQL services are running. You can also enable them to start automatically on boot:
+
+For **Fedora** or **systemd-based Linux**:
+
+```bash
+# Start Docker and PostgreSQL services
+sudo systemctl start docker
+sudo systemctl start postgresql
+
+# Enable services to start on boot
+sudo systemctl enable docker
+sudo systemctl enable postgresql
+```
+
+Verify Docker is running:
+
+```bash
+docker ps
+```
+
+Verify PostgreSQL is running:
+
+```bash
+sudo systemctl status postgresql
+```
+
+If either service is not running, start it manually as shown above.
+
 ## Setting up PostgreSQL
 
 1.  **Install PostgreSQL:** If you don't have PostgreSQL installed, install it using:
@@ -169,6 +199,44 @@ The backend requires environment variables for LLM configuration and database co
      *   **JWT Configuration:**
          *   `JWT_SECRET` is crucial for security. Generate a strong random string and paste it here. While the backend provides a default for non-production environments if this is missing, setting it explicitly is highly recommended.
 
+## Building the Python Analysis Docker Image
+
+Before running the analysis feature, you must build the Docker image used for sandboxed Python code execution.
+
+Navigate to the backend directory as the build context **(important)**:
+
+```bash
+cd src/backend
+```
+
+Then build the image with the tag `python-analysis-sandbox:latest`:
+
+```bash
+docker build -t python-analysis-sandbox:latest -f python-sandbox/Dockerfile .
+```
+
+This ensures the Docker build context is correct so that the `python-kernel/kernel_runner.py` file is included properly.
+
+### Troubleshooting: Permission Denied on script.py
+
+If you encounter an error like:
+
+```
+python: can't open file '/app/script.py': [Errno 13] Permission denied
+```
+
+This means the dynamically generated script inside the container does not have the correct permissions.
+
+To fix this, ensure that any script copied or mounted into `/app` inside the container is owned by the `pythonuser` user (UID 1001) and has read permissions:
+
+```bash
+# Example: fix permissions on the script before running the container
+sudo chown 1001:1001 /path/to/generated/script.py
+chmod 644 /path/to/generated/script.py
+```
+
+Or modify the backend code that copies the script to set the correct ownership and permissions.
+
 ## Running the Application
 
 You need to run both the backend and frontend servers concurrently. Open two separate terminal windows or tabs in the project's root directory (`match-profile`).
@@ -180,6 +248,7 @@ You need to run both the backend and frontend servers concurrently. Open two sep
         ```bash
         cd src/backend
         npm install # Install dependencies (run this after cloning or pulling changes)
+        npm install tar-fs # Install dependency needed for Docker script copying
         ```
 
     *   Then, start the server:

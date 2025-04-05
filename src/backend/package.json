@@ -38,6 +38,7 @@
     "pm2": "^5.4.2",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
+    "tar-fs": "^3.0.8",
     "winston": "^3.17.0",
     "xlsx": "^0.18.5"
   },

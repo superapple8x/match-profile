@@ -27,33 +27,28 @@ try:
     time_col = 'Total Time Spent'
 
     if required_col not in df.columns:
-        analysis_results['error'] = "Error: Column '" + required_col + "' not found."
-        print("Error: Column '" + required_col + "' not found.")
+        analysis_results['error'] = f"Error: Column '{required_col}' not found."
+        print(f"Error: Column '{required_col}' not found.")
     elif time_col not in df.columns:
-        analysis_results['error'] = "Error: Column '" + time_col + "' not found."
-        print("Error: Column '" + time_col + "' not found.")
+        analysis_results['error'] = f"Error: Column '{time_col}' not found."
+        print(f"Error: Column '{time_col}' not found.")
     else:
         df[f'{time_col}_numeric'] = pd.to_numeric(df[time_col], errors='coerce')
 
         if not df[f'{time_col}_numeric'].isnull().all():
-            location_time = df.groupby(required_col)[f'{time_col}_numeric'].sum()
-            max_location = location_time.idxmax()
-            max_time = location_time.max()
-
-            analysis_results['max_time_location'] = max_location
-            analysis_results['max_time'] = max_time
+            top_countries = df.groupby(required_col)[f'{time_col}_numeric'].sum().nlargest(5)
+            analysis_results['top_countries'] = top_countries.to_dict()
 
             plt.figure(figsize=(10, 6))
-            location_time.sort_values(ascending=False).head(10).plot(kind='bar')
-            plt.title('Top 10 Locations by Total Time Spent')
-            plt.xlabel('Location')
+            top_countries.plot(kind='bar')
+            plt.title('Top 5 Countries with Most Wasted Time')
             plt.ylabel('Total Time Spent')
             plt.tight_layout()
             plt.savefig('/output/plot_1.png')
             plt.close()
         else:
-            analysis_results['warning'] = "Warning: Column '" + time_col + "' could not be treated as numeric."
-            print("Warning: Column '" + time_col + "' could not be treated as numeric.")
+            analysis_results['warning'] = f"Warning: Column '{time_col}' could not be treated as numeric."
+            print(f"Warning: Column '{time_col}' could not be treated as numeric.")
 
     final_stats = convert_numpy_types(analysis_results)
     with open('/output/stats.json', 'w') as f:
