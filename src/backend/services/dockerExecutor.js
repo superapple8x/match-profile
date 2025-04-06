@@ -10,7 +10,8 @@ const docker = new Docker();
 const IMAGE_NAME = 'python-analysis-sandbox:latest'; // Tag for the sandbox image
 const DOCKERFILE_PATH = path.join(__dirname, '..', 'python-sandbox'); // Path to the Dockerfile directory
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads'); // Assumed location of uploaded datasets
-const TEMP_BASE_DIR = path.join(os.tmpdir(), 'match-profile-analysis'); // Base for temporary execution dirs
+// Changed TEMP_BASE_DIR to be within the project to avoid host /tmp restrictions
+const TEMP_BASE_DIR = path.join(__dirname, '..', 'docker_temp', 'match-profile-analysis');
 const EXECUTION_TIMEOUT_MS = 30000; // 30 seconds timeout for script execution
 const MEMORY_LIMIT_MB = 256; // Max memory for the container
 const CPU_SHARES = 512; // Relative CPU weight (default is 1024)
@@ -70,7 +71,19 @@ async function runPythonInSandbox(pythonCode, datasetCsvString) { // Changed dat
   try {
     // 1. Prepare Host Environment
     await fs.mkdir(TEMP_BASE_DIR, { recursive: true });
+    await fs.chmod(TEMP_BASE_DIR, 0o755); // Ensure base dir is traversable
+    console.log(`Docker Executor [${executionId}]: Set base directory permissions to ${(await fs.stat(TEMP_BASE_DIR)).mode.toString(8)}`);
+    
     tempDir = await fs.mkdtemp(path.join(TEMP_BASE_DIR, `${executionId}-`));
+    await fs.chmod(tempDir, 0o755); // Make temp dir traversable
+    console.log(`Docker Executor [${executionId}]: Set temp directory permissions to ${(await fs.stat(tempDir)).mode.toString(8)}`);
+
+    // Verify permissions along the entire path
+    let currentPath = tempDir;
+    while (currentPath !== TEMP_BASE_DIR) {
+      await fs.chmod(currentPath, 0o755);
+      currentPath = path.dirname(currentPath);
+    }
     const scriptPath = path.join(tempDir, 'script.py');
     const inputDirPath = path.join(tempDir, 'input');
     const outputDirPath = path.join(tempDir, 'output');
@@ -80,6 +93,8 @@ async function runPythonInSandbox(pythonCode, datasetCsvString) { // Changed dat
     await fs.mkdir(outputDirPath);
     await fs.chmod(outputDirPath, 0o777); // Make output dir writable by container user
     await fs.writeFile(scriptPath, pythonCode);
+    await fs.chmod(scriptPath, 0o755); // Changed from 644 to 755 for broader access
+    console.log(`Docker Executor [${executionId}]: Set script permissions to ${(await fs.stat(scriptPath)).mode.toString(8)}`);
 
     // Write the dataset CSV string to the temporary input file
     try {
@@ -99,14 +114,22 @@ async function runPythonInSandbox(pythonCode, datasetCsvString) { // Changed dat
     console.log(`Docker Executor [${executionId}]: Creating container...`);
     container = await docker.createContainer({
       Image: IMAGE_NAME,
-      Cmd: ['python', '/app/script.py'],
-      User: 'pythonuser',
+      // Cmd now copies the script from the mounted host temp dir before executing
+      Cmd: ['sh', '-c', 'cp /host_temp/script.py /app/script.py && python /app/script.py'],
+      User: 'pythonuser', // Restored non-root user
       WorkingDir: '/app',
+      Env: [
+        `TEMP_DIR_HOST_PATH=/host_temp` // Update env var to point to mount inside container
+      ],
       HostConfig: {
         Binds: [
-          `${scriptPath}:/app/script.py:ro`,
-          `${inputDataHostPath}:/input/data.csv:ro`,
-          `${outputDirPath}:/output`,
+          // Mount the entire host temp directory read-write with shared SELinux label
+          `${tempDir}:/host_temp:rw,z`,
+          // Add SELinux label to other mounts too
+          `${inputDataHostPath}:/input/data.csv:ro,z`,
+          `${outputDirPath}:/output:rw,z`, // Output needs rw
+          // Keep diagnostic passwd mount (no label needed for /etc/passwd)
+          `/etc/passwd:/etc/passwd:ro`,
         ],
         NetworkMode: 'none',
         Memory: MEMORY_LIMIT_MB * 1024 * 1024,
@@ -159,6 +182,7 @@ async function runPythonInSandbox(pythonCode, datasetCsvString) { // Changed dat
     if (result.StatusCode !== 0) {
       executionError = `Python script exited with non-zero status code: ${result.StatusCode}.`;
       console.error(`Docker Executor [${executionId}]: ${executionError}`);
+      console.error(`Docker Executor [${executionId}]: Script output:\n${executionLogs}`);
     } else {
       console.log(`Docker Executor [${executionId}]: Script executed successfully.`);
       // Check for output files

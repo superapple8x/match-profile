@@ -1,3 +1,34 @@
+
+import os
+import subprocess
+import sys
+
+print("--- DIAGNOSTICS START ---", flush=True)
+print(f"Python Executable: {sys.executable}", flush=True)
+print(f"Current Working Directory: {os.getcwd()}", flush=True)
+print("User Info:", flush=True)
+subprocess.run(["id"])
+print("\nListing /app:", flush=True)
+subprocess.run(["ls", "-la", "/app"])
+print("\nListing /input:", flush=True)
+subprocess.run(["ls", "-la", "/input"])
+print("\nListing /output:", flush=True)
+subprocess.run(["ls", "-la", "/output"])
+
+# Check the mounted host temp directory (now at /host_temp)
+print("\nListing mounted host temp dir (/host_temp):", flush=True)
+subprocess.run(["ls", "-la", "/host_temp"])
+
+print("\nContents of /etc/passwd:", flush=True)
+try:
+    with open("/etc/passwd", "r") as f:
+        print(f.read(), flush=True)
+except Exception as e:
+    print(f"Error reading /etc/passwd: {e}", flush=True)
+
+print("--- DIAGNOSTICS END ---", flush=True)
+
+# --- Original User Code Starts Here ---
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -27,11 +58,11 @@ try:
     time_col = 'Total Time Spent'
 
     if required_col not in df.columns:
-        analysis_results['error'] = "Error: Column '" + required_col + "' not found."
-        print("Error: Column '" + required_col + "' not found.")
+        analysis_results['error'] = f"Error: Column '{required_col}' not found."
+        print(f"Error: Column '{required_col}' not found.")
     elif time_col not in df.columns:
-        analysis_results['error'] = "Error: Column '" + time_col + "' not found."
-        print("Error: Column '" + time_col + "' not found.")
+        analysis_results['error'] = f"Error: Column '{time_col}' not found."
+        print(f"Error: Column '{time_col}' not found.")
     else:
         df[f'{time_col}_numeric'] = pd.to_numeric(df[time_col], errors='coerce')
 
@@ -48,8 +79,8 @@ try:
             plt.savefig('/output/plot_1.png')
             plt.close()
         else:
-            analysis_results['warning'] = "Warning: Column '" + time_col + "' could not be treated as numeric."
-            print("Warning: Column '" + time_col + "' could not be treated as numeric.")
+            analysis_results['warning'] = f"Warning: Column '{time_col}' could not be treated as numeric."
+            print(f"Warning: Column '{time_col}' could not be treated as numeric.")
 
     final_stats = convert_numpy_types(analysis_results)
     with open('/output/stats.json', 'w') as f:

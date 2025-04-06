@@ -19,6 +19,7 @@ build/
 .cache/
 .tmp/
 *.tmp
+src/backend/docker_temp/
 
 # OS generated files
 .DS_Store

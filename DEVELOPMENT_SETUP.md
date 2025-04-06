@@ -233,3 +233,41 @@ The frontend will make requests to the backend server (proxied via Vite) for fil
 To stop the servers, go to each terminal window where they are running and press `Ctrl + C`.
 
 **Important Note:** The backend code contains a commented-out variable `BASE_UPLOAD_DIR` in `src/backend/routes/fileOperations.js`. This variable is **not used** and should **not** be uncommented or used for file storage. The application is designed to process uploaded files in memory, not to store them permanently on the server's file system.
+
+## Troubleshooting
+
+### Docker Permission Errors (SELinux)
+
+If you encounter permission errors when running the LLM analysis feature, such as:
+
+*   `python: can't open file '/app/script.py': [Errno 13] Permission denied`
+*   `cp: cannot open '/host_temp/script.py' for reading: Permission denied`
+*   `cp: cannot stat '/host_temp/script.py': Permission denied`
+
+This is often caused by **SELinux** (or potentially AppArmor) on the host system preventing the Docker container from accessing files mounted from the host, even if standard file permissions seem correct.
+
+**Solution:**
+
+The codebase (`src/backend/services/dockerExecutor.js`) has been updated to mitigate this by:
+
+1.  **Using a Project-Local Temp Directory:** Temporary files for Docker execution are now created under `src/backend/docker_temp/` instead of the system `/tmp`. This directory is automatically added to `.gitignore`.
+2.  **Copying Script Inside Container:** The Python script is copied from the mounted temporary directory (`/host_temp`) to `/app/script.py` within the container before execution.
+3.  **Applying SELinux Volume Labels:** The crucial step is adding the `:z` label to the volume mounts in `src/backend/services/dockerExecutor.js`. This tells SELinux that the mounted directories (`/host_temp`, `/input/data.csv`, `/output`) are intended to be shared with the container.
+
+Example snippet from `dockerExecutor.js`:
+
+```javascript
+      HostConfig: {
+        Binds: [
+          // Mount the entire host temp directory read-write with shared SELinux label
+          `${tempDir}:/host_temp:rw,z`,
+          // Add SELinux label to other mounts too
+          `${inputDataHostPath}:/input/data.csv:ro,z`,
+          `${outputDirPath}:/output:rw,z`, // Output needs rw
+          // ... other mounts ...
+        ],
+        // ... rest of config ...
+      },
+```
+
+If you clone or pull the latest code, these configurations should already be in place. If you are setting up an older version or manually configuring, ensure these settings, especially the `:z` volume labels, are present if your host system uses SELinux.
