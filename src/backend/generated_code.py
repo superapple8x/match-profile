@@ -58,11 +58,11 @@ try:
     time_col = 'Total Time Spent'
 
     if required_col not in df.columns:
-        analysis_results['error'] = f"Error: Column '{required_col}' not found."
-        print(f"Error: Column '{required_col}' not found.")
+        analysis_results['error'] = "Error: Column '" + required_col + "' not found."
+        print("Error: Column '" + required_col + "' not found.")
     elif time_col not in df.columns:
-        analysis_results['error'] = f"Error: Column '{time_col}' not found."
-        print(f"Error: Column '{time_col}' not found.")
+        analysis_results['error'] = "Error: Column '" + time_col + "' not found."
+        print("Error: Column '" + time_col + "' not found.")
     else:
         df[f'{time_col}_numeric'] = pd.to_numeric(df[time_col], errors='coerce')
 
@@ -73,14 +73,13 @@ try:
             plt.figure(figsize=(10, 6))
             top_countries.plot(kind='bar')
             plt.title('Top 5 Countries with Most Wasted Time')
-            plt.xlabel('Country')
             plt.ylabel('Total Time Spent')
             plt.tight_layout()
             plt.savefig('/output/plot_1.png')
             plt.close()
         else:
-            analysis_results['warning'] = f"Warning: Column '{time_col}' could not be treated as numeric."
-            print(f"Warning: Column '{time_col}' could not be treated as numeric.")
+            analysis_results['warning'] = "Warning: Column '" + time_col + "' could not be treated as numeric."
+            print("Warning: Column '" + time_col + "' could not be treated as numeric.")
 
     final_stats = convert_numpy_types(analysis_results)
     with open('/output/stats.json', 'w') as f:

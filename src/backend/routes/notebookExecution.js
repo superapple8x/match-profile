@@ -3,7 +3,21 @@ const router = express.Router();
 const kernelManager = require('../services/kernelManager');
 const metadataService = require('../services/metadataService'); // Import metadataService
 const authMiddleware = require('../middleware/authMiddleware'); // Assuming this middleware adds user info to req.user
+const { getLLMService } = require('../llm/llmFactory'); // Import LLM service getter
+const { body, validationResult } = require('express-validator'); // Import validation functions
+const logger = require('../config/logger'); // Import logger
 const { PassThrough } = require('stream');
+
+// Middleware to handle validation errors from express-validator (if not already global)
+// Note: Define or import this if needed globally, or handle errors inline
+const validateRequest = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    logger.warn('Validation failed for request', { url: req.originalUrl, errors: errors.array() });
+    return res.status(400).json({ errors: errors.array() });
+  }
+  next();
+};
 
 // Middleware to check session ownership (basic example)
 // In a real app, associate sessionId with userId more securely
@@ -229,5 +243,59 @@ router.post('/stop', authMiddleware, checkSessionOwnership, async (req, res) => 
     res.status(500).json({ error: error.message || 'Failed to stop kernel session.' });
   }
 });
+
+// --- New Route: Generate Code ---
+const generateCodeValidationRules = [
+  body('prompt', 'Prompt is required').notEmpty().trim(),
+  // Add validation for datasetId
+  body('datasetId', 'Dataset ID is required').notEmpty().trim(), // Assuming string ID for now
+];
+
+router.post('/generate-code', authMiddleware, generateCodeValidationRules, validateRequest, async (req, res) => {
+  logger.info('--- /api/notebook/generate-code request received ---');
+  // Validation handled by middleware
+
+  const { prompt, datasetId } = req.body; // Get datasetId from body
+  const userId = req.user.id; // Assuming authMiddleware adds user
+
+  logger.info(`[Generate Code] User ${userId} requested code generation for dataset ${datasetId}.`);
+  logger.debug(`[Generate Code] Prompt: "${prompt}"`);
+
+  try {
+    const llmService = getLLMService(); // Get the singleton instance
+
+    // --- Fetch Metadata ---
+    logger.debug(`[Generate Code] Fetching metadata for dataset ID: ${datasetId}`);
+    const metadata = await metadataService.getMetadata(datasetId); // Use numeric ID if needed
+    if (!metadata || !metadata.dbTableName || !metadata.columnsMetadata) {
+        logger.error(`[Generate Code] Failed to retrieve valid metadata for dataset ID: ${datasetId}`, { userId });
+        return res.status(404).json({ error: `Metadata not found or invalid for dataset ID: ${datasetId}` });
+    }
+    logger.debug(`[Generate Code] Metadata fetched successfully for table: ${metadata.dbTableName}`);
+    // ---
+
+    // Call the LLM service, now with metadata context
+    const generatedCode = await llmService.generatePythonCode(prompt, metadata);
+
+    if (!generatedCode || typeof generatedCode !== 'string' || generatedCode.trim() === '') {
+        logger.warn('[Generate Code] LLM service returned empty or invalid code.', { userId, datasetId });
+        throw new Error('LLM failed to generate valid code.');
+    }
+
+    logger.info(`[Generate Code] Code generated successfully for user ${userId}.`);
+    logger.debug(`[Generate Code] Generated Code Snippet:\n${generatedCode.substring(0, 100)}...`); // Log snippet
+
+    res.status(200).json({ generatedCode });
+
+  } catch (error) {
+    logger.error(`[Generate Code] Error during code generation for user ${userId}`, { error });
+    // Check if it's an LLM initialization error vs. generation error
+    const errorMessage = error.message.includes('LLM Service could not be initialized')
+                         ? 'Code generation service is currently unavailable.'
+                         : 'Failed to generate code.';
+    res.status(500).json({ error: errorMessage, details: error.message });
+  }
+});
+// --- End New Route ---
 
 module.exports = router;

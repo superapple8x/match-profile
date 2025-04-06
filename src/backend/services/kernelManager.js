@@ -1,20 +1,27 @@
-const { spawn } = require('child_process');
+const { spawn } = require('child_process'); // Keep spawn for now as fallback/reference, but will replace core logic
+const Docker = require('dockerode'); // Import Dockerode
 const path = require('path');
 const fs = require('fs').promises;
 const { EventEmitter } = require('events');
-// const { v4: uuidv4 } = require('uuid'); // Execution IDs not needed with current 'busy' logic
+const { PassThrough } = require('stream'); // For handling Docker streams
 
 // Configuration
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads'); // Assumed location of uploaded datasets
 const KERNEL_SCRIPT_PATH = path.join(__dirname, '..', 'python-kernel', 'kernel_runner.py');
-const PYTHON_COMMAND = 'python3'; // Or just 'python', depending on system setup
+const PYTHON_COMMAND = 'python3'; // Fallback/reference, not used for Docker
 const KERNEL_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes idle timeout
-const KERNEL_STARTUP_TIMEOUT_MS = 10000; // 10 seconds for kernel to start
+const KERNEL_STARTUP_TIMEOUT_MS = 20000; // Increased startup timeout for Docker (20 seconds)
+const DOCKER_IMAGE_NAME = 'python-analysis-sandbox:latest'; // Image used by dockerExecutor
+// Base directory for kernel temporary files (output dirs)
+const KERNEL_TEMP_BASE_DIR = path.join(__dirname, '..', 'docker_temp', 'match-profile-kernels');
+
+const docker = new Docker(); // Instantiate Dockerode
 
 class KernelManager extends EventEmitter {
   constructor() {
     super();
-    this.kernels = {}; // Store: { sessionId: { process, datasetId, status, buffer, lastActivity, startupTimer, idleTimer, pendingCode: null } }
+    // Store: { sessionId: { container, stream, datasetId, status, buffer, lastActivity, startupTimer, idleTimer, pendingCode: null, userId } }
+    this.kernels = {};
     this.kernelCheckInterval = setInterval(this.cleanupIdleKernels.bind(this), 60 * 1000); // Check every minute
     console.log('KernelManager initialized.');
   }
@@ -33,10 +40,11 @@ class KernelManager extends EventEmitter {
       throw new Error(`Kernel for session ${sessionId} is already starting/stopping.`);
     }
 
-    console.log(`KernelManager: Starting kernel for session ${sessionId}, dataset ${datasetId}`);
+    console.log(`KernelManager: Starting kernel in Docker for session ${sessionId}, dataset ${datasetId}`);
     this.kernels[sessionId] = {
       userId: userId, // Store the userId
-      process: null,
+      container: null, // Changed from process
+      stream: null, // To store the attached stream
       datasetId: datasetId,
       status: 'starting',
       buffer: '',
@@ -44,10 +52,22 @@ class KernelManager extends EventEmitter {
       startupTimer: null,
       idleTimer: null,
       pendingCode: null, // Ensure pendingCode is initialized
+      tempOutputDir: null, // To store the path to the host output directory
       // executionCallback: null, // Removed for event-based streaming
     };
 
+    let tempOutputDir = null; // Define here for cleanup in catch block
+
     try {
+      // --- Create Temp Output Directory ---
+      await fs.mkdir(KERNEL_TEMP_BASE_DIR, { recursive: true });
+      // Create a unique output directory for this session on the host
+      tempOutputDir = await fs.mkdtemp(path.join(KERNEL_TEMP_BASE_DIR, `${sessionId}-output-`));
+      await fs.chmod(tempOutputDir, 0o777); // Ensure container user can write
+      this.kernels[sessionId].tempOutputDir = tempOutputDir; // Store path for cleanup
+      console.log(`KernelManager: Created temp output dir: ${tempOutputDir}`);
+      // ---
+
       // datasetId here is the original filename (datasetIdentifier) passed from the route
       const originalFileName = datasetId;
 
@@ -60,21 +80,56 @@ class KernelManager extends EventEmitter {
       console.log(`KernelManager: Checking access for path: ${datasetPath}`);
       // Basic check if dataset file exists (using the sanitized name)
       await fs.access(datasetPath);
-      console.log(`KernelManager: File access confirmed for: ${datasetPath}`);
+      console.log(`KernelManager: File access confirmed for host path: ${datasetPath}`);
+      await fs.access(KERNEL_SCRIPT_PATH);
+      console.log(`KernelManager: Kernel script access confirmed for host path: ${KERNEL_SCRIPT_PATH}`);
 
-      // Pass the *actual path* to the kernel runner script
-      const kernelProcess = spawn(PYTHON_COMMAND, [KERNEL_SCRIPT_PATH, datasetPath], {
-        stdio: ['pipe', 'pipe', 'pipe'], // stdin, stdout, stderr
-        // Consider security implications if running outside Docker
-        // cwd: path.dirname(KERNEL_SCRIPT_PATH), // Optional: set working directory
-      });
+      // --- Docker Container Setup ---
+      const containerOptions = {
+        Image: DOCKER_IMAGE_NAME,
+        Cmd: ['python', '/app/kernel_runner.py', '/input/data.csv'], // Command to run inside container
+        User: 'pythonuser', // Run as non-root user defined in Dockerfile
+        WorkingDir: '/app', // Set working directory inside container
+        Env: [], // Add any necessary environment variables
+        HostConfig: {
+          Binds: [
+            // Mount kernel script read-only
+            `${KERNEL_SCRIPT_PATH}:/app/kernel_runner.py:ro,z`,
+            // Mount dataset file read-only
+            `${datasetPath}:/input/data.csv:ro,z`,
+            // Mount the temporary output directory read-write
+            `${tempOutputDir}:/output:rw,z`,
+            // Mount passwd for user info (optional but helpful for diagnostics)
+            `/etc/passwd:/etc/passwd:ro`,
+          ],
+          NetworkMode: 'none', // No network access for the kernel container
+          AutoRemove: true, // Automatically remove container on exit
+          // Add resource limits if needed (Memory, CPU)
+          // Memory: 256 * 1024 * 1024, // Example: 256MB
+        },
+        Tty: false, // Don't allocate TTY
+        OpenStdin: true, // Keep stdin open to send commands
+        StdinOnce: false, // Keep stdin open after first write
+        AttachStdin: true,
+        AttachStdout: true,
+        AttachStderr: true,
+      };
 
-      // (spawn call moved up)
+      console.log(`KernelManager: Creating container for session ${sessionId}...`);
+      const container = await docker.createContainer(containerOptions);
+      this.kernels[sessionId].container = container; // Store container object
 
-      this.kernels[sessionId].process = kernelProcess;
-      this._setupKernelListeners(sessionId, kernelProcess);
+      console.log(`KernelManager: Attaching stream to container ${container.id}...`);
+      // Attach streams BEFORE starting
+      const stream = await container.attach({ stream: true, stdin: true, stdout: true, stderr: true });
+      this.kernels[sessionId].stream = stream; // Store the stream
 
-      // Timeout for kernel startup
+      console.log(`KernelManager: Starting container ${container.id}...`);
+      await container.start();
+
+      this._setupKernelListeners(sessionId, stream); // Setup listeners on the stream
+
+      // Timeout for kernel startup (wait for 'ready' message via stream)
       this.kernels[sessionId].startupTimer = setTimeout(() => {
         if (this.kernels[sessionId] && this.kernels[sessionId].status === 'starting') {
           console.error(`KernelManager: Kernel ${sessionId} startup timed out.`);
@@ -86,9 +141,9 @@ class KernelManager extends EventEmitter {
       // Set initial idle timer
       this._resetIdleTimer(sessionId);
 
-      console.log(`KernelManager: Kernel process ${kernelProcess.pid} spawned for session ${sessionId}. Waiting for ready signal...`);
+      console.log(`KernelManager: Container ${container.id} started for session ${sessionId}. Waiting for ready signal via stream...`);
 
-      // --- Wait for Ready Signal ---
+      // --- Wait for Ready Signal (via stream listener) ---
       const readyListener = (readySessionId) => {
         if (readySessionId === sessionId) {
           console.log(`KernelManager: Received ready signal for kernel ${sessionId}.`);
@@ -117,17 +172,22 @@ class KernelManager extends EventEmitter {
 
     } catch (error) {
       console.error(`KernelManager: Error starting kernel ${sessionId}:`, error);
-      this._handleKernelError(sessionId, error);
-      delete this.kernels[sessionId]; // Clean up state entry
-      // If initial spawn/setup failed, reject the promise
-      reject(new Error(`Failed to start kernel: ${error.message}`));
+      // Clean up temp output dir if created before error
+      if (tempOutputDir) {
+          fs.rm(tempOutputDir, { recursive: true, force: true }).catch(rmErr => console.error(`KernelManager: Error cleaning up temp output dir ${tempOutputDir} after start error:`, rmErr));
+      }
+      this._handleKernelError(sessionId, error); // This will also delete kernel state
+      // delete this.kernels[sessionId]; // Clean up state entry - _handleKernelError does this
+      // If initial container creation/start failed, reject the promise
+      reject(new Error(`Failed to start kernel container: ${error.message}`));
     }
    }); // End of Promise constructor
   }
 
   prepareCode(sessionId, code) {
     const kernelInfo = this.kernels[sessionId];
-    if (!kernelInfo || !kernelInfo.process) {
+    // Check for container existence
+    if (!kernelInfo || !kernelInfo.container) { // Check container
       throw new Error(`Kernel session ${sessionId} not found.`);
     }
     // Allow preparation even if busy? Or only if ready? Let's restrict to ready for now.
@@ -146,8 +206,9 @@ class KernelManager extends EventEmitter {
 
   runPreparedCode(sessionId) {
     const kernelInfo = this.kernels[sessionId];
-    if (!kernelInfo || !kernelInfo.process) {
-      throw new Error(`Kernel session ${sessionId} not found for running code.`);
+    // Check for container and stream
+    if (!kernelInfo || !kernelInfo.container || !kernelInfo.stream) { // Check container and stream
+      throw new Error(`Kernel session ${sessionId} not found or stream not attached for running code.`);
     }
     // Can only run if ready and there's pending code
     if (kernelInfo.status !== 'ready') {
@@ -169,57 +230,85 @@ class KernelManager extends EventEmitter {
 
     const command = { type: 'execute', code: codeToRun };
     try {
-      console.log(`KernelManager DEBUG (${sessionId}): Writing command to kernel stdin.`);
-      kernelInfo.process.stdin.write(JSON.stringify(command) + '\n');
+      console.log(`KernelManager DEBUG (${sessionId}): Writing command to kernel container stream.`);
+      // Write to the container's stream (stdin)
+      kernelInfo.stream.write(JSON.stringify(command) + '\n');
     } catch (writeError) {
-      console.error(`KernelManager: Error writing prepared code to kernel ${sessionId} stdin:`, writeError);
-      this.emit('kernelError', sessionId, { message: `Failed to send prepared code to kernel: ${writeError.message}` });
-      this.emit('kernelExecutionComplete', sessionId, { status: 'error', error: { message: 'Failed to send prepared code to kernel' } });
+      console.error(`KernelManager: Error writing prepared code to kernel ${sessionId} stream:`, writeError);
+      this.emit('kernelError', sessionId, { message: `Failed to send prepared code to kernel container: ${writeError.message}` });
+      this.emit('kernelExecutionComplete', sessionId, { status: 'error', error: { message: 'Failed to send prepared code to kernel container' } });
       kernelInfo.status = 'ready'; // Reset status
       this._resetIdleTimer(sessionId);
       // Should we throw here? The stream handler might be waiting. Let's not throw, rely on events.
     }
   }
 
-  stopKernel(sessionId, force = false) {
+  async stopKernel(sessionId, force = false) { // Made async
     const kernelInfo = this.kernels[sessionId];
     if (!kernelInfo) {
       // console.warn(`KernelManager: Attempted to stop non-existent kernel ${sessionId}`);
       return;
     }
+    // Prevent multiple stop attempts
+    if (kernelInfo.status === 'stopping' || kernelInfo.status === 'stopped') {
+        console.log(`KernelManager: Kernel ${sessionId} is already stopping or stopped.`);
+        return;
+    }
 
-    console.log(`KernelManager: Stopping kernel ${sessionId} (force: ${force})`);
+    console.log(`KernelManager: Stopping kernel container ${kernelInfo.container?.id} for session ${sessionId} (force: ${force})`);
     kernelInfo.status = 'stopping';
     clearTimeout(kernelInfo.startupTimer);
     clearTimeout(kernelInfo.idleTimer);
 
-    if (kernelInfo.process) {
-      if (force) {
-        kernelInfo.process.kill('SIGKILL'); // Force kill immediately
-      } else {
-        // Attempt graceful shutdown first
+    const container = kernelInfo.container;
+    const stream = kernelInfo.stream;
+
+    // Close the stream first to prevent further writes
+    if (stream) {
         try {
-          const command = { type: 'shutdown' };
-          kernelInfo.process.stdin.write(JSON.stringify(command) + '\n');
-          // Set a timeout to force kill if graceful shutdown fails
-          setTimeout(() => {
-            if (this.kernels[sessionId] && this.kernels[sessionId].process) {
-              console.warn(`KernelManager: Kernel ${sessionId} did not exit gracefully, forcing kill.`);
-              this.kernels[sessionId].process.kill('SIGKILL');
-            }
-          }, 2000); // 2 seconds grace period
-        } catch (e) {
-          // If writing fails (e.g., pipe closed), force kill
-          console.warn(`KernelManager: Error sending shutdown to kernel ${sessionId}, forcing kill.`, e);
-          kernelInfo.process.kill('SIGKILL');
+            stream.end();
+            // stream.destroy(); // More forceful closure if needed
+        } catch (streamError) {
+            console.warn(`KernelManager: Error ending stream for ${sessionId}:`, streamError);
+        }
+        kernelInfo.stream = null; // Clear stream reference
+    }
+
+    if (container) {
+      try {
+        // Attempt to stop the container (Docker handles graceful shutdown with timeout)
+        // Docker's stop command sends SIGTERM, then SIGKILL after a timeout (default 10s)
+        console.log(`KernelManager: Attempting to stop container ${container.id}...`);
+        await container.stop({ t: force ? 0 : 10 }); // Force immediately if force=true, else 10s timeout
+        console.log(`KernelManager: Container ${container.id} stopped.`);
+      } catch (stopError) {
+        // Handle errors, e.g., container already stopped (common)
+        if (stopError.statusCode === 304) { // 304 Not Modified often means already stopped
+          console.log(`KernelManager: Container ${container.id} was already stopped.`);
+        } else if (stopError.statusCode === 404) { // 404 Not Found
+           console.log(`KernelManager: Container ${container.id} not found (likely already removed).`);
+        } else {
+          console.error(`KernelManager: Error stopping container ${container.id}:`, stopError);
+          // Continue to removal attempt even if stop fails
         }
       }
+      // AutoRemove handles removal, no explicit remove needed.
     } else {
-      // Process doesn't exist, just clean up state
-      delete this.kernels[sessionId];
-      this.emit('kernelStopped', sessionId);
+      console.log(`KernelManager: No container object found for session ${sessionId} during stop.`);
     }
-    // State cleanup happens in the 'exit' listener (_handleKernelExit)
+
+    // Clean up the temporary output directory
+    const outputDirToClean = kernelInfo.tempOutputDir;
+    if (outputDirToClean) {
+        fs.rm(outputDirToClean, { recursive: true, force: true })
+            .then(() => console.log(`KernelManager: Cleaned up temp output dir: ${outputDirToClean}`))
+            .catch(rmErr => console.error(`KernelManager: Error cleaning up temp output dir ${outputDirToClean}:`, rmErr));
+    }
+
+    // Clean up state regardless of container stop success/failure
+    delete this.kernels[sessionId];
+    this.emit('kernelStopped', sessionId); // Emit stopped event
+    console.log(`KernelManager: Kernel state cleaned up for session ${sessionId}.`);
   }
 
   getKernelStatus(sessionId) {
@@ -236,17 +325,37 @@ class KernelManager extends EventEmitter {
 
   // --- Private Methods ---
 
-  _setupKernelListeners(sessionId, process) {
-    process.stdout.on('data', (data) => this._handleKernelStdout(sessionId, data));
-    process.stderr.on('data', (data) => this._handleKernelStderr(sessionId, data));
-    process.on('exit', (code, signal) => this._handleKernelExit(sessionId, code, signal));
-    process.on('error', (err) => this._handleKernelError(sessionId, err));
+  _setupKernelListeners(sessionId, stream) { // Changed 'process' to 'stream'
+    // Use docker.modem.demuxStream to separate stdout and stderr from the container stream
+    const stdout = new PassThrough();
+    const stderr = new PassThrough();
+
+    // Handle stdout stream data
+    stdout.on('data', (data) => this._handleKernelStdout(sessionId, data));
+    // Handle stderr stream data
+    stderr.on('data', (data) => this._handleKernelStderr(sessionId, data));
+
+    // Get the kernelInfo for this session
+    const kernelInfo = this.kernels[sessionId];
+    if (!kernelInfo || !kernelInfo.container) {
+        console.error(`KernelManager: Cannot demux stream for ${sessionId}, kernelInfo or container not found.`);
+        return; // Exit if kernelInfo or container is missing
+    }
+
+    // Demultiplex the container stream into stdout and stderr PassThrough streams
+    kernelInfo.container.modem.demuxStream(stream, stdout, stderr);
+
+    // Listen for the stream to end (container stopped/exited)
+    stream.on('end', () => this._handleKernelStreamEnd(sessionId));
+    stream.on('error', (err) => this._handleKernelError(sessionId, err)); // Handle stream errors directly
+
+    // Note: Container exit/error events are handled separately via container.wait() or errors during start/attach
   }
 
   _handleKernelStdout(sessionId, data) {
     const kernelInfo = this.kernels[sessionId];
     if (!kernelInfo) return;
-    console.log(`KernelManager DEBUG (${sessionId}): Received raw stdout data chunk.`); // Log raw data receipt
+    // console.log(`KernelManager DEBUG (${sessionId}): Received raw stdout data chunk.`); // Log raw data receipt
     kernelInfo.lastActivity = Date.now();
     kernelInfo.buffer += data.toString('utf8');
 
@@ -343,7 +452,7 @@ class KernelManager extends EventEmitter {
     kernelInfo.lastActivity = Date.now();
     const stderrText = data.toString('utf8').trim();
     if (stderrText) {
-        // console.error(`KernelManager: Kernel ${sessionId} stderr: ${stderrText}`); // Already emitted as output event
+        console.error(`KernelManager: Kernel ${sessionId} stderr: ${stderrText}`); // Log stderr directly
         // Emit stderr as a structured output event
         console.log(`KernelManager DEBUG (${sessionId}): Emitting kernelOutput event (stderr).`); // Log event emission
         this.emit('kernelOutput', sessionId, { type: 'stderr', content: stderrText });
@@ -351,29 +460,31 @@ class KernelManager extends EventEmitter {
     }
   }
 
-  _handleKernelExit(sessionId, code, signal) {
+  _handleKernelStreamEnd(sessionId) {
+    // This indicates the container stream has closed, usually because the container stopped.
+    // The actual exit code/status should be retrieved via container.wait() if needed,
+    // but often the cleanup logic is triggered by stopKernel or errors.
+    console.log(`KernelManager: Container stream ended for session ${sessionId}.`);
     const kernelInfo = this.kernels[sessionId];
     if (!kernelInfo) return;
 
-    console.log(`KernelManager: Kernel ${sessionId} exited with code ${code}, signal ${signal}.`);
-    clearTimeout(kernelInfo.startupTimer);
-    clearTimeout(kernelInfo.idleTimer);
-
-    // If an execution was in progress ('busy'), emit a completion event indicating it was cut short
+    // If the kernel was busy, it means it stopped unexpectedly during execution.
     if (kernelInfo.status === 'busy') {
-        console.log(`KernelManager DEBUG (${sessionId}): Emitting kernelError event (unexpected exit).`); // Log event emission
-        this.emit('kernelError', sessionId, { message: `Kernel process exited unexpectedly during execution (code: ${code}, signal: ${signal}).` });
-        console.log(`KernelManager DEBUG (${sessionId}): Emitting kernelExecutionComplete (error - unexpected exit) event.`); // Log event emission
-        this.emit('kernelExecutionComplete', sessionId, { status: 'error', error: { message: 'Kernel exited unexpectedly' } });
+        console.warn(`KernelManager: Stream ended while kernel ${sessionId} was busy. Assuming unexpected exit.`);
+        console.log(`KernelManager DEBUG (${sessionId}): Emitting kernelError event (unexpected stream end).`);
+        this.emit('kernelError', sessionId, { message: `Kernel stream ended unexpectedly during execution.` });
+        console.log(`KernelManager DEBUG (${sessionId}): Emitting kernelExecutionComplete (error - unexpected stream end) event.`);
+        this.emit('kernelExecutionComplete', sessionId, { status: 'error', error: { message: 'Kernel stream ended unexpectedly' } });
     }
-
-    delete this.kernels[sessionId]; // Clean up state
-    this.emit('kernelStopped', sessionId, code, signal);
+    // Don't delete kernelInfo here, let stopKernel handle container removal and state cleanup.
+    // We might need the container reference in stopKernel.
+    // Mark as stopped internally? Or rely on stopKernel being called?
+    // For now, assume stopKernel will be called or has been called.
   }
 
-  _handleKernelError(sessionId, error) {
+  _handleKernelError(sessionId, error) { // Handles stream errors or container errors passed here
     const kernelInfo = this.kernels[sessionId];
-    console.error(`KernelManager: Kernel ${sessionId} encountered error:`, error);
+    console.error(`KernelManager: Kernel/Stream ${sessionId} encountered error:`, error);
     if (!kernelInfo) return; // Already cleaned up?
 
     clearTimeout(kernelInfo.startupTimer);
@@ -387,13 +498,17 @@ class KernelManager extends EventEmitter {
         this.emit('kernelExecutionComplete', sessionId, { status: 'error', error: { message: error.message } });
     }
 
-    // Attempt to kill the process if it exists and isn't already exiting
-    if (kernelInfo.process && kernelInfo.process.exitCode === null) {
-        kernelInfo.process.kill('SIGKILL');
+    // Attempt to stop the container if it exists and seems to be running
+    if (kernelInfo.container && kernelInfo.status !== 'stopping' && kernelInfo.status !== 'stopped') { // Check container
+       console.log(`KernelManager: Attempting to stop container ${kernelInfo.container.id} due to error.`);
+       this.stopKernel(sessionId, true); // Force stop the container
+    } else {
+       // If already stopping or stopped, or no container, just ensure state is cleaned
+       delete this.kernels[sessionId];
+       this.emit('kernelStopped', sessionId); // Emit stopped event if not already handled by stopKernel
     }
-
-    delete this.kernels[sessionId]; // Clean up state
-    this.emit('kernelError', sessionId, error);
+    // Emit the error that triggered this handler
+    this.emit('kernelError', sessionId, error); // Ensure original error is emitted
   }
 
   _resetIdleTimer(sessionId) {

@@ -15,7 +15,7 @@ const authRoutes = require('./routes/auth'); // Import auth routes
 const sessionRoutes = require('./routes/sessions'); // Import session routes
 const notebookExecutionRoutes = require('./routes/notebookExecution'); // Import notebook routes
 const metadataService = require('./services/metadataService');
-const { getLLMServiceInstance } = require('./llm/llmFactory');
+const { getLLMService } = require('./llm/llmFactory'); // Import the correct getter function
 const dockerExecutor = require('./services/dockerExecutor');
 const helmet = require('helmet'); // Import helmet
 const rateLimit = require('express-rate-limit'); // Import express-rate-limit
@@ -36,10 +36,13 @@ const activeAnalyses = {};
  // --- Initialize LLM Service ---
 let llmService;
 try {
-  llmService = getLLMServiceInstance();
-  logger.info(`Successfully initialized LLM Service for provider: ${process.env.LLM_PROVIDER}`);
+  // Use the correct getter function which retrieves the singleton instance
+  llmService = getLLMService();
+  // The factory already logs success/failure during initialization
+  // logger.info(`Successfully initialized LLM Service for provider: ${process.env.LLM_PROVIDER}`);
 } catch (error) {
-  logger.error(`Failed to initialize LLM Service: ${error.message}`, { error });
+  // Error during initialization is already logged by the factory
+  // logger.error(`Failed to initialize LLM Service: ${error.message}`, { error });
   llmService = null;
 }
 // --- ---
@@ -396,10 +399,10 @@ print("--- DIAGNOSTICS END ---", flush=True)
         logAndEmit('info', 'Analysis complete.'); // Send final completion message
 
     } catch (error) {
-        // Pass the actual error object to errorAndEmit
-        errorAndEmit(`Error during analysis`, error); // Send error via SSE
-        // Send error details, potentially including logs captured within the error message itself
-        sendSseUpdate(res, { error: error.message || "An unknown error occurred during analysis." }); // Keep sending structured error too
+        // Ensure the full error object (including stack) is logged
+        errorAndEmit(`Error during analysis`, error); // Pass the error object to errorAndEmit
+        // Send error message via SSE
+        sendSseUpdate(res, { error: error.message || "An unknown error occurred during analysis." });
     } finally {
         // Always clean up stored analysis data and temp dir if not already cleaned
         delete activeAnalyses[analysisId];

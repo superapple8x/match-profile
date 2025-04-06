@@ -25,8 +25,9 @@ function CodeNotebook({ sessionId, datasetId, cells, onAddCell, onDeleteCell, on
       {cells.map((cell) => (
         <NotebookCell
           key={cell.id}
-          cellData={cell}
+          cellData={cell} // cellData contains { id, code }
           sessionId={sessionId}
+          datasetId={datasetId} // Pass datasetId down
           onCodeChange={onCodeChange} // Pass the prop received from parent
           onDeleteCell={onDeleteCell} // Use prop
         />
