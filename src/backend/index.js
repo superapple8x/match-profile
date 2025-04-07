@@ -240,41 +240,6 @@ async function performAnalysis(res, analysisId, analysisPrompt, datasetId) { // 
         logAndEmit('info', `Generating Python code using ${llmService.serviceName}...`);
         let pythonCode = await llmService.generatePythonCode(analysisPrompt, metadata); // Use analysisPrompt
         logAndEmit('info', 'Python code generated.'); // Don't log full code via SSE for brevity
-
-        // Prepend diagnostic code
-        const diagnosticCode = `
-import os
-import subprocess
-import sys
-
-print("--- DIAGNOSTICS START ---", flush=True)
-print(f"Python Executable: {sys.executable}", flush=True)
-print(f"Current Working Directory: {os.getcwd()}", flush=True)
-print("User Info:", flush=True)
-subprocess.run(["id"])
-print("\\nListing /app:", flush=True)
-subprocess.run(["ls", "-la", "/app"])
-print("\\nListing /input:", flush=True)
-subprocess.run(["ls", "-la", "/input"])
-print("\\nListing /output:", flush=True)
-subprocess.run(["ls", "-la", "/output"])
-
-# Check the mounted host temp directory (now at /host_temp)
-print("\\nListing mounted host temp dir (/host_temp):", flush=True)
-subprocess.run(["ls", "-la", "/host_temp"])
-
-print("\\nContents of /etc/passwd:", flush=True)
-try:
-    with open("/etc/passwd", "r") as f:
-        print(f.read(), flush=True)
-except Exception as e:
-    print(f"Error reading /etc/passwd: {e}", flush=True)
-
-print("--- DIAGNOSTICS END ---", flush=True)
-
-# --- Original User Code Starts Here ---
-`;
-        pythonCode = diagnosticCode + pythonCode;
         // Store the generated code to send later
         logger.debug(`Full Generated Python Code:\n${pythonCode}`, logMeta); // Log full code only to server debug log
 

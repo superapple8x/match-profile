@@ -37,7 +37,7 @@ function CodeNotebook({ sessionId, datasetId, cells, onAddCell, onDeleteCell, on
       <div className="mt-4 flex justify-center">
         <button
           onClick={onAddCell} // Use prop
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-gray-900 disabled:opacity-50"
+          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-kde-blue-600 hover:bg-kde-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-kde-blue-500 dark:focus:ring-offset-gray-900 disabled:opacity-50"
           disabled={!sessionId} // Disable if session isn't ready
           title={!sessionId ? "Waiting for session..." : "Add new code cell"}
         >

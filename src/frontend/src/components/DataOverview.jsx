@@ -148,8 +148,8 @@ function DataOverview({ datasetId, datasetName, datasetAttributes, authToken, da
         {
           label: 'Count',
           data: catData.map(item => item.count),
-          backgroundColor: 'rgba(75, 192, 192, 0.6)', // Teal color
-          borderColor: 'rgba(75, 192, 192, 1)',
+          backgroundColor: 'rgba(61, 174, 233, 0.6)', // kde-blue-500
+          borderColor: 'rgba(61, 174, 233, 1)',     // kde-blue-500
           borderWidth: 1,
         },
       ],
@@ -202,8 +202,8 @@ function DataOverview({ datasetId, datasetName, datasetAttributes, authToken, da
         {
           label: 'Count',
           data: histogramData.map(bucket => bucket.count),
-          backgroundColor: 'rgba(54, 162, 235, 0.6)', // Blue color
-          borderColor: 'rgba(54, 162, 235, 1)',
+          backgroundColor: 'rgba(42, 156, 215, 0.6)', // kde-blue-600
+          borderColor: 'rgba(42, 156, 215, 1)',     // kde-blue-600
           borderWidth: 1,
           barPercentage: 1.0, // Make bars touch for histogram feel
           categoryPercentage: 1.0, // Make bars touch
@@ -280,7 +280,7 @@ function DataOverview({ datasetId, datasetName, datasetAttributes, authToken, da
        if (lowerType.includes('string') || lowerType.includes('text') || lowerType.includes('varchar')) {
            return <DocumentTextIcon className="h-4 w-4 mr-1.5 text-gray-400 dark:text-gray-500 inline-block align-middle" aria-hidden="true" />;
        } else if (lowerType.includes('int') || lowerType.includes('num') || lowerType.includes('float') || lowerType.includes('double') || lowerType.includes('decimal')) {
-           return <HashtagIcon className="h-4 w-4 mr-1.5 text-blue-400 dark:text-blue-500 inline-block align-middle" aria-hidden="true" />;
+           return <HashtagIcon className="h-4 w-4 mr-1.5 text-kde-blue-500 dark:text-kde-blue-400 inline-block align-middle" aria-hidden="true" />;
        } else if (lowerType.includes('date') || lowerType.includes('time')) {
            return <CalendarDaysIcon className="h-4 w-4 mr-1.5 text-purple-400 dark:text-purple-500 inline-block align-middle" aria-hidden="true" />;
        } else {
@@ -435,9 +435,9 @@ function DataOverview({ datasetId, datasetName, datasetAttributes, authToken, da
       <button
         key={tabName}
         onClick={() => setActiveTab(tabName)}
-        className={`px-3 py-1.5 text-sm rounded-md transition-colors duration-150 ease-in-out focus:outline-none focus:ring-1 focus:ring-primary-500 ${
+        className={`px-3 py-1.5 text-sm rounded-md transition-colors duration-150 ease-in-out focus:outline-none focus:ring-1 focus:ring-kde-blue-500 ${
           isActive
-            ? 'bg-primary-600 text-white shadow-sm font-semibold' // Added font-semibold
+            ? 'bg-kde-blue-600 text-white shadow-sm font-semibold' // Added font-semibold
             : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 font-medium' // Lighter inactive text, keep font-medium
         }`}
       >
@@ -448,16 +448,16 @@ function DataOverview({ datasetId, datasetName, datasetAttributes, authToken, da
 
 
   return (
-    <div className="mb-6 bg-indigo-100/60 dark:bg-gray-800/70 backdrop-blur-sm shadow-md rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+    <div className="mb-6 bg-kde-blue-300/60 dark:bg-gray-800/70 backdrop-blur-sm shadow-md rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
       {/* Header Button */}
       <button
         onClick={toggleExpansion}
-        className="w-full flex justify-between items-center text-left p-4 focus:outline-none group hover:bg-indigo-100/50 dark:hover:bg-gray-700/50 transition-colors duration-150 ease-in-out"
+        className="w-full flex justify-between items-center text-left p-4 focus:outline-none group hover:bg-kde-blue-300/50 dark:hover:bg-gray-700/50 transition-colors duration-150 ease-in-out"
         aria-expanded={isExpanded}
         aria-controls="dataset-insights-content"
       >
         <div className="flex items-center space-x-3">
-           <TableCellsIcon className="h-6 w-6 text-primary-600 dark:text-primary-400 group-hover:text-primary-700 dark:group-hover:text-primary-300 transition-colors duration-150 ease-in-out" />
+           <TableCellsIcon className="h-6 w-6 text-kde-blue-600 dark:text-kde-blue-400 group-hover:text-kde-blue-700 dark:group-hover:text-kde-blue-300 transition-colors duration-150 ease-in-out" />
            <span className="text-xl font-semibold text-gray-800 dark:text-white truncate" title={datasetName}> {/* Increased text-xl */}
              Dataset: {datasetName || 'Unnamed Dataset'}
            </span>

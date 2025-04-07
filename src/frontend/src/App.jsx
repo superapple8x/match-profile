@@ -47,7 +47,7 @@ function AuthView({ onLoginSuccess, switchToAppView }) { // Accept switchToAppVi
              {/* Add Back to App Button */}
              <button
                  onClick={switchToAppView}
-                 className="absolute top-4 left-4 text-sm text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-200 flex items-center z-10 p-2 rounded-md hover:bg-indigo-100 dark:hover:bg-gray-700 transition-colors" // Example styling
+                 className="absolute top-4 left-4 text-sm text-kde-blue-600 hover:text-kde-blue-700 dark:text-kde-blue-400 dark:hover:text-kde-blue-300 flex items-center z-10 p-2 rounded-md hover:bg-kde-blue-100 dark:hover:bg-gray-700 transition-colors" // Use KDE Blue
                  aria-label="Back to application"
              >
                  <ArrowLeftIcon className="h-4 w-4 mr-1" /> Back to App
@@ -71,8 +71,8 @@ function AuthView({ onLoginSuccess, switchToAppView }) { // Accept switchToAppVi
 
 
 function App() {
-  const prefersDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const [darkMode, setDarkMode] = useState(prefersDarkMode);
+  // Force dark mode - removed prefersDarkMode check
+  const [darkMode, setDarkMode] = useState(true); // Always start in dark mode
   const [searchResults, setSearchResults] = useState(null); // Will contain { matches: [], pagination: {}, error: null }
   const [searchCriteria, setSearchCriteria] = useState(null); // Array of criteria objects
   const [searchWeights, setSearchWeights] = useState({}); // Object for per-attribute weights
@@ -110,26 +110,25 @@ function App() {
 
   // --- Effects ---
 
-  // Dark mode effect (remains the same)
+  // Dark mode effect (MODIFIED TO ALWAYS APPLY DARK)
   useEffect(() => {
     const body = document.body;
     const bodyClassList = body.classList;
-    if (darkMode) {
-      bodyClassList.add('dark');
-    } else {
-      bodyClassList.remove('dark');
-    }
-    body.style.color = darkMode ? 'rgb(243 244 246)' : 'rgb(17 24 39)';
-    body.style.backgroundColor = '';
-    body.style.height = '';
-    body.style.overflow = '';
-    document.documentElement.style.height = '';
-    body.style.transition = 'color 0.3s ease-in-out';
+    // Always add dark class
+    bodyClassList.add('dark');
+    // Set text color for dark mode
+    body.style.color = 'rgb(243 244 246)'; // dark mode text color
+    body.style.backgroundColor = ''; // Reset potentially conflicting styles
+    body.style.height = ''; // Reset potentially conflicting styles
+    body.style.overflow = ''; // Reset potentially conflicting styles
+    document.documentElement.style.height = ''; // Reset potentially conflicting styles
+    // No transition needed if always dark
+    // Cleanup function still useful to remove class if component unmounts (though unlikely for App)
     return () => {
         bodyClassList.remove('dark');
-        body.style.color = '';
+        body.style.color = ''; // Reset color on unmount
     }
-  }, [darkMode]);
+  }, []); // Dependency array is now empty as it no longer depends on darkMode state
 
   // View switching effect (works for anonymous users)
   useEffect(() => {
@@ -479,9 +478,9 @@ function App() {
 
   // Common button classes (remain the same)
   const baseButtonClasses = "w-full flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2";
-  const primaryButtonActiveClasses = "bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500 dark:bg-indigo-500 dark:hover:bg-indigo-600 dark:focus:ring-indigo-400 dark:focus:ring-offset-gray-900"; // Adjusted dark focus ring
+  const primaryButtonActiveClasses = "bg-kde-blue-600 text-white hover:bg-kde-blue-700 focus:ring-kde-blue-500 dark:bg-kde-blue-500 dark:hover:bg-kde-blue-600 dark:focus:ring-kde-blue-400 dark:focus:ring-offset-gray-900"; // Use KDE Blue
   const primaryButtonDisabledClasses = "bg-gray-400 dark:bg-gray-700 text-gray-600 dark:text-gray-400 cursor-not-allowed opacity-70";
-  const secondaryButtonClasses = "bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-semibold";
+  const secondaryButtonClasses = "bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-semibold focus:ring-kde-blue-500"; // Use KDE Blue focus ring
 
   // --- Notebook State Handlers (Lifted to App) ---
   const handleAddNotebookCell = useCallback((targetDatasetId) => {
@@ -568,30 +567,23 @@ function App() {
                   {/* Add Login/Register Button for Anonymous Users */}
                  {!isAuthenticated && (
                    <button
-                     onClick={switchToAuthView}
-                     className={`w-full flex items-center justify-center px-4 py-2 rounded-md shadow-sm transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${secondaryButtonClasses}`}
-                     title={isSidebarCollapsed ? "Login or Register" : ""}
-                   >
+                      onClick={switchToAuthView}
+                      className={`w-full flex items-center justify-center px-4 py-2 rounded-md shadow-sm transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${secondaryButtonClasses}`} // Removed explicit focus ring here, now part of secondaryButtonClasses
+                      title={isSidebarCollapsed ? "Login or Register" : ""}
+                    >
                      <UserCircleIcon className={`h-5 w-5 ${!isSidebarCollapsed ? 'mr-2' : 'mx-auto'}`} />
                      {!isSidebarCollapsed && <span className="text-sm">Login / Register</span>}
                    </button>
                  )}
                   <button
                       onClick={toggleSidebarCollapse}
-                      className={`w-full flex items-center justify-center px-4 py-2 rounded-md shadow-sm transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${secondaryButtonClasses}`} // Indigo focus
+                      className={`w-full flex items-center justify-center px-4 py-2 rounded-md shadow-sm transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${secondaryButtonClasses}`} // Removed explicit focus ring here, now part of secondaryButtonClasses
                       aria-label={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
                   >
                       {isSidebarCollapsed ? <ChevronDoubleRightIcon className="h-5 w-5" /> : <ChevronDoubleLeftIcon className="h-5 w-5" />} {/* Adjusted size */}
                       {!isSidebarCollapsed && <span className="ml-2 text-sm">Collapse</span>} {/* Adjusted size */}
                   </button>
-                   <button
-                       onClick={toggleDarkMode}
-                       className={`w-full flex items-center justify-center px-4 py-2 rounded-md shadow-sm transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${secondaryButtonClasses}`} // Indigo focus
-                       aria-label={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
-                   >
-                       {darkMode ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />} {/* Adjusted size */}
-                       {!isSidebarCollapsed && <span className="ml-2 text-sm">{darkMode ? 'Light Mode' : 'Dark Mode'}</span>} {/* Adjusted size */}
-                   </button>
+                   {/* Dark Mode Toggle Button Removed */}
                    {/* Only show Logout if authenticated */}
                    {isAuthenticated && (
                      <button
@@ -608,7 +600,7 @@ function App() {
 
           {/* Draggable Resize Handle */}
           <div
-              className="flex-shrink-0 w-1.5 cursor-col-resize bg-gray-300/50 dark:bg-gray-600/50 hover:bg-indigo-500 dark:hover:bg-indigo-400 transition-colors duration-150 h-full sticky top-0 z-20" // Adjusted width
+              className="flex-shrink-0 w-1.5 cursor-col-resize bg-gray-300/50 dark:bg-gray-600/50 hover:bg-kde-blue-500 dark:hover:bg-kde-blue-400 transition-colors duration-150 h-full sticky top-0 z-20" // Use KDE Blue hover
               onMouseDown={startResizing}
               title="Resize Sidebar"
           />
@@ -688,6 +680,7 @@ function App() {
                   onNotebookCodeChange={(cellId, code) => handleNotebookCodeChange(datasetId, cellId, code)}
                   // Pass setNotebookCells directly for handleEditCode (simpler than another handler)
                   setNotebookCellsForDataset={(newCells) => setNotebookStates(prev => ({...prev, [datasetId]: newCells}))}
+                  darkMode={darkMode} // Pass darkMode state
                 />
               )}
             </div>

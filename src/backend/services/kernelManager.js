@@ -53,6 +53,7 @@ class KernelManager extends EventEmitter {
       idleTimer: null,
       pendingCode: null, // Ensure pendingCode is initialized
       tempOutputDir: null, // To store the path to the host output directory
+      finalResultReceived: false, // Track if the specific result JSON was received
       // executionCallback: null, // Removed for event-based streaming
     };
 
@@ -224,6 +225,7 @@ class KernelManager extends EventEmitter {
     console.log(`KernelManager: Running prepared code in session ${sessionId}`);
     const codeToRun = kernelInfo.pendingCode;
     kernelInfo.pendingCode = null; // Clear pending code
+    kernelInfo.finalResultReceived = false; // Reset flag for new execution
     kernelInfo.status = 'busy'; // Mark as busy *now*
     kernelInfo.lastActivity = Date.now();
     this._resetIdleTimer(sessionId);
@@ -388,13 +390,36 @@ class KernelManager extends EventEmitter {
               console.log(`KernelManager DEBUG (${sessionId}): Emitting kernelOutput event:`, result.type); // Log event emission
               this.emit('kernelOutput', sessionId, result);
               break;
-            case 'result':
-              // Execution finished successfully, emit final result and completion event
-              // this.emit('kernelOutput', sessionId, result); // Don't emit the raw 'result' type, just completion
-              console.log(`KernelManager DEBUG (${sessionId}): Emitting kernelExecutionComplete (success) event.`); // Log event emission
-              this.emit('kernelExecutionComplete', sessionId, { status: 'success', result: result.output });
-              kernelInfo.status = 'ready'; // Kernel is ready for next command
-              this._resetIdleTimer(sessionId);
+            case 'final_result': // Handle the specific result JSON from stdout
+              if (kernelInfo.status === 'busy') { // Only process if we were expecting a result
+                console.log(`KernelManager DEBUG (${sessionId}): Received final_result.`);
+                kernelInfo.finalResultReceived = true; // Mark that we got the real result
+                const actualResult = result.data; // Extract the data payload
+                console.log(`KernelManager DEBUG (${sessionId}): Emitting kernelExecutionComplete (success - final_result) event.`);
+                this.emit('kernelExecutionComplete', sessionId, { status: 'success', result: actualResult });
+                kernelInfo.status = 'ready'; // Kernel is ready for next command
+                this._resetIdleTimer(sessionId);
+              } else {
+                 console.warn(`KernelManager WARN (${sessionId}): Received final_result when not busy. Ignoring.`);
+              }
+              break;
+            case 'result': // Handle the generic completion message from kernel_runner.py
+              // This signals the Python script exited cleanly, but might not contain the actual data
+              // if 'final_result' was already handled.
+              if (kernelInfo.status === 'busy' && !kernelInfo.finalResultReceived) {
+                // If we were busy AND haven't received the specific 'final_result',
+                // then emit completion with the (likely empty) output from this message.
+                console.log(`KernelManager DEBUG (${sessionId}): Received standard 'result' message without prior 'final_result'. Emitting completion.`);
+                this.emit('kernelExecutionComplete', sessionId, { status: 'success', result: result.output });
+                kernelInfo.status = 'ready'; // Kernel is ready for next command
+                this._resetIdleTimer(sessionId);
+              } else if (kernelInfo.status === 'busy' && kernelInfo.finalResultReceived) {
+                 // We already handled the 'final_result', just log that the script exit signal was received.
+                 console.log(`KernelManager DEBUG (${sessionId}): Received standard 'result' message after 'final_result'. Script exit confirmed.`);
+                 // Status was already set to 'ready' by 'final_result' handler.
+              } else {
+                 console.warn(`KernelManager WARN (${sessionId}): Received standard 'result' message when not busy or after final result. Ignoring completion signal.`);
+              }
               break;
             case 'error':
               // Execution failed, emit error details and completion event

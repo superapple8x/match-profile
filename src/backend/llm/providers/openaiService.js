@@ -225,7 +225,57 @@ Generate the Python code now, adhering strictly to all instructions.
       const cleanedCode = generatedCode.replace(/(pd\.read_csv\([^)]*?)(,\s*errors\s*=\s*['"][^'"]*['"]|errors\s*=\s*['"][^'"]*['"]\s*,?)([^)]*\))/g, '$1$3');
       logger.debug(`${this.serviceName} Service: Applied post-processing to remove errors= argument.`);
       // Clean potential markdown code blocks from the already cleaned code
-      return cleanedCode.replace(/^```python\n?/, '').replace(/\n?```$/, '');
+      let finalCode = cleanedCode.replace(/^```python\n?/, '').replace(/\n?```$/, '');
+
+      // --- Append Notebook Result Printing Snippet ---
+      const notebookResultSnippet = `
+
+# --- Added by Backend: Ensure final result is printed for Notebook ---
+import json
+import numpy as np
+import pandas as pd
+import math
+import sys # Import sys for stderr
+
+# Ensure convert_numpy_types is defined (in case LLM forgets)
+if 'convert_numpy_types' not in locals():
+    print("DEBUG: Defining convert_numpy_types fallback.", file=sys.stderr)
+    def convert_numpy_types(obj):
+        if isinstance(obj, (np.integer, np.int64)): return int(obj)
+        elif isinstance(obj, (np.floating, np.float64, float)) and math.isnan(obj): return None
+        elif isinstance(obj, (np.floating, np.float64)): return float(obj)
+        elif isinstance(obj, np.ndarray): return obj.tolist()
+        elif isinstance(obj, pd.Timestamp): return obj.isoformat()
+        elif isinstance(obj, (pd.Series, pd.Index)): return obj.tolist()
+        elif isinstance(obj, dict): return {str(k): convert_numpy_types(v) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple)): return [convert_numpy_types(i) for i in obj]
+        elif hasattr(obj, 'isoformat'): return obj.isoformat()
+        try: json.dumps(obj); return obj
+        except TypeError: return str(obj)
+
+# Check if analysis_results exists and print it
+if 'analysis_results' in locals():
+    try:
+        final_notebook_stats = convert_numpy_types(analysis_results)
+        print(json.dumps({'type': 'final_result', 'data': final_notebook_stats}))
+    except Exception as conversion_error:
+        print(f"DEBUG: Error during final conversion/print: {conversion_error}", file=sys.stderr)
+        # Fallback: print the raw results if conversion fails
+        try:
+            print(json.dumps({'type': 'final_result', 'data': {'error': 'Result conversion failed', 'details': str(analysis_results)}}))
+        except Exception: # Handle cases where even raw results aren't serializable
+             print(json.dumps({'type': 'final_result', 'data': {'error': 'Result conversion and fallback failed'}}))
+
+else:
+    # If analysis_results doesn't exist (e.g., script error before definition), print empty result
+    print(json.dumps({'type': 'final_result', 'data': {'warning': 'analysis_results variable not found in script scope.'}}))
+# --- End of Added Snippet ---
+`;
+      finalCode += notebookResultSnippet;
+      logger.debug(`${this.serviceName} Service: Appended notebook result printing snippet.`);
+      // --- End Append ---
+
+      return finalCode; // Return the modified code
 
     } catch (error) {
       // Log the specific error from the API call

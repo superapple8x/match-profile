@@ -415,7 +415,7 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
           key={`${suggestion.type}-${suggestion.value}-${index}`} // Ensure key uniqueness
           className={`px-3 py-2 cursor-pointer text-gray-800 dark:text-gray-200 transition-colors duration-150 ease-in-out text-sm ${
             index === highlightedIndex
-              ? 'bg-indigo-100 dark:bg-gray-700' // Highlight color
+              ? 'bg-kde-blue-300 dark:bg-gray-700' // Highlight color (KDE blue for light mode)
               : 'hover:bg-gray-100 dark:hover:bg-gray-600' // Hover color
           }`}
           onClick={() => handleSuggestionSelect(suggestion)}
@@ -434,8 +434,8 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
 
   // Define button styles based on reference
   const baseButtonClasses = "inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-900"; // Adjusted dark offset
-  const primaryButtonStyle = "bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500 dark:bg-indigo-500 dark:hover:bg-indigo-600 dark:focus:ring-indigo-400"; // Primary indigo
-  const secondaryButtonStyle = "bg-gray-200 hover:bg-gray-300 text-gray-800 focus:ring-indigo-500 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 dark:focus:ring-gray-500";
+  const primaryButtonStyle = "bg-kde-blue-700 text-white hover:bg-kde-blue-600 focus:ring-kde-blue-500 dark:bg-kde-blue-600 dark:hover:bg-kde-blue-700 dark:focus:ring-kde-blue-500"; // Darker Primary KDE Blue
+  const secondaryButtonStyle = "bg-gray-200 hover:bg-gray-300 text-gray-800 focus:ring-kde-blue-500 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 dark:focus:ring-gray-500"; // Secondary uses gray, focus ring KDE Blue
   const disabledClasses = "disabled:opacity-50 disabled:cursor-not-allowed";
 
 
@@ -447,14 +447,14 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
           {selectedCriteria.map((criteria, index) => (
             <span
               key={index}
-              className="inline-flex items-center bg-indigo-100 dark:bg-gray-700 border border-indigo-200 dark:border-gray-600 rounded-full px-3 py-1 text-xs font-medium text-indigo-800 dark:text-gray-200 shadow-sm"
+              className="inline-flex items-center bg-kde-blue-300 dark:bg-gray-700 border border-kde-blue-400 dark:border-gray-600 rounded-full px-3 py-1 text-xs font-medium text-kde-blue-700 dark:text-gray-200 shadow-sm"
             >
               {/* Display format: Attribute Operator Value */}
               {criteria.attribute} <strong className="mx-1">{criteria.operator}</strong> {String(criteria.value)}
               <button
                 type="button"
                 aria-label={`Remove ${criteria.attribute} ${criteria.operator} ${criteria.value}`}
-                className="ml-1.5 -mr-1 flex-shrink-0 h-4 w-4 rounded-full inline-flex items-center justify-center text-indigo-500 hover:text-indigo-700 hover:bg-indigo-200/70 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:bg-indigo-500/20 focus:text-indigo-700 dark:focus:bg-gray-600/30 dark:focus:text-gray-200 transition-all duration-150 ease-in-out"
+                className="ml-1.5 -mr-1 flex-shrink-0 h-4 w-4 rounded-full inline-flex items-center justify-center text-kde-blue-500 hover:text-kde-blue-700 hover:bg-kde-blue-200/70 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:bg-kde-blue-500/20 focus:text-kde-blue-700 dark:focus:bg-gray-600/30 dark:focus:text-gray-200 transition-all duration-150 ease-in-out"
                 onClick={() => setSelectedCriteria(
                   selectedCriteria.filter((_, i) => i !== index)
                 )}
@@ -480,7 +480,7 @@ function SearchBar({ datasetAttributes, onSearch, initialCriteria, datasetId, au
           className={`w-full p-3 border rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:border-transparent outline-none transition-colors duration-200 ease-in-out shadow-sm ${
             inputError
               ? 'border-red-500 dark:border-red-400 focus:ring-red-500' // Error state
-              : 'border-gray-300 dark:border-gray-600 focus:ring-indigo-500' // Normal state
+              : 'border-gray-300 dark:border-gray-600 focus:ring-kde-blue-500' // Normal state
           }`}
         />
 

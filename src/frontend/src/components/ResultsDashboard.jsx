@@ -151,7 +151,7 @@ function ResultsDashboard({
                name="sortBy"
                value={localSortBy}
                onChange={handleLocalSortChange}
-               className="block w-full sm:w-auto pl-3 pr-8 py-1.5 text-base border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+               className="block w-full sm:w-auto pl-3 pr-8 py-1.5 text-base border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-kde-blue-500 focus:border-kde-blue-500 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
              >
                <option value="">Select Attribute</option>
                {/* Add Match Percentage as a sort option */}
@@ -169,7 +169,7 @@ function ResultsDashboard({
                value={localSortDirection}
                onChange={handleLocalSortChange}
                disabled={!localSortBy} // Disable if no attribute selected
-               className="block w-auto pl-3 pr-8 py-1.5 text-base border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm disabled:opacity-50"
+               className="block w-auto pl-3 pr-8 py-1.5 text-base border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-kde-blue-500 focus:border-kde-blue-500 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm disabled:opacity-50"
              >
                <option value="desc">Descending</option>
                <option value="asc">Ascending</option>
@@ -219,7 +219,7 @@ function ResultsDashboard({
           <h3 className="text-md font-semibold mb-1.5 text-gray-700 dark:text-gray-200">Active Search Criteria:</h3>
           <ul className="flex flex-wrap gap-1.5">
             {searchCriteria.map((criteria, index) => (
-              <li key={index} className="inline-flex items-center bg-indigo-100 dark:bg-gray-600 border border-indigo-200 dark:border-gray-500 rounded-full px-2.5 py-0.5 text-xs font-medium text-indigo-800 dark:text-gray-100 shadow-sm">
+              <li key={index} className="inline-flex items-center bg-kde-blue-300 dark:bg-gray-600 border border-kde-blue-400 dark:border-gray-500 rounded-full px-2.5 py-0.5 text-xs font-medium text-kde-blue-700 dark:text-gray-100 shadow-sm">
                 {/* Look up weight from the searchWeights map using the attribute name */}
                 {criteria.attribute} <strong className="mx-1">{criteria.operator}</strong> {String(criteria.value)} (W: {searchWeights?.[criteria.attribute] ?? 'N/A'})
               </li>
@@ -248,7 +248,7 @@ function ResultsDashboard({
             <div className="flex justify-end mt-4">
               <button
                 onClick={handleCloseBreakdown}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100 font-semibold border border-gray-300 dark:border-gray-500 rounded-md shadow-sm hover:shadow-md transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-gray-400 dark:focus:ring-offset-gray-800"
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100 font-semibold border border-gray-300 dark:border-gray-500 rounded-md shadow-sm hover:shadow-md transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-kde-blue-500 focus:ring-offset-2 dark:focus:ring-gray-400 dark:focus:ring-offset-gray-800"
               >
                 Close
               </button>

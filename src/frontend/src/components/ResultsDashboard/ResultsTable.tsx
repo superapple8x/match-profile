@@ -77,7 +77,7 @@ function ResultsTable({ results, datasetAttributes, onMatchClick }: ResultsTable
            <button
              onClick={() => onMatchClick(row.original)}
              // Updated Details button style: subtle link-like appearance
-             className="text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium text-sm transition-colors duration-150 ease-in-out focus:outline-none focus:ring-1 focus:ring-primary-500 rounded"
+             className="text-kde-blue-600 dark:text-kde-blue-400 hover:text-kde-blue-700 dark:hover:text-kde-blue-300 font-medium text-sm transition-colors duration-150 ease-in-out focus:outline-none focus:ring-1 focus:ring-kde-blue-500 rounded"
            >
              Details
            </button>

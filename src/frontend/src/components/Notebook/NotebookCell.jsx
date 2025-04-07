@@ -333,7 +333,7 @@ function NotebookCell({ cellData, sessionId, datasetId, onCodeChange, onDeleteCe
             <button
                 onClick={() => { setShowGenerator(!showGenerator); setGeneratorError(null); }} // Toggle generator bar
                 disabled={isGenerating || ['queued', 'preparing', 'connecting', 'running'].includes(executionStatus)} // Disable if running or generating
-                className={`p-1 rounded text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-1 focus:ring-purple-500 focus:bg-gray-200 dark:focus:bg-gray-700`}
+                className={`p-1 rounded text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-1 focus:ring-kde-blue focus:bg-gray-200 dark:focus:bg-gray-700`}
                 title="Generate code with AI"
             >
                 <SparklesIcon className="h-4 w-4" />
@@ -374,14 +374,14 @@ function NotebookCell({ cellData, sessionId, datasetId, onCodeChange, onDeleteCe
              </div>
            )}
            <div className="flex items-center space-x-2">
-             <SparklesIcon className="h-4 w-4 text-purple-500 flex-shrink-0" />
+             <SparklesIcon className="h-4 w-4 text-kde-blue flex-shrink-0" />
              <input
                type="text"
                value={generatorPrompt}
                onChange={(e) => setGeneratorPrompt(e.target.value)}
                placeholder="Enter a prompt to generate code..."
                disabled={isGenerating}
-               className="flex-grow px-2 py-1 border border-gray-300 dark:border-gray-600 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm placeholder-gray-500 dark:placeholder-gray-400"
+               className="flex-grow px-2 py-1 border border-gray-300 dark:border-gray-600 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-kde-blue focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm placeholder-gray-500 dark:placeholder-gray-400"
                onKeyDown={(e) => {
                  if (e.key === 'Enter' && !e.shiftKey) {
                    e.preventDefault();
@@ -395,7 +395,7 @@ function NotebookCell({ cellData, sessionId, datasetId, onCodeChange, onDeleteCe
              <button
                onClick={handleGenerateCode}
                disabled={isGenerating || !generatorPrompt.trim()}
-               className="p-1.5 rounded text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-1 focus:ring-purple-500 focus:ring-offset-1 dark:focus:ring-offset-gray-850"
+               className="p-1.5 rounded text-white bg-kde-blue hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-1 focus:ring-kde-blue focus:ring-offset-1 dark:focus:ring-offset-gray-850"
                title="Generate Code"
              >
                {isGenerating ? (

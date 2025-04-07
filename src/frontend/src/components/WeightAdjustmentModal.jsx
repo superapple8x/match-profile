@@ -72,7 +72,7 @@ function WeightAdjustmentModal({ selectedCriteria, initialAttributeWeights, onWe
                 max="10"
                 value={attributeWeights[attribute] || DEFAULT_WEIGHT} // Use state value or default
                 onChange={(e) => handleSliderChange(attribute, e.target.value)}
-                className="flex-1 h-2 bg-gray-300 dark:bg-gray-600 rounded-full appearance-none cursor-pointer accent-indigo-600 dark:accent-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-all duration-150"
+                className="flex-1 h-2 bg-gray-300 dark:bg-gray-600 rounded-full appearance-none cursor-pointer accent-kde-blue-600 dark:accent-kde-blue-400 focus:outline-none focus:ring-2 focus:ring-kde-blue-500/50 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-all duration-150"
               />
               <span className="w-8 text-center font-semibold text-gray-700 dark:text-gray-200">
                 {attributeWeights[attribute] || DEFAULT_WEIGHT}
@@ -88,7 +88,7 @@ function WeightAdjustmentModal({ selectedCriteria, initialAttributeWeights, onWe
           <button
             onClick={handleApplyWeights} // Use the new handler
             disabled={uniqueAttributes.length === 0}
-            className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white font-semibold rounded-md shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5 transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+            className="px-5 py-2 bg-kde-blue-600 hover:bg-kde-blue-700 dark:bg-kde-blue-500 dark:hover:bg-kde-blue-600 text-white font-semibold rounded-md shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5 transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-kde-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
           >
             Apply Weights
           </button>

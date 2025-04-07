@@ -66,12 +66,12 @@ function TabbedDetailsCard({ stats, generatedCode, processUpdates, initiallyOpen
       key={tabKey}
       onClick={() => !disabled && setActiveTab(tabKey)}
       disabled={disabled}
-      className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors duration-150 ease-in-out focus:outline-none focus:ring-1 focus:ring-primary-500 focus:ring-offset-1 dark:focus:ring-offset-gray-800 ${
+      className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors duration-150 ease-in-out focus:outline-none focus:ring-1 focus:ring-kde-blue-500 focus:ring-offset-1 dark:focus:ring-offset-gray-800 ${
         activeTab === tabKey
-          ? 'bg-primary-500 text-white shadow-sm'
+          ? 'bg-kde-blue-500 text-white shadow-sm' // Use KDE Blue for active tab
           : disabled
           ? 'text-gray-400 dark:text-gray-600 cursor-not-allowed bg-gray-100 dark:bg-gray-700/50'
-          : 'text-gray-600 dark:text-gray-300 hover:bg-indigo-100/80 dark:hover:bg-gray-700'
+          : 'text-gray-600 dark:text-gray-300 hover:bg-kde-blue-100/80 dark:hover:bg-gray-700' // Use KDE Blue for hover
       }`}
     >
       {label}
@@ -87,10 +87,10 @@ function TabbedDetailsCard({ stats, generatedCode, processUpdates, initiallyOpen
    }
 
   return (
-    <div className="mt-2 border rounded-md dark:border-gray-700 overflow-hidden bg-indigo-50/70 dark:bg-gray-800/50 shadow-sm">
+    <div className="mt-2 border rounded-md dark:border-gray-700 overflow-hidden bg-kde-blue-50/70 dark:bg-gray-800/50 shadow-sm">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex justify-between items-center p-2 bg-indigo-100/50 dark:bg-gray-700/50 hover:bg-indigo-100 dark:hover:bg-gray-600/50 focus:outline-none"
+        className="w-full flex justify-between items-center p-2 bg-kde-blue-100/50 dark:bg-gray-700/50 hover:bg-kde-blue-100 dark:hover:bg-gray-600/50 focus:outline-none"
       >
         <span className="font-medium text-gray-700 dark:text-gray-300 text-xs">Details</span>
         {isOpen ? (
@@ -100,7 +100,7 @@ function TabbedDetailsCard({ stats, generatedCode, processUpdates, initiallyOpen
         )}
       </button>
       {isOpen && (
-        <div className="bg-indigo-50/50 dark:bg-gray-800/30">
+        <div className="bg-kde-blue-50/50 dark:bg-gray-800/30">
           <div className="px-2 py-2 border-b border-gray-200 dark:border-gray-600 flex space-x-2">
             {renderTabButton(DETAIL_TABS.STATS, 'Statistics', !hasStats)}
             {renderTabButton(DETAIL_TABS.CODE, 'Generated Code', !hasCode)}
@@ -108,14 +108,14 @@ function TabbedDetailsCard({ stats, generatedCode, processUpdates, initiallyOpen
           </div>
           <div className="p-2">
             {activeTab === DETAIL_TABS.STATS && hasStats && (
-              <pre className="bg-indigo-100/60 dark:bg-gray-900 p-2 rounded text-xs overflow-x-auto max-h-60 overflow-y-auto">{JSON.stringify(stats, null, 2)}</pre>
+              <pre className="bg-kde-blue-100/60 dark:bg-gray-900 p-2 rounded text-xs overflow-x-auto max-h-60 overflow-y-auto">{JSON.stringify(stats, null, 2)}</pre>
             )}
             {activeTab === DETAIL_TABS.CODE && hasCode && (
               <div className="relative">
-                <pre className="bg-indigo-100/60 dark:bg-gray-900 p-2 rounded text-xs whitespace-pre-wrap break-all max-h-60 overflow-y-auto">{generatedCode}</pre>
+                <pre className="bg-kde-blue-100/60 dark:bg-gray-900 p-2 rounded text-xs whitespace-pre-wrap break-all max-h-60 overflow-y-auto">{generatedCode}</pre>
                 <button
                   onClick={() => onEditCode(generatedCode)}
-                  className="absolute top-1 right-1 p-1 bg-indigo-500 hover:bg-indigo-600 text-white rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-1 dark:focus:ring-offset-gray-900"
+                  className="absolute top-1 right-1 p-1 bg-kde-blue-500 hover:bg-kde-blue-600 text-white rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-kde-blue-400 focus:ring-offset-1 dark:focus:ring-offset-gray-900"
                   title="Edit Code in Notebook"
                 >
                   <PencilSquareIcon className="h-3 w-3" />
@@ -123,7 +123,7 @@ function TabbedDetailsCard({ stats, generatedCode, processUpdates, initiallyOpen
               </div>
             )}
             {activeTab === DETAIL_TABS.PROCESS && hasProcessUpdates && (
-              <div className="bg-indigo-100/60 dark:bg-gray-900 p-2 rounded text-xs max-h-60 overflow-y-auto">
+              <div className="bg-kde-blue-100/60 dark:bg-gray-900 p-2 rounded text-xs max-h-60 overflow-y-auto">
                 {processUpdates.map((update, index) => (
                     <p key={`${index}-${update ? update.substring(0, 20) : 'null'}`} className="whitespace-pre-wrap break-words font-mono text-gray-600 dark:text-gray-400">{update}</p>
                 ))}
@@ -461,9 +461,9 @@ const sendButtonStyle = "p-2.5 rounded-full";
 const disabledClasses = "disabled:opacity-50 disabled:cursor-not-allowed";
 
   return (
-    <div className="flex flex-col h-full bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-gray-800 dark:to-gray-900 border border-gray-200/80 dark:border-gray-700/50 rounded-lg shadow-lg overflow-hidden">
+    <div className="flex flex-col h-full bg-gradient-to-br from-kde-blue-50 to-kde-blue-100 dark:from-gray-800 dark:to-gray-900 border border-gray-200/80 dark:border-gray-700/50 rounded-lg shadow-lg overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-700/80 bg-indigo-50/80 dark:bg-gray-800/80 backdrop-blur-sm sticky top-0 z-10">
+        <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-700/80 bg-kde-blue-50/80 dark:bg-gray-800/80 backdrop-blur-sm sticky top-0 z-10">
             <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
                 {viewMode === 'chat' ? 'LLM Data Analysis' : 'Python Notebook'}
                 {datasetId ? <span className="text-sm font-normal text-gray-500 dark:text-gray-400 ml-2">({datasetId})</span> : ''}
@@ -473,12 +473,12 @@ const disabledClasses = "disabled:opacity-50 disabled:cursor-not-allowed";
                  <button
                      onClick={handleToggleView}
                      disabled={!datasetId || isStartingSession}
-                     className={`flex items-center px-3 py-1 bg-indigo-100 hover:bg-indigo-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-indigo-800 dark:text-gray-200 text-sm font-medium rounded-md shadow-sm hover:shadow-md transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 dark:focus:ring-gray-400 dark:focus:ring-offset-gray-800 ${disabledClasses}`}
+                     className={`flex items-center px-3 py-1 bg-kde-blue-100 hover:bg-kde-blue-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-kde-blue-800 dark:text-gray-200 text-sm font-medium rounded-md shadow-sm hover:shadow-md transition-colors focus:outline-none focus:ring-2 focus:ring-kde-blue-400 focus:ring-offset-2 dark:focus:ring-gray-400 dark:focus:ring-offset-gray-800 ${disabledClasses}`}
                      aria-label={viewMode === 'chat' ? "Switch to Notebook View" : "Switch to Chat View"}
                      title={viewMode === 'chat' ? "Switch to Notebook View" : "Switch to Chat View"}
                  >
                      {isStartingSession ? (
-                         <svg className="animate-spin h-4 w-4 mr-1 text-indigo-800 dark:text-gray-200" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                         <svg className="animate-spin h-4 w-4 mr-1 text-kde-blue-800 dark:text-gray-200" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                          </svg>
@@ -492,7 +492,7 @@ const disabledClasses = "disabled:opacity-50 disabled:cursor-not-allowed";
                  {/* Back Button */}
                  <button
                      onClick={onCloseAnalysis}
-                     className="flex items-center px-3 py-1 bg-indigo-100 hover:bg-indigo-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-indigo-800 dark:text-gray-200 text-sm font-medium rounded-md shadow-sm hover:shadow-md transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 dark:focus:ring-gray-400 dark:focus:ring-offset-gray-800"
+                     className="flex items-center px-3 py-1 bg-kde-blue-100 hover:bg-kde-blue-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-kde-blue-800 dark:text-gray-200 text-sm font-medium rounded-md shadow-sm hover:shadow-md transition-colors focus:outline-none focus:ring-2 focus:ring-kde-blue-400 focus:ring-offset-2 dark:focus:ring-gray-400 dark:focus:ring-offset-gray-800"
                      aria-label="Back to Dashboard"
                  >
                     <ArrowUturnLeftIcon className="h-4 w-4 mr-1" />
@@ -511,16 +511,16 @@ const disabledClasses = "disabled:opacity-50 disabled:cursor-not-allowed";
                     <div className="flex flex-col items-center justify-center text-center pt-16 pb-8">
                         <h2 className="text-2xl font-semibold mb-6 text-gray-700 dark:text-gray-300">How can I help you analyze the data?</h2>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-lg lg:max-w-xl">
-                            <button onClick={() => setQuery('Show summary statistics')} className="p-3 bg-indigo-50/80 dark:bg-gray-700/80 border border-indigo-200 dark:border-gray-600/80 rounded-lg hover:bg-indigo-100 dark:hover:bg-gray-700 text-sm text-indigo-800 dark:text-gray-300 transition-colors text-left">
+                            <button onClick={() => setQuery('Show summary statistics')} className="p-3 bg-kde-blue-50/80 dark:bg-gray-700/80 border border-kde-blue-200 dark:border-gray-600/80 rounded-lg hover:bg-kde-blue-100 dark:hover:bg-gray-700 text-sm text-kde-blue-800 dark:text-gray-300 transition-colors text-left">
                                 Show summary statistics
                             </button>
-                            <button onClick={() => setQuery('Plot the distribution of [column_name]')} className="p-3 bg-indigo-50/80 dark:bg-gray-700/80 border border-indigo-200 dark:border-gray-600/80 rounded-lg hover:bg-indigo-100 dark:hover:bg-gray-700 text-sm text-indigo-800 dark:text-gray-300 transition-colors text-left">
+                            <button onClick={() => setQuery('Plot the distribution of [column_name]')} className="p-3 bg-kde-blue-50/80 dark:bg-gray-700/80 border border-kde-blue-200 dark:border-gray-600/80 rounded-lg hover:bg-kde-blue-100 dark:hover:bg-gray-700 text-sm text-kde-blue-800 dark:text-gray-300 transition-colors text-left">
                                 Plot the distribution of...
                             </button>
-                            <button onClick={() => setQuery('Show the top 5 rows with the highest [column_name]')} className="p-3 bg-indigo-50/80 dark:bg-gray-700/80 border border-indigo-200 dark:border-gray-600/80 rounded-lg hover:bg-indigo-100 dark:hover:bg-gray-700 text-sm text-indigo-800 dark:text-gray-300 transition-colors text-left">
+                            <button onClick={() => setQuery('Show the top 5 rows with the highest [column_name]')} className="p-3 bg-kde-blue-50/80 dark:bg-gray-700/80 border border-kde-blue-200 dark:border-gray-600/80 rounded-lg hover:bg-kde-blue-100 dark:hover:bg-gray-700 text-sm text-kde-blue-800 dark:text-gray-300 transition-colors text-left">
                                 Show the top 5 rows with the highest...
                             </button>
-                            <button onClick={() => setQuery('Count missing values per column')} className="p-3 bg-indigo-50/80 dark:bg-gray-700/80 border border-indigo-200 dark:border-gray-600/80 rounded-lg hover:bg-indigo-100 dark:hover:bg-gray-700 text-sm text-indigo-800 dark:text-gray-300 transition-colors text-left">
+                            <button onClick={() => setQuery('Count missing values per column')} className="p-3 bg-kde-blue-50/80 dark:bg-gray-700/80 border border-kde-blue-200 dark:border-gray-600/80 rounded-lg hover:bg-kde-blue-100 dark:hover:bg-gray-700 text-sm text-kde-blue-800 dark:text-gray-300 transition-colors text-left">
                                 Count missing values per column
                             </button>
                         </div>
@@ -532,8 +532,8 @@ const disabledClasses = "disabled:opacity-50 disabled:cursor-not-allowed";
                         <div
                         className={`max-w-3xl lg:max-w-5xl px-5 py-3 rounded-xl shadow ${
                             msg.sender === 'user'
-                            ? 'bg-primary-600 text-white'
-                            : 'bg-indigo-50/90 dark:bg-gray-700/80 text-gray-900 dark:text-gray-100'
+                            ? 'bg-kde-blue-600 text-white' // Use KDE Blue for user message
+                            : 'bg-kde-blue-50/90 dark:bg-gray-700/80 text-gray-900 dark:text-gray-100' // Use KDE Blue light for bot message
                         }`}
                         >
                         {msg.sender === 'user' && <p className="text-sm whitespace-normal break-words">{msg.content}</p>}
@@ -573,7 +573,7 @@ const disabledClasses = "disabled:opacity-50 disabled:cursor-not-allowed";
                     ))}
                      {isLoading && (
                          <div className="flex justify-start">
-                             <div className="px-4 py-2 rounded-lg shadow-sm bg-indigo-50/90 dark:bg-gray-700 text-gray-900 dark:text-gray-100 border border-indigo-100 dark:border-gray-600 w-full max-w-3xl lg:max-w-5xl">
+                             <div className="px-4 py-2 rounded-lg shadow-sm bg-kde-blue-50/90 dark:bg-gray-700 text-gray-900 dark:text-gray-100 border border-kde-blue-100 dark:border-gray-600 w-full max-w-3xl lg:max-w-5xl">
                                  <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400 mb-2">
                                      <svg className="animate-spin h-4 w-4 text-gray-600 dark:text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -594,7 +594,7 @@ const disabledClasses = "disabled:opacity-50 disabled:cursor-not-allowed";
                 </div>
 
                {/* Input Area */}
-               <div className="p-4 border-t border-gray-200 dark:border-gray-700/80 bg-indigo-50/80 dark:bg-gray-800/80 backdrop-blur-sm sticky bottom-0 z-10">
+               <div className="p-4 border-t border-gray-200 dark:border-gray-700/80 bg-kde-blue-50/80 dark:bg-gray-800/80 backdrop-blur-sm sticky bottom-0 z-10">
                 <div className="max-w-3xl mx-auto">
                  {error && !messages.some(msg => msg.sender === 'bot' && msg.content.error) && (
                    <div className="mb-2 p-2 text-sm bg-red-100 dark:bg-red-900 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-200 rounded-md flex items-center shadow-sm">
@@ -604,12 +604,12 @@ const disabledClasses = "disabled:opacity-50 disabled:cursor-not-allowed";
                  {!isAuthenticated && datasetId && (
                    <div className="mb-3 p-3 text-sm bg-blue-50 dark:bg-gray-700 border border-blue-200 dark:border-gray-600 text-blue-700 dark:text-blue-200 rounded-md flex items-center justify-between shadow-sm">
                      <span>
-                       <InformationCircleIcon className="h-5 w-5 mr-2 inline-block align-middle" />
-                       Log in or register to save analysis sessions and access full features.
-                     </span>
-                     <button
-                       onClick={switchToAuthView}
-                       className="ml-4 px-3 py-1 bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-medium rounded shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 dark:focus:ring-offset-gray-700"
+                      <InformationCircleIcon className="h-5 w-5 mr-2 inline-block align-middle" />
+                      Log in or register to save analysis sessions and access full features.
+                    </span>
+                    <button
+                      onClick={switchToAuthView}
+                      className="ml-4 px-3 py-1 bg-kde-blue-500 hover:bg-kde-blue-600 text-white text-xs font-medium rounded shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-kde-blue-400 focus:ring-offset-2 dark:focus:ring-offset-gray-700"
                      >
                        Login / Register
                      </button>
@@ -620,7 +620,7 @@ const disabledClasses = "disabled:opacity-50 disabled:cursor-not-allowed";
                     type="text"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    className="flex-grow px-4 py-2 border border-indigo-200 dark:border-gray-600 rounded-full shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-indigo-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 sm:text-sm placeholder-gray-500 dark:placeholder-gray-500"
+                    className="flex-grow px-4 py-2 border border-kde-blue-200 dark:border-gray-600 rounded-full shadow-sm focus:outline-none focus:ring-2 focus:ring-kde-blue-500 focus:border-transparent bg-kde-blue-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 sm:text-sm placeholder-gray-500 dark:placeholder-gray-500"
                     placeholder="Ask about the data..."
                     disabled={isLoading || !datasetId}
                     aria-label="Data analysis query"
@@ -628,7 +628,7 @@ const disabledClasses = "disabled:opacity-50 disabled:cursor-not-allowed";
                   <button
                     type="submit"
                     disabled={isLoading || !query.trim() || !datasetId}
-                    className={`${baseButtonClasses.replace('px-4 py-2', 'p-2.5').replace('rounded-md','rounded-full')} ${primaryButtonStyle.replace('focus:ring-gray-500', 'focus:ring-primary-500')} ${disabledClasses}`}
+                    className={`${baseButtonClasses.replace('px-4 py-2', 'p-2.5').replace('rounded-md','rounded-full')} ${primaryButtonStyle.replace('focus:ring-gray-500', 'focus:ring-kde-blue-500')} ${disabledClasses}`}
                     aria-label="Run Analysis"
                   >
                     <PaperAirplaneIcon className="h-5 w-5" />
