@@ -106,7 +106,10 @@ ${metadataString}
     *   Store ALL results (stats dict, row dict, error messages if any) in a SINGLE Python dictionary named \`analysis_results\`.
     *   **JSON Conversion:** Include and ALWAYS use the \`convert_numpy_types\` helper function (provided below) on the \`analysis_results\` dictionary BEFORE saving it to '/output/stats.json'. \`final_stats = convert_numpy_types(analysis_results)\`.
     *   Save the converted dictionary: \`with open('/output/stats.json', 'w') as f: json.dump(final_stats, f, indent=2)\`.
-8.  **Code Output:** Output ONLY the raw Python code. No explanations, comments outside code, or markdown formatting.
+8.  **Column Identification (IMPORTANT):** After loading the DataFrame \`df\`, identify numeric and categorical columns using pandas methods. Do NOT assume a variable named \`columnsMetadata\` exists.
+    *   Numeric columns: \`numeric_cols = df.select_dtypes(include=np.number).columns.tolist()\`
+    *   Categorical/Text columns: \`categorical_cols = df.select_dtypes(include=['object', 'category', 'boolean']).columns.tolist()\`
+9.  **Code Output:** Output ONLY the raw Python code. No explanations, comments outside code, or markdown formatting.
 
 **Helper Function (MUST INCLUDE and USE for saving stats.json):**
 \`\`\`python
@@ -153,34 +156,51 @@ analysis_results = {} # Initialize results dict
 
 try:
     # Load data safely
-    df = pd.read_csv('/input/data.csv', encoding='utf-8') # Corrected example: removed errors='replace'
+    df = pd.read_csv('/input/data.csv', encoding='utf-8')
 
-    # Check if required column exists
-    required_col = 'SomeColumn'
-    if required_col not in df.columns:
-        analysis_results['error'] = "Error: Column '" + required_col + "' not found."
-        print("Error: Column '" + required_col + "' not found.")
+    # Identify column types *after* loading
+    numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+    categorical_cols = df.select_dtypes(include=['object', 'category', 'boolean']).columns.tolist()
+    analysis_results['identified_numeric_columns'] = numeric_cols
+    analysis_results['identified_categorical_columns'] = categorical_cols
+
+    # Example: Summarize a numeric column (use identified list)
+    if numeric_cols: # Check if any numeric columns were found
+        example_numeric_col = numeric_cols[0] # Use the first identified numeric column
+        # No need for separate pd.to_numeric if already identified as numeric
+        analysis_results[f'{example_numeric_col}_summary'] = {
+             'mean': df[example_numeric_col].mean(),
+             'median': df[example_numeric_col].median(),
+             'std': df[example_numeric_col].std()
+        }
+        # Example Plot for numeric
+        plt.figure(figsize=(10, 6))
+        sns.histplot(df[example_numeric_col].dropna(), kde=True)
+        plt.title(f'Distribution of {example_numeric_col}')
+        plt.tight_layout()
+        plt.savefig('/output/plot_1.png')
+        plt.close()
     else:
-        # Attempt numeric conversion if needed
-        df[f'{required_col}_numeric'] = pd.to_numeric(df[required_col], errors='coerce')
+        analysis_results['numeric_summary_warning'] = "No numeric columns identified for summary."
 
-        # Perform analysis only if conversion worked
-        if not df[f'{required_col}_numeric'].isnull().all():
-            max_val = df[f'{required_col}_numeric'].max()
-            analysis_results['max_value'] = max_val
-            # ... other analysis ...
 
-            # Example Plot
-            plt.figure(figsize=(10, 6))
-            sns.histplot(df[f'{required_col}_numeric'].dropna())
-            plt.title(f'Distribution of {required_col}')
-            plt.tight_layout()
-            plt.savefig('/output/plot_1.png')
-            plt.close()
+    # Example: Summarize a categorical column (use identified list)
+    if categorical_cols:
+        example_cat_col = categorical_cols[0] # Use the first identified categorical column
+        analysis_results[f'{example_cat_col}_summary'] = {
+            'unique_values': df[example_cat_col].nunique(),
+            'top_value': df[example_cat_col].mode()[0] if not df[example_cat_col].mode().empty else None
+        }
+         # Example Plot for categorical
+        plt.figure(figsize=(10, 6))
+        sns.countplot(data=df, y=example_cat_col, order = df[example_cat_col].value_counts().index)
+        plt.title(f'Counts for {example_cat_col}')
+        plt.tight_layout()
+        plt.savefig('/output/plot_2.png')
+        plt.close()
+    else:
+        analysis_results['categorical_summary_warning'] = "No categorical columns identified for summary."
 
-        else:
-            analysis_results['warning'] = "Warning: Column '" + required_col + "' could not be treated as numeric."
-            print("Warning: Column '" + required_col + "' could not be treated as numeric.")
 
     # Convert the entire results dict before saving
     final_stats = convert_numpy_types(analysis_results)
@@ -197,9 +217,9 @@ Generate the Python code now, adhering strictly to all instructions.
 `;
   }
 
-  // generatePythonCode remains the same as before
-  async generatePythonCode(userQuery, datasetMetadata) {
-    logger.info(`${this.serviceName} Service: Generating Python code for query: "${userQuery}" using model ${this.codeModel}`);
+  // generatePythonCode now accepts an optional context parameter
+  async generatePythonCode(userQuery, datasetMetadata, context = null) { // Add context parameter
+    logger.info(`${this.serviceName} Service: Generating Python code for query: "${userQuery}" using model ${this.codeModel} (Context: ${context})`); // Log context
     // Call the function with sanitization
     const systemPrompt = this._buildCodeGenerationPrompt(userQuery, datasetMetadata);
 
@@ -227,8 +247,9 @@ Generate the Python code now, adhering strictly to all instructions.
       // Clean potential markdown code blocks from the already cleaned code
       let finalCode = cleanedCode.replace(/^```python\n?/, '').replace(/\n?```$/, '');
 
-      // --- Append Notebook Result Printing Snippet ---
-      const notebookResultSnippet = `
+      // --- Conditionally Append Notebook Result Printing Snippet ---
+      if (context === 'notebook') {
+        const notebookResultSnippet = `
 
 # --- Added by Backend: Ensure final result is printed for Notebook ---
 import json
@@ -271,11 +292,14 @@ else:
     print(json.dumps({'type': 'final_result', 'data': {'warning': 'analysis_results variable not found in script scope.'}}))
 # --- End of Added Snippet ---
 `;
-      finalCode += notebookResultSnippet;
-      logger.debug(`${this.serviceName} Service: Appended notebook result printing snippet.`);
-      // --- End Append ---
+        finalCode += notebookResultSnippet;
+        logger.debug(`${this.serviceName} Service: Appended notebook result printing snippet because context is 'notebook'.`);
+      } else {
+         logger.debug(`${this.serviceName} Service: Did not append notebook snippet because context is not 'notebook' (context: ${context}).`);
+      }
+      // --- End Conditional Append ---
 
-      return finalCode; // Return the modified code
+      return finalCode; // Return the potentially modified code
 
     } catch (error) {
       // Log the specific error from the API call

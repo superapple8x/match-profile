@@ -274,8 +274,8 @@ router.post('/generate-code', authMiddleware, generateCodeValidationRules, valid
     logger.debug(`[Generate Code] Metadata fetched successfully for table: ${metadata.dbTableName}`);
     // ---
 
-    // Call the LLM service, now with metadata context
-    const generatedCode = await llmService.generatePythonCode(prompt, metadata);
+    // Call the LLM service, passing metadata and indicating the context is 'notebook'
+    const generatedCode = await llmService.generatePythonCode(prompt, metadata, 'notebook'); // Add context parameter
 
     if (!generatedCode || typeof generatedCode !== 'string' || generatedCode.trim() === '') {
         logger.warn('[Generate Code] LLM service returned empty or invalid code.', { userId, datasetId });
