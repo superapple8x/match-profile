@@ -320,3 +320,29 @@ else if (detectedMime === 'unknown' && ['text/csv', 'application/csv', 'applicat
 ```
 
 If you are on an older version of the code, pulling the latest changes should include this fix. If you need to apply it manually, locate the `/api/import` route handler in `src/backend/routes/fileOperations.js` and modify the conditional statement as shown above.
+
+### LLM Analysis Docker Build Error (Forbidden Path)
+
+If you encounter a Docker build error when setting up the Python analysis sandbox, specifically `COPY failed: forbidden path outside the build context: ../python-kernel/kernel_runner.py`, this is due to an incorrect relative path in the Dockerfile.
+
+**Explanation:**
+
+The Docker build process is initiated from the `src/backend` directory. The `Dockerfile` for the Python sandbox is located at `src/backend/python-sandbox/Dockerfile`. A `COPY` instruction within this Dockerfile was attempting to copy the `kernel_runner.py` file using the path `../python-kernel/kernel_runner.py`. This path is outside the build context (`src/backend`), which is not allowed by Docker.
+
+**Solution:**
+
+The path in the `COPY` instruction in `src/backend/python-sandbox/Dockerfile` needs to be relative to the build context (`src/backend`). The correct path to `kernel_runner.py` from `src/backend` is `python-kernel/kernel_runner.py`.
+
+The line in `src/backend/python-sandbox/Dockerfile` was modified from:
+
+```dockerfile
+COPY ../python-kernel/kernel_runner.py /app/kernel_runner.py
+```
+
+to:
+
+```dockerfile
+COPY python-kernel/kernel_runner.py /app/kernel_runner.py
+```
+
+If you are on an older version of the code, pulling the latest changes should include this fix. If you need to apply it manually, edit `src/backend/python-sandbox/Dockerfile` and correct the path in the `COPY` instruction. After applying the fix, rebuild the Docker image by navigating to `src/backend` and running `docker build -t python-analysis-sandbox:latest -f python-sandbox/Dockerfile .`.

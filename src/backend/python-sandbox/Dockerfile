@@ -20,7 +20,7 @@ RUN pip install --no-cache-dir pandas matplotlib seaborn
 
 # Copy the kernel runner script into the image
 # Assumes the build context is src/backend/
-COPY ../python-kernel/kernel_runner.py /app/kernel_runner.py
+COPY python-kernel/kernel_runner.py /app/kernel_runner.py
 RUN chown pythonuser:pythonuser /app/kernel_runner.py
 
 # Set the working directory
