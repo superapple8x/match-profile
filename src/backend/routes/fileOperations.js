@@ -12,7 +12,7 @@ const optionalAuthMiddleware = require('../middleware/optionalAuthMiddleware'); 
 const { query, pool: dbPool } = require('../config/db'); // Import query function and the instantiated pool
 const { body, query: queryValidator, param, validationResult } = require('express-validator'); // Import validation functions
 const logger = require('../config/logger'); // Import logger
-const { fileTypeFromBuffer } = require('file-type'); // Import file-type
+// const { fileTypeFromBuffer } = require('file-type'); // Import file-type - Changed to dynamic import due to package being ESM
 const cache = require('../services/cacheService'); // Import cache service
 
 // --- Validation Middleware ---
@@ -162,40 +162,35 @@ router.post('/import', optionalAuthMiddleware, upload.single('file'), async (req
 
     let parsedData = [];
 
-    // --- File Type Validation (Revised) ---
-    // Get the MIME type reported by multer (based on Content-Type header)
-    const reportedMimeType = req.file.mimetype;
-    const isReportedCsv = ['text/csv', 'application/csv'].includes(reportedMimeType);
-    const isReportedExcel = [
-        'application/vnd.ms-excel',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    ].includes(reportedMimeType);
+    // --- File Type Validation (Revised - Prioritize Detected Type) ---
+    const { fileTypeFromBuffer } = await import('file-type'); // Dynamically import file-type (ESM)
+    const detectedType = await fileTypeFromBuffer(fileBuffer);
+    const detectedMime = detectedType ? detectedType.mime : 'unknown';
+    const reportedMimeType = req.file.mimetype; // Keep for logging
 
-    let fileTypeCheckPassed = false;
-    let actualMimeType = reportedMimeType; // Assume reported is correct initially
+    logger.info(`[Import] Reported MIME: ${reportedMimeType}, Detected MIME: ${detectedMime}`);
 
-    if (isReportedCsv) {
-        // For CSV, trust the reported type for now and let the parser handle errors.
-        fileTypeCheckPassed = true;
-        logger.info(`[Import] File reported as CSV (${reportedMimeType}). Proceeding to parse.`);
-    } else if (isReportedExcel) {
-        // For Excel, verify using magic numbers as it's more reliable.
-        const detectedType = await fileTypeFromBuffer(fileBuffer);
-        if (detectedType && (detectedType.mime === 'application/vnd.ms-excel' || detectedType.mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
-            fileTypeCheckPassed = true;
-            actualMimeType = detectedType.mime; // Use the detected type
-            logger.info(`[Import] Detected Excel file MIME type: ${actualMimeType}`);
-        } else {
-            const detectedMime = detectedType ? detectedType.mime : 'unknown';
-            logger.warn(`[Import] Rejected Excel file upload. Reported MIME: ${reportedMimeType}, Detected MIME: ${detectedMime}`, { originalFileName });
-            return res.status(400).json({ error: `Invalid Excel file format detected. Reported: ${reportedMimeType}, Detected: ${detectedMime}.` });
-        }
-    }
+    const allowedMimeTypes = [
+      'text/csv',
+      'application/csv',
+      'application/vnd.ms-excel', // .xls
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' // .xlsx
+    ];
 
-    if (!fileTypeCheckPassed) {
-        // This path is reached if the reported type wasn't CSV or Excel, or if Excel magic number check failed.
-        logger.warn(`[Import] Rejected file upload due to unsupported reported MIME type`, { originalFileName, reportedMimeType });
-        return res.status(400).json({ error: `Unsupported file type reported by client: ${reportedMimeType}. Allowed: CSV, XLS, XLSX.` });
+    let actualMimeType = 'unknown'; // Initialize
+
+    if (allowedMimeTypes.includes(detectedMime)) {
+        actualMimeType = detectedMime;
+        logger.info(`[Import] Detected type (${actualMimeType}) is allowed. Proceeding.`);
+    } else if (detectedMime === 'unknown' && ['text/csv', 'application/csv', 'application/vnd.ms-excel'].includes(reportedMimeType)) {
+        // Fallback for CSV if detection fails but reported type is a common CSV/Excel type
+        // This is common as CSV has no reliable magic number, and some clients report Excel MIME for CSV
+        actualMimeType = 'text/csv'; // Explicitly set to text/csv for parsing
+        logger.warn(`[Import] Detected type is unknown, but reported type (${reportedMimeType}) suggests CSV. Attempting CSV parse.`);
+    } else {
+        // Reject if detected type is not allowed (and not the CSV fallback case)
+        logger.warn(`[Import] Rejected file upload. Detected MIME type "${detectedMime}" is not supported.`, { originalFileName, reportedMimeType });
+        return res.status(400).json({ error: `Unsupported file type detected: ${detectedMime}. Allowed: CSV, XLS, XLSX.` });
     }
     // --- End File Type Validation ---
 

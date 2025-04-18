@@ -51,7 +51,7 @@ This guide provides a comprehensive, step-by-step walkthrough for setting up and
     sudo usermod -aG docker ${USER}
     ```
 
-    **Important:** Log out and log back in for this change to take effect. Verify by running `docker ps` without `sudo`:
+    **Important:** Log out and log back in (or close and reopen your WSL terminal) for this change to take effect. Verify by running `docker ps` without `sudo`:
 
     ```bash
     docker ps
@@ -67,49 +67,68 @@ This guide provides a comprehensive, step-by-step walkthrough for setting up and
     sudo apt install postgresql postgresql-contrib
     ```
 
-2.  **Create a Database User (if needed):** The default user is `postgres`. You may need to create a password for this user:
+2.  **Create a Database User Password:** The default user is `postgres`. Set a password for this user:
 
     ```bash
     sudo passwd postgres
     ```
+    (Enter and confirm your desired password when prompted)
 
-    Then, switch to the `postgres` user:
-
-    ```bash
-    sudo -i -u postgres
-    ```
-
-    And set the password:
+    Then, set the password within PostgreSQL itself (replace `your_db_password` with the password you just set):
 
     ```bash
-    psql -c "ALTER USER postgres PASSWORD 'your_password';"
-    ```
-
-    Replace `your_password` with a strong password. Exit the `postgres` user session:
-
-    ```bash
-    exit
+    sudo -i -u postgres psql -c "ALTER USER postgres PASSWORD 'your_db_password';"
     ```
 
 3.  **Create a Database:** Create the `profile_matching` database:
 
     ```bash
-    sudo -i -u postgres
-    createdb profile_matching
-    exit
+    sudo -i -u postgres createdb profile_matching
     ```
 
-4.  **Initialize/Migrate the Database Schema:** The database schema is no longer initialized automatically or via a raw SQL file. Database schema changes are managed using `node-pg-migrate`.
+4.  **Ensure PostgreSQL Service is Running:**
+    *   Find your PostgreSQL version (e.g., 16) by running: `ls /etc/postgresql/`
+    *   Check the status of the version-specific service (replace `<version>` with your version number):
+        ```bash
+        sudo systemctl status postgresql@<version>-main.service
+        ```
+    *   If the service is not `active (running)`, start it:
+        ```bash
+        sudo systemctl start postgresql@<version>-main.service
+        ```
+    *   (Optional) Enable the service to start automatically on boot:
+        ```bash
+        sudo systemctl enable postgresql@<version>-main.service
+        ```
+    *   **Note:** Do not use the generic `postgresql.service` unit for starting/stopping/enabling the database cluster.
 
-    *   Navigate to the backend directory:
+5.  **Install Backend Dependencies:** Before running migrations, install the necessary Node.js packages for the backend:
+    ```bash
+    cd src/backend
+    npm install
+    ```
+    *   **Note:** If you encounter an `ERR_PACKAGE_PATH_NOT_EXPORTED` error related to the `file-type` package when running `npm start` later, it's likely due to an ESM/CommonJS incompatibility. The code in `src/backend/routes/fileOperations.js` should already use a dynamic `import()` to handle this. Ensure you have the latest code changes.
+
+6.  **Initialize/Migrate the Database Schema:** Database schema changes are managed using `node-pg-migrate`.
+    *   Navigate to the backend directory (if not already there):
         ```bash
         cd src/backend
         ```
-    *   Run the migrations to set up or update the schema:
+    *   Run the migrations:
         ```bash
         npm run db:migrate:up
         ```
-    *   This command reads the configuration from `db-migrate-config.js` (which uses the `.env` file for connection details) and applies any pending migrations found in the `migrations/` directory. You should run this command after cloning the repository for the first time and whenever new database migrations are added.
+    *   **Troubleshooting Migration Connection Errors:**
+        *   If you encounter a `SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string` error, even after setting the password correctly in `.env`, it might be due to issues with the client library's authentication negotiation.
+        *   **Workaround:** Try running the migration by explicitly setting the `DATABASE_URL` environment variable with `auth_method=md5`. Replace placeholders with your actual credentials:
+            ```bash
+            DATABASE_URL="postgresql://<user>:<password>@<host>:<port>/<database>?auth_method=md5" npm run db:migrate:up
+            ```
+            For example:
+            ```bash
+            DATABASE_URL="postgresql://postgres:your_db_password@localhost:5432/profile_matching?auth_method=md5" npm run db:migrate:up
+            ```
+        *   If the `DATABASE_URL` workaround doesn't resolve the issue, you might need to edit PostgreSQL's authentication configuration file (`pg_hba.conf`) to use `md5` instead of `scram-sha-256` for local connections. Locate the file (usually `/etc/postgresql/<version>/main/pg_hba.conf`), change the relevant `host` lines, and reload the PostgreSQL service (`sudo systemctl reload postgresql@<version>-main.service`).
 
 ## Configuring the Backend
 
@@ -122,17 +141,17 @@ The backend requires environment variables for LLM configuration and database co
     touch .env
     ```
 
-2.  **Edit `.env` file:** Open the `.env` file with a text editor (e.g., `nano`, `vim`, `gedit`) and add the following content. Replace the placeholder values with your actual API keys and database settings:
+2.  **Edit `.env` file:** Open the `.env` file with a text editor (e.g., `nano`, `vim`, `gedit`) and add the following content. Replace the placeholder values with your actual API keys and the database password you set earlier:
 
     ```bash
     nano .env
     ```
 
-    Then, paste the following content into the file:
+    Paste the following content:
 
     ```dotenv
     # LLM Configuration
-    LLM_PROVIDER=deepseek # Options: openai, deepseek (gemini, ollama not fully implemented)
+    LLM_PROVIDER=deepseek # Options: openai, gemini, deepseek, ollama
 
     # --- API Keys & Config (Add your keys/prefs here) ---
 
@@ -144,30 +163,33 @@ The backend requires environment variables for LLM configuration and database co
     # DeepSeek (if LLM_PROVIDER=deepseek)
     DEEPSEEK_API_KEY=your_deepseek_key
     DEEPSEEK_BASE_URL=https://api.deepseek.com/v1 # OpenAI compatible endpoint
-    DEEPSEEK_CODE_MODEL=deepseek-coder # Or deepseek-chat, deepseek-reasoner
+    DEEPSEEK_CODE_MODEL=deepseek-chat # Or deepseek-chat, deepseek-reasoner
     DEEPSEEK_TEXT_MODEL=deepseek-chat # Or deepseek-reasoner
+
+    # Gemini (if LLM_PROVIDER=gemini) - Requires different SDK/implementation
+    # GEMINI_API_KEY=your_gemini_key
+
+    # Ollama (if LLM_PROVIDER=ollama)
+    # OLLAMA_BASE_URL=http://localhost:11434
+    # OLLAMA_CODE_MODEL=codellama
+    # OLLAMA_TEXT_MODEL=llama3
 
     # PostgreSQL Configuration
     DB_USER=postgres # Default: postgres
     DB_HOST=localhost # Default: localhost
     DB_NAME=profile_matching # Default: profile_matching
-    DB_PASSWORD=your_db_password # Default: (empty string) - Set your actual password here
+    DB_PASSWORD=your_db_password # IMPORTANT: Replace with the password you set for the postgres user
     DB_PORT=5432 # Default: 5432
 
     # JWT Configuration (Required for Authentication)
-    # Generate a strong, random secret (e.g., using openssl rand -hex 32)
+    # Generate a strong, random secret (e.g., using: openssl rand -hex 32)
     JWT_SECRET=your_strong_random_jwt_secret_here
     JWT_EXPIRES_IN=1h # Optional: Default is 1 hour
     ```
 
-    *   **LLM Configuration:**
-        *   Set `LLM_PROVIDER` to the LLM service you want to use (e.g., `deepseek`).
-        *   Fill in the corresponding API key (`DEEPSEEK_API_KEY` or `OPENAI_API_KEY`).
-        *   You can optionally change the model names (e.g., `DEEPSEEK_CODE_MODEL`).
-    *   **PostgreSQL Configuration:**
-        *   These variables control how the backend connects to your PostgreSQL database. The defaults should work if you have a local PostgreSQL instance running with the default settings.
-     *   **JWT Configuration:**
-         *   `JWT_SECRET` is crucial for security. Generate a strong random string and paste it here. While the backend provides a default for non-production environments if this is missing, setting it explicitly is highly recommended.
+    *   **LLM Configuration:** Set `LLM_PROVIDER` and fill in the corresponding API key.
+    *   **PostgreSQL Configuration:** Ensure `DB_PASSWORD` matches the password you set for the `postgres` user.
+    *   **JWT Configuration:** Generate a strong random string (e.g., `openssl rand -hex 32`) and paste it as the `JWT_SECRET`.
 
 ## Running the Application
 
@@ -179,7 +201,7 @@ You need to run both the backend and frontend servers concurrently. Open two sep
 
         ```bash
         cd src/backend
-        npm install # Install dependencies (run this after cloning or pulling changes)
+        # Dependencies should already be installed from the migration step
         # Build the Python kernel Docker image (required for notebook feature)
         docker build -t python-analysis-sandbox:latest -f python-sandbox/Dockerfile .
         ```
@@ -190,10 +212,8 @@ You need to run both the backend and frontend servers concurrently. Open two sep
         npm start
         ```
 
-    *   This command uses `node index.js` directly, suitable for basic development. Keep this terminal running.
-    *   Alternatively, you can use `pm2` for more robust process management locally (useful for testing restarts, etc.): `npm run start:prod`. Use `pm2 logs` to view logs and `npm run stop:prod` to stop it.
-    *   Logs will be generated in the `src/backend/logs/` directory (`combined.log`, `error.log`).
-    *   The first time the LLM analysis feature is used, it may take a minute to build the necessary Docker image (`python-analysis-sandbox`).
+    *   This command uses `node index.js` directly. Keep this terminal running.
+    *   Logs will be generated in `src/backend/logs/`.
 
 2.  **Start the Frontend Development Server:**
 
@@ -203,14 +223,17 @@ You need to run both the backend and frontend servers concurrently. Open two sep
         cd src/frontend
         ```
 
-    *   Install dependencies if you haven't already: `npm install`
+    *   Install dependencies:
+        ```bash
+        npm install
+        ```
     *   Then, start the Vite development server:
 
         ```bash
         npm run dev
         ```
 
-    *   Vite will compile the application and start a development server, usually on `http://localhost:5173`. It will also watch for file changes and automatically update the browser (Hot Module Replacement - HMR). Keep this terminal running.
+    *   Vite will compile the application and start a development server, usually on `http://localhost:5173`. Keep this terminal running.
 
 ## Accessing the Application
 
@@ -244,15 +267,15 @@ If you encounter permission errors when running the LLM analysis feature, such a
 *   `cp: cannot open '/host_temp/script.py' for reading: Permission denied`
 *   `cp: cannot stat '/host_temp/script.py': Permission denied`
 
-This is often caused by **SELinux** (or potentially AppArmor) on the host system preventing the Docker container from accessing files mounted from the host, even if standard file permissions seem correct.
+This is often caused by **SELinux** (or potentially AppArmor) on the host system preventing the Docker container from accessing files mounted from the host.
 
 **Solution:**
 
 The codebase (`src/backend/services/dockerExecutor.js`) has been updated to mitigate this by:
 
-1.  **Using a Project-Local Temp Directory:** Temporary files for Docker execution are now created under `src/backend/docker_temp/` instead of the system `/tmp`. This directory is automatically added to `.gitignore`.
+1.  **Using a Project-Local Temp Directory:** Temporary files for Docker execution are now created under `src/backend/docker_temp/`.
 2.  **Copying Script Inside Container:** The Python script is copied from the mounted temporary directory (`/host_temp`) to `/app/script.py` within the container before execution.
-3.  **Applying SELinux Volume Labels:** The crucial step is adding the `:z` label to the volume mounts in `src/backend/services/dockerExecutor.js`. This tells SELinux that the mounted directories (`/host_temp`, `/input/data.csv`, `/output`) are intended to be shared with the container.
+3.  **Applying SELinux Volume Labels:** The crucial step is adding the `:z` label to the volume mounts in `src/backend/services/dockerExecutor.js`.
 
 Example snippet from `dockerExecutor.js`:
 
@@ -270,4 +293,30 @@ Example snippet from `dockerExecutor.js`:
       },
 ```
 
-If you clone or pull the latest code, these configurations should already be in place. If you are setting up an older version or manually configuring, ensure these settings, especially the `:z` volume labels, are present if your host system uses SELinux.
+If you clone or pull the latest code, these configurations should already be in place.
+
+### CSV File Upload Errors (Unknown MIME Type)
+
+If you encounter issues uploading CSV files where the backend logs show the file being rejected with "Detected MIME type 'unknown' is not supported", and the "Reported MIME" is `application/vnd.ms-excel`, this is a known issue related to file type detection.
+
+**Explanation:**
+
+CSV files often lack a distinct "magic number" signature, making it difficult for the backend's file type detection library (`file-type`) to identify them reliably from the file content alone, resulting in an 'unknown' detected MIME type. The backend includes a fallback mechanism to check the MIME type reported by the client's browser, but it previously only accepted `text/csv` or `application/csv` for this fallback. Some browsers or systems may report `application/vnd.ms-excel` for CSV files, causing the rejection.
+
+**Solution:**
+
+The backend code in `src/backend/routes/fileOperations.js` has been updated to include `application/vnd.ms-excel` in the list of reported MIME types that trigger the CSV fallback when the detected MIME type is 'unknown'.
+
+Specifically, the condition on line ~185 was modified from:
+
+```javascript
+else if (detectedMime === 'unknown' && ['text/csv', 'application/csv'].includes(reportedMimeType)) {
+```
+
+to:
+
+```javascript
+else if (detectedMime === 'unknown' && ['text/csv', 'application/csv', 'application/vnd.ms-excel'].includes(reportedMimeType)) {
+```
+
+If you are on an older version of the code, pulling the latest changes should include this fix. If you need to apply it manually, locate the `/api/import` route handler in `src/backend/routes/fileOperations.js` and modify the conditional statement as shown above.
