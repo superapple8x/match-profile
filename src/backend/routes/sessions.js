@@ -1,5 +1,6 @@
 const express = require('express');
-const db = require('../config/db');
+// Removed: const db = require('../config/db');
+const supabase = require('../config/supabaseClient'); // Import the Supabase client
 const authMiddleware = require('../middleware/authMiddleware'); // Import the auth middleware
 const { body, param, validationResult } = require('express-validator'); // Import validation functions
 const logger = require('../config/logger'); // Import logger
@@ -21,7 +22,7 @@ const validateRequest = (req, res, next) => {
   next();
 };
 
-// --- JSDoc Definitions for Swagger ---
+// --- JSDoc Definitions for Swagger (Updated for Supabase) ---
 
 /**
  * @swagger
@@ -35,7 +36,7 @@ const validateRequest = (req, res, next) => {
  *       type: object
  *       properties:
  *         id:
- *           type: integer
+ *           type: integer # Kept as integer based on migration
  *           description: Unique ID of the saved session.
  *           example: 5
  *         session_name:
@@ -61,9 +62,10 @@ const validateRequest = (req, res, next) => {
  *         - type: object
  *           properties:
  *             user_id:
- *               type: integer
- *               description: ID of the user who owns the session.
- *               example: 1
+ *               type: string # Changed to string for UUID
+ *               format: uuid
+ *               description: ID of the user who owns the session (from Supabase Auth).
+ *               example: "123e4567-e89b-12d3-a456-426614174000"
  *             search_criteria:
  *               type: object # Stored as JSONB in DB
  *               nullable: true
@@ -163,21 +165,39 @@ const validateRequest = (req, res, next) => {
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/', async (req, res) => {
-  const userId = req.user.id; // Get user ID from middleware
+  const userId = req.user.id; // Get user ID (UUID) from middleware
+
+  if (!supabase) {
+      logger.error('[Sessions GET /] Supabase client not initialized.');
+      return res.status(503).json({ message: 'Service unavailable.' });
+  }
 
   logger.info(`[Sessions GET /] Attempting to fetch sessions for user ${userId}`);
   try {
-    const sql = 'SELECT id, session_name, dataset_id, created_at, updated_at FROM saved_sessions WHERE user_id = $1 ORDER BY updated_at DESC';
-    logger.debug(`[Sessions GET /] Executing SQL: ${sql} with params: [${userId}]`);
-    const result = await db.query(sql, [userId]);
-    logger.info(`[Sessions GET /] Successfully fetched ${result.rows.length} sessions for user ${userId}`);
-    res.json(result.rows);
+    // Removed: const sql = 'SELECT id, session_name, dataset_id, created_at, updated_at FROM saved_sessions WHERE user_id = $1 ORDER BY updated_at DESC';
+    // Removed: logger.debug(`[Sessions GET /] Executing SQL: ${sql} with params: [${userId}]`);
+    // Removed: const result = await db.query(sql, [userId]);
+
+    const { data, error } = await supabase
+        .from('saved_sessions')
+        .select('id, session_name, dataset_id, created_at, updated_at')
+        .eq('user_id', userId) // Use UUID for user_id
+        .order('updated_at', { ascending: false });
+
+    if (error) {
+        // Throw the error to be caught by the catch block
+        throw error;
+    }
+
+    logger.info(`[Sessions GET /] Successfully fetched ${data ? data.length : 0} sessions for user ${userId}`);
+    res.json(data || []); // Return data or empty array if null
+
   } catch (err) {
     // Log the specific database error
     logger.error(`[Sessions GET /] Database error fetching saved sessions for user ${userId}`, {
         errorMessage: err.message,
-        errorCode: err.code, // PostgreSQL error code (e.g., 42P01 for undefined_table)
-        errorStack: err.stack,
+        // Supabase error might have code/details: err.code, err.details
+        error: err, // Log the full error object
         userId: userId
      });
     res.status(500).json({ message: 'Error fetching saved sessions.' });
@@ -236,33 +256,64 @@ const saveSessionValidationRules = [
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post('/', saveSessionValidationRules, validateRequest, async (req, res) => {
-  const userId = req.user.id;
+  const userId = req.user.id; // UUID
   // Use validated data
   const {
     sessionName,
-    searchCriteria,
+    searchCriteria, // This should be a JS object/array
     analysisQuery,
-    analysisMessages,
+    analysisMessages, // This should be a JS object/array
     datasetId
   } = req.body;
+
+  if (!supabase) {
+      logger.error('[Sessions POST /] Supabase client not initialized.');
+      return res.status(503).json({ message: 'Service unavailable.' });
+  }
 
   // Old validation removed
 
  try {
-   // Ensure JSON types are stringified before sending to DB
-   const searchCriteriaString = searchCriteria ? JSON.stringify(searchCriteria) : null;
-   const analysisMessagesString = analysisMessages ? JSON.stringify(analysisMessages) : null;
+   // Supabase client handles JSONB directly, no need to stringify
+   // Removed: const searchCriteriaString = searchCriteria ? JSON.stringify(searchCriteria) : null;
+   // Removed: const analysisMessagesString = analysisMessages ? JSON.stringify(analysisMessages) : null;
 
-   const result = await db.query(
-     `INSERT INTO saved_sessions
-      (user_id, session_name, search_criteria, analysis_query, analysis_messages, dataset_id)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING *`, // Return all columns for SessionDetail response
-     // Pass the stringified versions to the query
-     [userId, sessionName, searchCriteriaString, analysisQuery, analysisMessagesString, datasetId]
-   );
-   logger.info(`Session saved`, { userId, sessionId: result.rows[0].id, sessionName });
-   res.status(201).json(result.rows[0]); // Return the full session detail
+   const sessionToInsert = {
+       user_id: userId,
+       session_name: sessionName,
+       search_criteria: searchCriteria, // Pass JS object directly
+       analysis_query: analysisQuery,
+       analysis_messages: analysisMessages, // Pass JS object/array directly
+       dataset_id: datasetId
+   };
+
+   // Removed old query logic
+   // const result = await db.query(
+   //   `INSERT INTO saved_sessions
+   //    (user_id, session_name, search_criteria, analysis_query, analysis_messages, dataset_id)
+   //    VALUES ($1, $2, $3, $4, $5, $6)
+   //    RETURNING *`,
+   //   [userId, sessionName, searchCriteriaString, analysisQuery, analysisMessagesString, datasetId]
+   // );
+
+   const { data, error } = await supabase
+       .from('saved_sessions')
+       .insert(sessionToInsert)
+       .select('*') // Select all columns of the inserted row
+       .single(); // Expect only one row to be inserted
+
+   if (error) {
+       throw error; // Throw to be caught by catch block
+   }
+
+   if (!data) {
+       // Should not happen if insert succeeded without error, but good practice
+       throw new Error('Session inserted but no data returned.');
+   }
+
+   logger.info(`Session saved`, { userId, sessionId: data.id, sessionName });
+   res.status(201).json(data); // Return the full session detail from Supabase
+
   } catch (err) {
     logger.error(`Error saving session '${sessionName}'`, { userId, error: err });
     res.status(500).json({ message: 'Error saving session.' });
@@ -328,25 +379,43 @@ const sessionIdValidationRule = [
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/:id', sessionIdValidationRule, validateRequest, async (req, res) => {
-  const userId = req.user.id;
+  const userId = req.user.id; // UUID
   // Use validated param
-  const sessionId = req.params.id;
+  const sessionId = req.params.id; // Still integer based on migration
+
+  if (!supabase) {
+      logger.error(`[Sessions GET /:id] Supabase client not initialized.`);
+      return res.status(503).json({ message: 'Service unavailable.' });
+  }
 
   // Old validation removed
 
   try {
-    const result = await db.query(
-      'SELECT * FROM saved_sessions WHERE id = $1 AND user_id = $2',
-      [sessionId, userId]
-    );
+    // Removed old query logic
+    // const result = await db.query(
+    //   'SELECT * FROM saved_sessions WHERE id = $1 AND user_id = $2',
+    //   [sessionId, userId]
+    // );
 
-    if (result.rows.length === 0) {
+    const { data, error } = await supabase
+        .from('saved_sessions')
+        .select('*')
+        .eq('id', sessionId)
+        .eq('user_id', userId) // Match on UUID
+        .maybeSingle(); // Use maybeSingle as it might not exist or belong to user
+
+    if (error) {
+        throw error; // Throw to be caught by catch block
+    }
+
+    if (!data) { // maybeSingle returns null if not found
       logger.warn(`Attempted to access non-existent or unauthorized session`, { userId, sessionId });
       return res.status(404).json({ message: 'Session not found or access denied.' });
     }
 
     logger.info(`Session loaded`, { userId, sessionId });
-    res.json(result.rows[0]);
+    res.json(data); // Return the session data from Supabase
+
   } catch (err) {
     logger.error(`Error loading session`, { userId, sessionId, error: err });
     res.status(500).json({ message: 'Error loading session.' });
@@ -404,26 +473,46 @@ router.get('/:id', sessionIdValidationRule, validateRequest, async (req, res) =>
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.delete('/:id', sessionIdValidationRule, validateRequest, async (req, res) => {
-  const userId = req.user.id;
+  const userId = req.user.id; // UUID
   // Use validated param
-  const sessionId = req.params.id;
+  const sessionId = req.params.id; // Still integer
+
+  if (!supabase) {
+      logger.error(`[Sessions DELETE /:id] Supabase client not initialized.`);
+      return res.status(503).json({ message: 'Service unavailable.' });
+  }
 
   // Old validation removed
 
   try {
-    const result = await db.query(
-      'DELETE FROM saved_sessions WHERE id = $1 AND user_id = $2 RETURNING id',
-      [sessionId, userId]
-    );
+    // Removed old query logic
+    // const result = await db.query(
+    //   'DELETE FROM saved_sessions WHERE id = $1 AND user_id = $2 RETURNING id',
+    //   [sessionId, userId]
+    // );
 
-    if (result.rowCount === 0) {
-      // If no rows were deleted, it means the session didn't exist or didn't belong to the user
+    // We need to check if it exists *for this user* first, or rely on RLS.
+    // RLS is better. Assuming RLS policy `auth.uid() = user_id` is active.
+    const { error, count } = await supabase
+        .from('saved_sessions')
+        .delete({ count: 'exact' }) // Request count of deleted rows
+        .eq('id', sessionId)
+        .eq('user_id', userId); // RLS should also enforce this, but explicit check is safer
+
+    if (error) {
+        throw error;
+    }
+
+    // Check the count of deleted rows
+    if (count === 0) {
+      // If no rows were deleted, it means the session didn't exist or didn't belong to the user (or RLS blocked it)
       logger.warn(`Attempted to delete non-existent or unauthorized session`, { userId, sessionId });
       return res.status(404).json({ message: 'Session not found or access denied.' });
     }
 
     logger.info(`Session deleted`, { userId, sessionId });
     res.status(204).send(); // No Content success status
+
   } catch (err) {
     logger.error(`Error deleting session`, { userId, sessionId, error: err });
     res.status(500).json({ message: 'Error deleting session.' });
