@@ -1,27 +1,10 @@
-const jwt = require('jsonwebtoken');
+// Removed: const jwt = require('jsonwebtoken');
+const supabase = require('../config/supabaseClient'); // Import the Supabase client
 const logger = require('../config/logger'); // Import logger
 
-// Use the same secret as in auth.js, preferably from environment variables
-let JWT_SECRET = process.env.JWT_SECRET; // Use let to allow reassignment for dev default
+// Removed JWT_SECRET and related logic
 
-// --- Critical Security Check ---
-if (!JWT_SECRET) {
-  const errorMsg = 'FATAL ERROR: JWT_SECRET environment variable is not set.';
-  logger.error(errorMsg + ' (authMiddleware)');
-  // In production, prevent the application from starting without a secret
-  if (process.env.NODE_ENV === 'production') {
-    // Throwing here might be too late if middleware is loaded after auth.js check.
-    // Rely on the check in auth.js to prevent startup. Log error here.
-    // Consider a centralized config check on startup instead.
-  } else {
-    logger.warn('JWT_SECRET is not set in authMiddleware. Using a default insecure secret for development ONLY.');
-    // Assign the weak default ONLY if not in production and it was missing
-    JWT_SECRET = 'your-default-very-secret-key-dev-only';
-  }
-}
-// --- End Security Check ---
-
-module.exports = function(req, res, next) {
+module.exports = async function(req, res, next) { // Make the function async
   let token = null;
 
   // 1. Try getting token from Authorization header
@@ -32,13 +15,14 @@ module.exports = function(req, res, next) {
       token = parts[1];
     } else {
       // Invalid header format
+      logger.warn('AuthMiddleware: Invalid Authorization header format.');
       return res.status(401).json({ message: 'Token is not valid (Format Error).' });
     }
   }
 
-  // 2. If no header token AND it's the stream route, try query parameter
-  // Check if the path starts with '/api/notebook/stream/'
-  const isStreamRoute = req.originalUrl.startsWith('/api/notebook/stream/');
+  // 2. If no header token AND it's a stream route, try query parameter
+  // Check if the path starts with '/api/notebook/stream/' (Adjust path if needed)
+  const isStreamRoute = req.originalUrl.startsWith('/api/notebook/stream/'); // Example path
 
   if (!token && isStreamRoute && req.query.token) {
     token = req.query.token;
@@ -47,25 +31,51 @@ module.exports = function(req, res, next) {
 
   // 3. Check if token was found either way
   if (!token) {
+    logger.warn('AuthMiddleware: No token provided.');
     return res.status(401).json({ message: 'No token provided, authorization denied.' });
+  }
+
+  // 4. Check if Supabase client is initialized
+  if (!supabase) {
+      logger.error('AuthMiddleware: Supabase client not initialized.');
+      return res.status(503).json({ message: 'Authentication service is unavailable.' }); // 503 Service Unavailable
   }
 
   // Token variable now holds the token from either header or query param
 
   try {
-    // Verify token
-    const decoded = jwt.verify(token, JWT_SECRET);
+    // Verify token using Supabase client
+    const { data: { user }, error } = await supabase.auth.getUser(token);
 
-    // Add user from payload to request object
-    req.user = decoded.user; // Contains { id: user.id, username: user.username }
-    if (!req.user || !req.user.id) {
-        logger.error('Token decoded but user ID missing in payload', { decodedPayload: decoded });
-        return res.status(401).json({ message: 'Token is not valid (Payload Error).' });
+    if (error) {
+      // Handle specific Supabase errors if needed
+      logger.warn('Supabase token verification failed', { error: error.message, status: error.status });
+      // Map Supabase error status codes if possible, default to 401
+      const statusCode = error.status && typeof error.status === 'number' ? error.status : 401;
+      return res.status(statusCode).json({ message: error.message || 'Token is not valid or has expired.' });
     }
+
+    if (!user) {
+        // This case might occur if the token is valid but doesn't correspond to a user
+        logger.warn('Supabase token verification succeeded but no user found.');
+        return res.status(401).json({ message: 'Token is valid but no user session found.' });
+    }
+
+    // Add user from Supabase payload to request object
+    // Ensure the structure matches what downstream routes expect
+    req.user = {
+        id: user.id, // Supabase user ID (UUID)
+        email: user.email, // Supabase user email
+        // Add other relevant fields from 'user' object if needed by your application
+        // e.g., user.app_metadata, user.user_metadata
+    };
+
+    logger.debug(`AuthMiddleware: User authenticated: ${req.user.id}`);
     next(); // Proceed to the next middleware or route handler
+
   } catch (err) {
-    // Log specific JWT errors differently if needed (e.g., TokenExpiredError)
-    logger.warn('Token verification failed', { error: err.message, tokenProvided: !!token });
-    res.status(401).json({ message: 'Token is not valid or has expired.' }); // Slightly more informative message
+    // Catch unexpected errors during the process
+    logger.error('Unexpected error during Supabase token verification', { error: err });
+    res.status(500).json({ message: 'Internal server error during authentication.' });
   }
 };

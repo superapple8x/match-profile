@@ -22,30 +22,57 @@ analysis_results = {}
 
 try:
     df = pd.read_csv('/input/data.csv', encoding='utf-8')
-
+    
     numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
     categorical_cols = df.select_dtypes(include=['object', 'category', 'boolean']).columns.tolist()
     analysis_results['identified_numeric_columns'] = numeric_cols
     analysis_results['identified_categorical_columns'] = categorical_cols
 
-    if 'Location' in df.columns and 'Total Time Spent' in df.columns:
-        df['Total Time Spent_numeric'] = pd.to_numeric(df['Total Time Spent'], errors='coerce')
-        if not df['Total Time Spent_numeric'].isnull().all():
-            top_countries = df.groupby('Location')['Total Time Spent_numeric'].sum().nlargest(5)
-            analysis_results['top_5_countries_most_wasted_time'] = top_countries.to_dict()
-            
+    if numeric_cols:
+        numeric_summary = {}
+        for col in numeric_cols:
+            numeric_summary[col] = {
+                'count': df[col].count(),
+                'mean': df[col].mean(),
+                'std': df[col].std(),
+                'min': df[col].min(),
+                '25%': df[col].quantile(0.25),
+                '50%': df[col].median(),
+                '75%': df[col].quantile(0.75),
+                'max': df[col].max()
+            }
+        analysis_results['numeric_summary'] = numeric_summary
+
+        for i, col in enumerate(numeric_cols[:3]):  # Limit to first 3 numeric columns for plots
             plt.figure(figsize=(10, 6))
-            sns.barplot(x=top_countries.values, y=top_countries.index)
-            plt.title('Top 5 Countries with Most Wasted Time')
-            plt.xlabel('Total Time Spent')
-            plt.ylabel('Country')
+            sns.histplot(df[col].dropna(), kde=True)
+            plt.title(f'Distribution of {col}')
             plt.tight_layout()
-            plt.savefig('/output/plot_1.png')
+            plt.savefig(f'/output/plot_{i+1}.png')
             plt.close()
-        else:
-            analysis_results['error'] = "Column 'Total Time Spent' could not be treated as numeric."
     else:
-        analysis_results['error'] = "Required columns 'Location' or 'Total Time Spent' not found in dataset."
+        analysis_results['numeric_summary_warning'] = "No numeric columns identified for summary."
+
+    if categorical_cols:
+        categorical_summary = {}
+        for col in categorical_cols:
+            categorical_summary[col] = {
+                'count': df[col].count(),
+                'unique': df[col].nunique(),
+                'top': df[col].mode()[0] if not df[col].mode().empty else None,
+                'freq': df[col].value_counts().iloc[0] if not df[col].value_counts().empty else None
+            }
+        analysis_results['categorical_summary'] = categorical_summary
+
+        for i, col in enumerate(categorical_cols[:3]):  # Limit to first 3 categorical columns for plots
+            plt.figure(figsize=(10, 6))
+            sns.countplot(data=df, y=col, order=df[col].value_counts().index)
+            plt.title(f'Counts for {col}')
+            plt.tight_layout()
+            plt.savefig(f'/output/plot_{i+4}.png')
+            plt.close()
+    else:
+        analysis_results['categorical_summary_warning'] = "No categorical columns identified for summary."
 
     final_stats = convert_numpy_types(analysis_results)
     with open('/output/stats.json', 'w') as f:

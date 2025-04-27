@@ -8,9 +8,6 @@
     "start:prod": "pm2 start index.js --no-daemon",
     "stop:prod": "pm2 stop index.js",
     "logs:prod": "pm2 logs",
-    "db:migrate:create": "node-pg-migrate create",
-    "db:migrate:up": "node-pg-migrate up",
-    "db:migrate:down": "node-pg-migrate down",
     "lint": "eslint . --ext .js",
     "format": "prettier --write \"**/*.js\""
   },

@@ -6,7 +6,7 @@ const { EventEmitter } = require('events');
 const { PassThrough } = require('stream'); // For handling Docker streams
 
 // Configuration
-const UPLOAD_DIR = path.join(__dirname, '..', 'uploads'); // Assumed location of uploaded datasets
+// const UPLOAD_DIR = path.join(__dirname, '..', 'uploads'); // Assumed location of uploaded datasets - No longer used for reading
 const KERNEL_SCRIPT_PATH = path.join(__dirname, '..', 'python-kernel', 'kernel_runner.py');
 const PYTHON_COMMAND = 'python3'; // Fallback/reference, not used for Docker
 const KERNEL_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes idle timeout
@@ -16,6 +16,8 @@ const DOCKER_IMAGE_NAME = 'python-analysis-sandbox:latest'; // Image used by doc
 const KERNEL_TEMP_BASE_DIR = path.join(__dirname, '..', 'docker_temp', 'match-profile-kernels');
 
 const docker = new Docker(); // Instantiate Dockerode
+const { query } = require('../config/db'); // Import the query function
+const Papa = require('papaparse'); // Import PapaParse for CSV formatting
 
 class KernelManager extends EventEmitter {
   constructor() {
@@ -70,18 +72,50 @@ class KernelManager extends EventEmitter {
       // ---
 
       // datasetId here is the original filename (datasetIdentifier) passed from the route
-      const originalFileName = datasetId;
+      const originalFileName = datasetId; // Keep original name for metadata lookup
+      console.log(`KernelManager: Looking up metadata for dataset identifier: "${originalFileName}" and user ID: ${userId}`);
 
-      // Apply the SAME sanitization logic used elsewhere (e.g., fileOperations)
-      // to get the expected filename on disk.
-      const sanitizedDiskFileName = path.basename(originalFileName).replace(/[^a-zA-Z0-9._-]/g, '_');
-      console.log(`KernelManager: Original filename "${originalFileName}", Sanitized for disk access: "${sanitizedDiskFileName}"`);
+      // --- Fetch Dataset from Database ---
+      // 1. Get metadata (table name, columns) based on original filename and user ID
+      const metadataSql = `
+        SELECT id, db_table_name, columns_metadata
+        FROM dataset_metadata
+        WHERE dataset_identifier = $1 AND user_id ${userId === null ? 'IS NULL' : '= $2'}
+        ORDER BY created_at DESC LIMIT 1; -- Get the latest if duplicates exist (shouldn't happen with overwrite logic)
+      `;
+      const metadataParams = userId === null ? [originalFileName] : [originalFileName, userId];
+      const metadataResult = await query(metadataSql, metadataParams);
 
-      const datasetPath = path.join(UPLOAD_DIR, sanitizedDiskFileName); // Use sanitized name for path
-      console.log(`KernelManager: Checking access for path: ${datasetPath}`);
-      // Basic check if dataset file exists (using the sanitized name)
-      await fs.access(datasetPath);
-      console.log(`KernelManager: File access confirmed for host path: ${datasetPath}`);
+      if (metadataResult.rows.length === 0) {
+        throw new Error(`Dataset metadata not found for identifier "${originalFileName}" and user ${userId}.`);
+      }
+      const { db_table_name: dbTableName, columns_metadata: columnsMetadataJson } = metadataResult.rows[0];
+      const columnsMetadata = JSON.parse(columnsMetadataJson); // Assuming it's stored as JSON string
+      console.log(`KernelManager: Found metadata. DB Table: ${dbTableName}`);
+
+      // 2. Fetch all data from the table
+      // Select columns using their sanitized names from metadata
+      const selectColumns = columnsMetadata.map(col => `"${col.sanitizedName}" AS "${col.originalName}"`).join(', ');
+      const dataSql = `SELECT ${selectColumns} FROM "${dbTableName}";`;
+      console.log(`KernelManager: Fetching data from table ${dbTableName}...`);
+      const dataResult = await query(dataSql);
+      const datasetData = dataResult.rows; // Array of objects with original column names as keys
+      console.log(`KernelManager: Fetched ${datasetData.length} rows from database.`);
+
+      // 3. Convert data to CSV string
+      const csvData = Papa.unparse(datasetData, {
+          header: true, // Include headers based on object keys (original names)
+          quotes: true, // Ensure fields are quoted
+      });
+
+      // 4. Write CSV data to a temporary file within the session's output directory
+      const tempDatasetPath = path.join(tempOutputDir, 'data.csv');
+      await fs.writeFile(tempDatasetPath, csvData);
+      await fs.chmod(tempDatasetPath, 0o666); // Ensure container user can read
+      console.log(`KernelManager: Wrote dataset to temporary file: ${tempDatasetPath}`);
+      // --- End Fetch Dataset ---
+
+      // Check kernel script access
       await fs.access(KERNEL_SCRIPT_PATH);
       console.log(`KernelManager: Kernel script access confirmed for host path: ${KERNEL_SCRIPT_PATH}`);
 
@@ -96,8 +130,8 @@ class KernelManager extends EventEmitter {
           Binds: [
             // Mount kernel script read-only
             `${KERNEL_SCRIPT_PATH}:/app/kernel_runner.py:ro,z`,
-            // Mount dataset file read-only
-            `${datasetPath}:/input/data.csv:ro,z`,
+            // Mount the TEMPORARY dataset file read-only
+            `${tempDatasetPath}:/input/data.csv:ro,z`,
             // Mount the temporary output directory read-write
             `${tempOutputDir}:/output:rw,z`,
             // Mount passwd for user info (optional but helpful for diagnostics)

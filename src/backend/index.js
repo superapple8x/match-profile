@@ -8,7 +8,8 @@ const fsp = require('fs').promises; // Use fs.promises
 const path = require('path');
 const crypto = require('crypto'); // For generating unique IDs
 const Docker = require('dockerode');
-const { query, pool } = require('./config/db'); // Import query function and pool
+// Removed: const { query, pool } = require('./config/db'); // Import query function and pool
+const supabase = require('./config/supabaseClient'); // Import the Supabase client
 const Papa = require('papaparse'); // Import papaparse for CSV stringifying
 const fileOperationsRoutes = require('./routes/fileOperations');
 const authRoutes = require('./routes/auth'); // Import auth routes
@@ -157,7 +158,7 @@ function sendSseUpdate(res, data) {
 }
 // ---
 
-// --- Analysis Logic (Refactored) ---
+// --- Analysis Logic (Refactored for Supabase) ---
 async function performAnalysis(res, analysisId, analysisPrompt, datasetId) { // Renamed 'query' parameter to 'analysisPrompt'
     let tempDirToClean = null;
     let pythonLogs = ''; // Store logs specifically from python execution
@@ -190,6 +191,11 @@ async function performAnalysis(res, analysisId, analysisPrompt, datasetId) { // 
     // ---
 
     try {
+        // Check if Supabase client is available
+        if (!supabase) {
+            throw new Error('Supabase client is not initialized. Cannot perform analysis.');
+        }
+
         logAndEmit('info', 'Fetching dataset metadata...');
         const metadata = await metadataService.getMetadata(datasetId); // Assumes this returns { dbTableName, columnsMetadata, ... }
         if (!metadata || !metadata.dbTableName || !metadata.columnsMetadata) {
@@ -197,17 +203,25 @@ async function performAnalysis(res, analysisId, analysisPrompt, datasetId) { // 
         }
         logAndEmit('info', `Metadata fetched for table: ${metadata.dbTableName}`);
 
-        // --- Fetch Data from DB ---
+        // --- Fetch Data from DB using Supabase ---
         logAndEmit('debug', `Fetching data from table: ${metadata.dbTableName}...`);
-        const dataSql = `SELECT * FROM "${metadata.dbTableName}";`; // Select all columns
-        const dataResult = await query(dataSql);
-        const datasetRows = dataResult.rows;
-        logAndEmit('debug', `Fetched ${datasetRows.length} rows.`);
+        // Removed: const dataSql = `SELECT * FROM "${metadata.dbTableName}";`; // Select all columns
+        // Removed: const dataResult = await query(dataSql);
+        const { data: datasetRows, error: dbError } = await supabase
+            .from(metadata.dbTableName)
+            .select('*'); // Select all columns
+
+        if (dbError) {
+            throw new Error(`Database error fetching data: ${dbError.message}`);
+        }
+
+        // datasetRows is now the array of rows, equivalent to dataResult.rows previously
+        logAndEmit('debug', `Fetched ${datasetRows ? datasetRows.length : 0} rows.`);
         // ---
 
         // --- Convert Data to CSV String ---
         let datasetCsvString = '';
-        if (datasetRows.length > 0) {
+        if (datasetRows && datasetRows.length > 0) { // Check if datasetRows is not null/undefined
             logAndEmit('debug', 'Converting data to CSV format...');
             // Get original column names in the correct order from metadata
             const originalHeaders = metadata.columnsMetadata.map(col => col.originalName);
@@ -228,7 +242,7 @@ async function performAnalysis(res, analysisId, analysisPrompt, datasetId) { // 
             });
             logAndEmit('debug', 'Data converted to CSV string.');
         } else {
-            logAndEmit('info', 'Dataset is empty, creating empty CSV string.');
+            logAndEmit('info', 'Dataset is empty or fetch failed, creating empty CSV string.');
             // Create CSV with only headers if the table is empty
              const originalHeaders = metadata.columnsMetadata.map(col => col.originalName);
              datasetCsvString = Papa.unparse([], { header: true, columns: originalHeaders });
@@ -433,13 +447,27 @@ app.get('/healthz', (req, res) => {
 
 app.get('/readyz', async (req, res) => {
   // Readiness check - is the server ready to accept traffic? (e.g., DB connected)
+  if (!supabase) {
+      logger.error('Readiness check failed: Supabase client not initialized.');
+      return res.status(503).send('Service Unavailable');
+  }
   try {
-    const client = await pool.connect();
-    await client.query('SELECT 1'); // Simple query to check connection
-    client.release();
+    // Perform a simple query to check Supabase connection
+    // Using rpc('SELECT 1') is a common way to ping the DB
+    const { error } = await supabase.rpc('SELECT 1'); // Check Supabase connection
+
+    if (error) {
+        throw error; // Throw error to be caught below
+    }
+
+    // Removed old pool logic:
+    // const client = await pool.connect();
+    // await client.query('SELECT 1'); // Simple query to check connection
+    // client.release();
+
     res.status(200).send('OK');
   } catch (err) {
-    logger.error('Readiness check failed: Database connection error', { error: err });
+    logger.error('Readiness check failed: Supabase connection error', { error: err });
     res.status(503).send('Service Unavailable'); // 503 Service Unavailable
   }
 });
@@ -452,7 +480,7 @@ app.listen(port, () => {
 // Graceful shutdown handling
 const gracefulShutdown = (signal) => {
   logger.info(`${signal} received. Shutting down gracefully...`);
-  // Add any cleanup logic here (e.g., close database connections)
+  // Add any cleanup logic here (e.g., close database connections if needed, though Supabase client might handle this)
   // Give time for ongoing requests to finish if needed
   process.exit(0);
 };

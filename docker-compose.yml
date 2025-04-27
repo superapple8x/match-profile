@@ -16,6 +16,9 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3001:3001"
+    # Load environment variables from a .env file in the project root
+    env_file:
+      - .env
     depends_on:
       - frontend
     networks:
