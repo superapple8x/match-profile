@@ -9,7 +9,8 @@ const fs = require('fs').promises; // Use fs.promises
 const path = require('path'); // Need path module
 const authMiddleware = require('../middleware/authMiddleware'); // Import auth middleware
 const optionalAuthMiddleware = require('../middleware/optionalAuthMiddleware'); // Import optional auth middleware
-const { query, pool: dbPool } = require('../config/db'); // Import query function and the instantiated pool
+// Removed: const { query, pool: dbPool } = require('../config/db'); // Import query function and the instantiated pool
+const supabase = require('../config/supabaseClient'); // Import the Supabase client
 const { body, query: queryValidator, param, validationResult } = require('express-validator'); // Import validation functions
 const logger = require('../config/logger'); // Import logger
 // const { fileTypeFromBuffer } = require('file-type'); // Import file-type - Changed to dynamic import due to package being ESM
@@ -63,8 +64,12 @@ function inferColumnType(value) {
   return 'TEXT'; // Default to TEXT
 }
 
-// --- Metadata Caching Helper ---
+// --- Metadata Caching Helper (Refactored for Supabase) ---
 async function getMetadataWithCache(datasetId) {
+  if (!supabase) {
+      logger.error('[Cache] Supabase client not available for metadata fetch.');
+      return null;
+  }
   const cacheKey = `metadata_${datasetId}`;
   let metadata = cache.get(cacheKey);
 
@@ -74,26 +79,30 @@ async function getMetadataWithCache(datasetId) {
   }
 
   logger.debug(`[Cache] MISS for metadata: ${cacheKey}. Fetching from DB.`);
-  // Fetch from DB if not in cache
-  const metadataSql = `
-    SELECT db_table_name, columns_metadata, user_id AS owner_id
-    FROM dataset_metadata
-    WHERE id = $1;
-  `;
-  const metadataResult = await query(metadataSql, [datasetId]);
+  // Fetch from DB if not in cache using Supabase client
+  const { data: dbRow, error: dbError } = await supabase
+    .from('dataset_metadata')
+    .select('db_table_name, columns_metadata, user_id') // user_id is UUID from auth.users
+    .eq('id', datasetId)
+    .maybeSingle(); // Use maybeSingle() as datasetId might not exist
 
-  if (metadataResult.rows.length === 0) {
+  if (dbError) {
+    logger.error('[Cache] Error fetching metadata from Supabase', { datasetId, error: dbError });
+    return null;
+  }
+
+  if (!dbRow) {
+    logger.warn(`[Cache] Metadata not found in DB for dataset ID: ${datasetId}`);
     return null; // Indicate not found
   }
 
   // Prepare metadata object (ensure columns_metadata is parsed)
-  const dbRow = metadataResult.rows[0];
   metadata = {
     db_table_name: dbRow.db_table_name,
     columns_metadata: typeof dbRow.columns_metadata === 'string'
       ? JSON.parse(dbRow.columns_metadata)
       : dbRow.columns_metadata,
-    owner_id: dbRow.owner_id
+    owner_id: dbRow.user_id // Renamed user_id to owner_id for consistency in this function's return value
   };
 
   // Store in cache (using default TTL from cacheService)
@@ -141,8 +150,15 @@ const upload = multer({
 // File import endpoint - Use optionalAuthMiddleware
 router.post('/import', optionalAuthMiddleware, upload.single('file'), async (req, res) => { // Use optional auth
   logger.info('--- /api/import request received ---');
+  let dbTableName = null; // Keep track of table name for potential cleanup
+
   try {
-    // User ID might be null if request is anonymous
+    // Check if Supabase client is available
+    if (!supabase) {
+        throw new Error('Supabase client is not initialized. Cannot process import.');
+    }
+
+    // User ID might be null if request is anonymous (UUID format from Supabase)
     const userId = req.user?.id || null;
     logger.info(`[Import] User ID: ${userId === null ? 'Anonymous' : userId}`);
 
@@ -236,7 +252,7 @@ router.post('/import', optionalAuthMiddleware, upload.single('file'), async (req
     }
     // No 'else' needed here as fileTypeCheckPassed ensures we only handle allowed types
 
-    // --- Database Interaction Logic ---
+    // --- Database Interaction Logic (Refactored for Supabase) ---
     if (!parsedData || parsedData.length === 0) {
       logger.warn('[Import] Parsed data is empty, skipping database operations.');
       return res.status(400).json({ error: 'No data found in the uploaded file.' });
@@ -272,51 +288,65 @@ router.post('/import', optionalAuthMiddleware, upload.single('file'), async (req
     // 2. Generate Unique Table Name
     const timestamp = Date.now();
     // Use 'anonymous' in table name if userId is null
-    const userPart = userId ? `user_${userId}` : 'anonymous';
-    const dbTableName = sanitizeDbIdentifier(`dataset_${userPart}_${timestamp}_${safeFileName}`);
+    const userPart = userId ? `user_${userId.replace(/-/g, '_')}` : 'anonymous'; // Replace hyphens in UUID for table name
+    dbTableName = sanitizeDbIdentifier(`dataset_${userPart}_${timestamp}_${safeFileName}`);
     logger.info(`[Import] Generated DB Table Name: ${dbTableName}`);
 
-    // --- Overwrite Logic: Check for and clean up existing dataset with the same identifier ---
-    // Adjust query based on whether userId is null
-    let checkExistingSql;
-    let checkParams;
-    if (userId) {
-        checkExistingSql = `
-          SELECT id, db_table_name FROM dataset_metadata
-          WHERE user_id = $1 AND dataset_identifier = $2;
-        `;
-        checkParams = [userId, originalFileName];
-    } else {
-        // For anonymous, only check based on identifier where user_id IS NULL
-        // Note: This means an anonymous user overwrites the *last* anonymous upload with the same name.
-        // Consider if a different strategy is needed for anonymous overwrites (e.g., disallow, or keep multiple).
-        // For now, we'll allow overwriting the last anonymous upload with the same name.
-        checkExistingSql = `
-          SELECT id, db_table_name FROM dataset_metadata
-          WHERE user_id IS NULL AND dataset_identifier = $1
-          ORDER BY created_at DESC LIMIT 1; -- Find the most recent anonymous one
-        `;
-        checkParams = [originalFileName];
-    }
+    // --- Overwrite Logic: Check for and clean up existing dataset with the same identifier (Refactored for Supabase) ---
+    let oldMetadataId = null;
+    let oldDbTableName = null;
 
     try {
-        const existingResult = await query(checkExistingSql, checkParams);
-        if (existingResult.rows.length > 0) {
-            const oldMetadataId = existingResult.rows[0].id;
-            const oldDbTableName = existingResult.rows[0].db_table_name;
+        let query = supabase
+            .from('dataset_metadata')
+            .select('id, db_table_name')
+            .eq('dataset_identifier', originalFileName);
+
+        if (userId) {
+            query = query.eq('user_id', userId);
+        } else {
+            query = query.is('user_id', null).order('created_at', { ascending: false }).limit(1);
+        }
+
+        const { data: existingData, error: checkError } = await query;
+
+        if (checkError) {
+            throw new Error(`Error checking for existing dataset: ${checkError.message}`);
+        }
+
+        if (existingData && existingData.length > 0) {
+            oldMetadataId = existingData[0].id;
+            oldDbTableName = existingData[0].db_table_name;
             const userIdentifierLog = userId ? `user ${userId}` : 'anonymous user';
             logger.info(`[Import] Found existing dataset metadata (ID: ${oldMetadataId}) for "${originalFileName}" and ${userIdentifierLog}. Table: "${oldDbTableName}". Proceeding with overwrite.`);
 
             // Delete old metadata AND invalidate cache
-            const deleteMetadataSql = `DELETE FROM dataset_metadata WHERE id = $1;`;
-            await query(deleteMetadataSql, [oldMetadataId]);
+            const { error: deleteMetaError } = await supabase
+                .from('dataset_metadata')
+                .delete()
+                .eq('id', oldMetadataId);
+
+            if (deleteMetaError) {
+                throw new Error(`Failed to delete old metadata record (ID: ${oldMetadataId}): ${deleteMetaError.message}`);
+            }
             cache.del(`metadata_${oldMetadataId}`); // Invalidate cache
             logger.info(`[Import] Deleted old metadata record (ID: ${oldMetadataId}) and invalidated cache.`);
 
-            // Drop old table
-            const dropTableSql = `DROP TABLE IF EXISTS "${oldDbTableName}";`; // Ensure table name is quoted
-            await query(dropTableSql);
-            logger.info(`[Import] Dropped old database table "${oldDbTableName}".`);
+            // Drop old table - REQUIRES a custom DB function called via RPC
+            logger.info(`[Import] Attempting to drop old database table "${oldDbTableName}" via RPC.`);
+            // const { error: dropError } = await supabase.rpc('drop_dataset_table', { table_name: oldDbTableName });
+            // if (dropError) {
+            //     // Log error but potentially continue, or throw depending on desired strictness
+            //     logger.error(`[Import] Error dropping old table "${oldDbTableName}" via RPC`, { error: dropError });
+            //     // throw new Error(`Failed to drop old table: ${dropError.message}`);
+            // } else {
+            //     logger.info(`[Import] Successfully requested drop for old table "${oldDbTableName}".`);
+            // }
+            logger.warn(`[Import] Dropping table "${oldDbTableName}" requires a custom Supabase function 'drop_dataset_table'. Skipping drop.`);
+            // --- Placeholder for RPC call ---
+            // TODO: Implement and call `supabase.rpc('drop_dataset_table', { table_name: oldDbTableName })`
+            // Ensure the 'drop_dataset_table' function exists in your Supabase SQL editor and has appropriate permissions.
+
         }
     } catch (cleanupError) {
         logger.error('[Import] Error during cleanup of existing dataset', { error: cleanupError });
@@ -328,82 +358,96 @@ router.post('/import', optionalAuthMiddleware, upload.single('file'), async (req
     // --- End Overwrite Logic ---
 
 
-    // Use a database client from the imported pool for transaction control
-    const dbClient = await dbPool.connect(); // Get client from the actual pool
+    // --- Transaction logic removed - Handled per operation or via DB functions ---
+    // Removed: const dbClient = await dbPool.connect();
+    // Removed: await dbClient.query('BEGIN');
 
     try {
-      await dbClient.query('BEGIN'); // Start transaction
+      // 3. Create Table Dynamically - REQUIRES a custom DB function called via RPC
+      logger.info(`[Import] Requesting CREATE TABLE for ${dbTableName} via RPC.`);
+      const createTableColumnsDef = columnsMetadata.map(col => ({
+          name: col.sanitizedName,
+          type: col.type
+      }));
+      // const { error: createError } = await supabase.rpc('create_dataset_table', {
+      //     table_name: dbTableName,
+      //     columns_def: createTableColumnsDef // Pass column definitions as JSON/array
+      // });
+      // if (createError) {
+      //     throw new Error(`Failed to create table "${dbTableName}" via RPC: ${createError.message}`);
+      // }
+      logger.warn(`[Import] Creating table "${dbTableName}" requires a custom Supabase function 'create_dataset_table'. Skipping creation.`);
+      // --- Placeholder for RPC call ---
+      // TODO: Implement and call `supabase.rpc('create_dataset_table', { table_name: dbTableName, columns_def: columnsMetadata })`
+      // Ensure the 'create_dataset_table' function exists, handles dynamic SQL safely, and adds the 'id' and 'original_row_index' columns.
 
-      // 3. Create Table Dynamically (Add original_row_index)
-      const createTableColumns = columnsMetadata
-        .map(col => `"${col.sanitizedName}" ${col.type}`)
-        .join(', ');
-      // Add the new column definition
-      const createTableSql = `CREATE TABLE "${dbTableName}" (id SERIAL PRIMARY KEY, original_row_index INTEGER, ${createTableColumns});`;
-      logger.info(`[Import] Executing CREATE TABLE for ${dbTableName}`); // Don't log full SQL by default
-      logger.debug(`[Import] CREATE TABLE SQL: ${createTableSql}`);
-      await dbClient.query(createTableSql);
-      logger.info(`[Import] Table "${dbTableName}" created successfully.`);
 
-      // 4. Insert Data (Include original_row_index)
+      // 4. Insert Data (Refactored for Supabase Batch Insert)
       logger.info(`[Import] Preparing to insert ${parsedData.length} rows into "${dbTableName}"...`);
-      // Add original_row_index to columns and placeholders
-      const insertColumns = `"original_row_index", ${columnsMetadata.map(col => `"${col.sanitizedName}"`).join(', ')}`;
-      const valuePlaceholders = columnsMetadata.map((_, index) => `$${index + 2}`).join(', '); // Start from $2
-      const insertSql = `INSERT INTO "${dbTableName}" (${insertColumns}) VALUES ($1, ${valuePlaceholders})`; // $1 is for index
 
-      // Execute inserts row by row, including the index
-      for (let i = 0; i < parsedData.length; i++) {
-        const row = parsedData[i];
-        const originalIndex = i + 1; // Use 1-based index for user display
+      const rowsToInsert = parsedData.map((row, i) => {
+          const newRow = { original_row_index: i + 1 }; // Add 1-based index
+          columnsMetadata.forEach(colMeta => {
+              let val = row[colMeta.originalName];
+              // Apply same coercion logic as before
+              if (colMeta.type === 'NUMERIC') {
+                  val = (val === null || val === undefined || val === '') ? null : parseFloat(val);
+                  if (isNaN(val)) val = null;
+              } else if (colMeta.type === 'BOOLEAN') {
+                  if (typeof val === 'string') {
+                      const lowerVal = val.trim().toLowerCase();
+                      val = lowerVal === 'true' ? true : (lowerVal === 'false' ? false : null);
+                  } else if (typeof val !== 'boolean') {
+                      val = null;
+                  }
+              } else if (colMeta.type === 'TIMESTAMP WITH TIME ZONE') {
+                   val = (val === null || val === undefined || val === '') ? null : new Date(val);
+                   if (isNaN(val.getTime())) val = null;
+              } else if (colMeta.type === 'TEXT' && val !== null && val !== undefined) {
+                   val = String(val).trim();
+              }
+              newRow[colMeta.sanitizedName] = val;
+          });
+          return newRow;
+      });
 
-        const values = columnsMetadata.map(col => {
-            let val = row[col.originalName];
-            // Basic type coercion (keep existing logic)
-            if (col.type === 'NUMERIC') {
-                val = (val === null || val === undefined || val === '') ? null : parseFloat(val);
-                if (isNaN(val)) val = null; // Handle parsing errors
-            } else if (col.type === 'BOOLEAN') {
-                if (typeof val === 'string') {
-                    const lowerVal = val.trim().toLowerCase();
-                    val = lowerVal === 'true' ? true : (lowerVal === 'false' ? false : null);
-                } else if (typeof val !== 'boolean') {
-                    val = null; // Or handle other types appropriately
-                }
-            } else if (col.type === 'TIMESTAMP WITH TIME ZONE') {
-                 val = (val === null || val === undefined || val === '') ? null : new Date(val);
-                 if (isNaN(val.getTime())) val = null; // Handle invalid dates
-            }
-            // Ensure TEXT values are strings and trim whitespace
-            else if (col.type === 'TEXT' && val !== null && val !== undefined) {
-                 val = String(val).trim(); // Trim whitespace here
-            }
-            return val;
-        });
-
-        // Prepend the original index to the values array
-        const finalValues = [originalIndex, ...values];
-        // console.log(`[Import] Inserting values:`, finalValues); // DEBUG log
-        await dbClient.query(insertSql, finalValues);
+      // Insert data in batches (Supabase client handles batching internally to some extent, but explicit batching for very large files is safer)
+      const BATCH_SIZE = 500; // Adjust batch size as needed
+      for (let i = 0; i < rowsToInsert.length; i += BATCH_SIZE) {
+          const batch = rowsToInsert.slice(i, i + BATCH_SIZE);
+          logger.debug(`[Import] Inserting batch ${i / BATCH_SIZE + 1} (${batch.length} rows)`);
+          const { error: insertError } = await supabase.from(dbTableName).insert(batch);
+          if (insertError) {
+              // Log details about the failing batch if possible
+              logger.error(`[Import] Error inserting batch starting at index ${i}`, { error: insertError });
+              throw new Error(`Database error during data insertion: ${insertError.message}`);
+          }
       }
       logger.info(`[Import] Successfully inserted ${parsedData.length} rows.`);
 
-      // 5. Store Metadata (Add original_row_index to metadata if needed for reference, though maybe not necessary)
-      // For now, we don't strictly need to add it to columns_metadata JSON,
-      // as the column exists in the table itself.
-      const metadataSql = `
-        INSERT INTO dataset_metadata (user_id, dataset_identifier, db_table_name, columns_metadata)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id;
-      `;
-      const metadataValues = [userId, originalFileName, dbTableName, JSON.stringify(columnsMetadata)];
+      // 5. Store Metadata (Refactored for Supabase)
+      const metadataToInsert = {
+          user_id: userId,
+          dataset_identifier: originalFileName,
+          db_table_name: dbTableName,
+          columns_metadata: columnsMetadata // Store as JSONB
+      };
       logger.info('[Import] Storing metadata', { userId, originalFileName, dbTableName });
-      const metadataResult = await dbClient.query(metadataSql, metadataValues);
-      const datasetId = metadataResult.rows[0].id;
+
+      const { data: insertedMetadata, error: metaInsertError } = await supabase
+          .from('dataset_metadata')
+          .insert(metadataToInsert)
+          .select('id') // Select the ID of the inserted row
+          .single(); // Expect only one row to be inserted
+
+      if (metaInsertError) {
+          throw new Error(`Database error storing metadata: ${metaInsertError.message}`);
+      }
+
+      const datasetId = insertedMetadata.id;
       logger.info(`[Import] Metadata stored successfully. Dataset ID: ${datasetId}`);
 
-      await dbClient.query('COMMIT'); // Commit transaction
-      logger.info('[Import] Transaction committed.');
+      // Removed: await dbClient.query('COMMIT');
 
       // 6. Update API Response
       logger.info(`[Import] Sending success response for dataset ID: ${datasetId}`);
@@ -414,30 +458,42 @@ router.post('/import', optionalAuthMiddleware, upload.single('file'), async (req
       });
 
     } catch (dbError) {
-      await dbClient.query('ROLLBACK'); // Rollback transaction on error
-      logger.error('[Import] Database error during import, transaction rolled back', { error: dbError });
-      // Attempt to drop the table if creation succeeded but insertion/metadata failed
-      try {
-          logger.warn(`[Import] Attempting to drop potentially created table "${dbTableName}" due to error.`);
-          await query(`DROP TABLE IF EXISTS "${dbTableName}";`); // Use original query function for cleanup
-          logger.info(`[Import] Cleanup successful for table "${dbTableName}".`);
-      } catch (cleanupError) {
-          logger.error(`[Import] Error during table cleanup for "${dbTableName}"`, { error: cleanupError });
+      // Removed: await dbClient.query('ROLLBACK');
+      logger.error('[Import] Database error during import', { error: dbError });
+
+      // Attempt to drop the table if creation *might* have succeeded but subsequent steps failed
+      // This still requires the custom DB function
+      if (dbTableName) {
+          try {
+              logger.warn(`[Import] Attempting to drop potentially created table "${dbTableName}" via RPC due to error.`);
+              // const { error: dropError } = await supabase.rpc('drop_dataset_table', { table_name: dbTableName });
+              // if (dropError) {
+              //     logger.error(`[Import] Error during RPC table cleanup for "${dbTableName}"`, { error: dropError });
+              // } else {
+              //     logger.info(`[Import] Cleanup requested via RPC for table "${dbTableName}".`);
+              // }
+              logger.warn(`[Import] Dropping table "${dbTableName}" requires a custom Supabase function 'drop_dataset_table'. Skipping drop on error.`);
+              // --- Placeholder for RPC call ---
+              // TODO: Implement and call `supabase.rpc('drop_dataset_table', { table_name: dbTableName })`
+          } catch (cleanupError) {
+              logger.error(`[Import] Exception during table cleanup attempt for "${dbTableName}"`, { error: cleanupError });
+          }
       }
-      throw new Error(`Database operation failed: ${dbError.message}`); // Re-throw to be caught by outer handler
+      // Re-throw the original error to be caught by the outer handler
+      throw dbError;
     } finally {
-      dbClient.release(); // Release the client back to the pool
-      logger.debug('[Import] Database client released.');
+      // Removed: dbClient.release();
+      logger.debug('[Import] Database operations finished (no client release needed).');
     }
 
   } catch (error) {
     logger.error("--- Error during file import ---", { error }); // Add marker for easier log searching
-    // Ensure a JSON error response is always sent, even if dbClient wasn't defined
+    // Ensure a JSON error response is always sent
     res.status(500).json({ error: 'Failed to process file', details: error.message });
   }
 });
 
-// File export endpoint (example: CSV)
+// File export endpoint (example: CSV) - No DB interaction, no changes needed
 router.get('/export/csv', (req, res) => {
   try {
     // Sample data (replace with your actual data source)
@@ -457,7 +513,7 @@ router.get('/export/csv', (req, res) => {
   }
 });
 
-// Match profiles endpoint - Modified for DB querying and optional auth
+// Match profiles endpoint - Modified for DB querying and optional auth (Refactored for Supabase)
 // Define validation rules for /match endpoint
 const matchValidationRules = [
   body('datasetId', 'Dataset ID is required').notEmpty(), // Add .isInt() if applicable
@@ -475,6 +531,10 @@ const matchValidationRules = [
 router.post('/match', optionalAuthMiddleware, matchValidationRules, validateRequest, async (req, res) => { // Use optionalAuthMiddleware, made async
   logger.info('--- /api/match request received ---');
   try {
+    // Check if Supabase client is available
+    if (!supabase) {
+        throw new Error('Supabase client is not initialized. Cannot process match request.');
+    }
     // User ID might be null if request is anonymous
     const userId = req.user?.id || null;
     logger.info(`[Match] Requesting User ID: ${userId === null ? 'Anonymous' : userId}`);
@@ -485,16 +545,16 @@ router.post('/match', optionalAuthMiddleware, matchValidationRules, validateRequ
         criteria, // Renamed from searchCriteria to match frontend payload
         weights,
         matchingRules,
-        page = 1, // Default to page 1
-        pageSize = 20, // Default page size
+        // page = 1, // Default to page 1 - Use validated value below
+        // pageSize = 20, // Default page size - Use validated value below
         sortBy, // Optional column to sort by (original name)
-        sortDirection = 'ASC' // Default sort direction
+        // sortDirection = 'ASC' // Default sort direction - Use validated value below
     } = req.body;
 
     // Use validated and potentially defaulted values
     const pageNum = parseInt(req.body.page || 1, 10);
     const pageSizeNum = parseInt(req.body.pageSize || 20, 10);
-    const upperSortDirection = req.body.sortDirection || 'ASC'; // Default handled by validation/logic below
+    const upperSortDirection = (req.body.sortDirection || 'ASC').toUpperCase(); // Default handled by validation/logic below
 
     logger.info('[Match] Received (validated):', { datasetId, criteria, weights, matchingRules, page: pageNum, pageSize: pageSizeNum, sortBy, sortDirection: upperSortDirection });
 
@@ -508,8 +568,8 @@ router.post('/match', optionalAuthMiddleware, matchValidationRules, validateRequ
     }
 
     // 2.1 Check Authorization: Authenticated users can only access their own datasets. Anonymous users can only access anonymous datasets.
-    const ownerId = metadata.owner_id;
-    if (ownerId !== userId) { // This covers both cases: (ownerId=null, userId=123) and (ownerId=123, userId=null) and (ownerId=123, userId=456)
+    const ownerId = metadata.owner_id; // owner_id is UUID or null
+    if (ownerId !== userId) { // This covers both cases: (ownerId=null, userId=UUID) and (ownerId=UUID, userId=null) and (ownerId=UUID1, userId=UUID2)
         logger.warn(`[Match] Authorization failed: User ${userId} attempted to access dataset ${datasetId} owned by user ${ownerId}.`);
         return res.status(403).json({ error: 'Access denied to this dataset.' });
     }
@@ -532,175 +592,96 @@ router.post('/match', optionalAuthMiddleware, matchValidationRules, validateRequ
         }
     }
 
-    // 4. Build Parameterized SQL Query
-    let whereClause = 'WHERE 1 = 1'; // Start with a clause that's always true
-    const queryParams = [];
-    let paramIndex = 1;
+    // 4. Build Supabase Query
+    let query = supabase.from(dbTableName).select('*', { count: 'exact' }); // Request count
 
-    // Define allowed operators
-    const allowedOperators = ['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'ILIKE', 'NOT LIKE', 'NOT ILIKE', 'IN', 'NOT IN', 'IS NULL', 'IS NOT NULL'];
-
-    criteria.forEach(criterion => { // Updated to iterate over 'criteria'
-      const { attribute, operator: rawOperator, value: rawValue } = criterion; // Expect operator and value
+    // Apply filters based on criteria
+    criteria.forEach(criterion => {
+      const { attribute, operator: rawOperator, value: rawValue } = criterion;
       const sanitizedColName = originalToSanitizedMap[attribute];
-      const colType = validDbColumns[sanitizedColName]; // Get the DB type
-      const rule = matchingRules?.[attribute] || {}; // Get the rule for this attribute, default to empty object
+      const colType = validDbColumns[sanitizedColName];
+      const operator = rawOperator?.toUpperCase() || (colType === 'TEXT' ? 'ILIKE' : 'EQ'); // Default operator
 
-      // Validate operator, BUT override for partial matching rule
-      let operator = rawOperator && allowedOperators.includes(rawOperator.toUpperCase())
-                       ? rawOperator.toUpperCase()
-                       : (colType === 'TEXT' ? 'ILIKE' : '='); // Default based on type if invalid/missing
-
-      let value = rawValue;
-      let queryFragment = '';
-
-      // --- Removed specific override for partial text match ---
-      // Let the standard logic below handle operator and value based on input criteria
-
-
-      // Handle operators that don't need a value
-      if (operator === 'IS NULL' || operator === 'IS NOT NULL') {
-        queryFragment = `"${sanitizedColName}" ${operator}`;
-      } else if (rawValue === undefined || rawValue === null) {
-         // Skip criteria if value is missing for operators that require it
-         logger.warn(`[Match] Missing value for attribute "${attribute}" with operator "${operator}". Skipping criterion.`);
-         return;
-      }
-      // Standard handling for operators requiring a value
-      else {
-        // Handle type coercion/validation based on column type AND operator
-        try {
-          if (operator === 'IN' || operator === 'NOT IN') {
-            // Use rawValue for array check
-             if (!Array.isArray(rawValue)) {
-               throw new Error(`Value for IN/NOT IN must be an array.`);
-             }
-             if (rawValue.length === 0) {
-                  logger.warn(`[Match] Empty array provided for IN/NOT IN for attribute "${attribute}". Skipping criterion.`);
-                  return; // Skip if array is empty
-             }
-             // Coerce array elements based on column type from rawValue
-             value = rawValue.map(item => {
-               if (colType === 'NUMERIC') return parseFloat(item);
-               if (colType === 'BOOLEAN') {
-                   if (typeof item === 'string') {
-                       const lower = item.trim().toLowerCase();
-                       return lower === 'true' ? true : (lower === 'false' ? false : null);
-                   }
-                   return typeof item === 'boolean' ? item : null;
-               }
-               return String(item);
-             }).filter(item => item !== null && (typeof item === 'boolean' || !isNaN(item) || colType === 'TEXT')); // Simplified filter
-
-             if (value.length === 0) {
-                  logger.warn(`[Match] Array became empty after type coercion for IN/NOT IN for attribute "${attribute}". Skipping criterion.`);
-                  return; // Skip if array is empty after coercion
-             }
-             const placeholders = value.map(() => `$${paramIndex++}`).join(', ');
-             queryFragment = `"${sanitizedColName}" ${operator} (${placeholders})`;
-             queryParams.push(...value); // Add coerced values
-
-          } else {
-            // Handle single value operators (use rawValue for coercion)
-            value = rawValue; // Reset value to rawValue for coercion
-            if (colType === 'NUMERIC') {
-              value = parseFloat(value);
-              if (isNaN(value)) throw new Error('Invalid numeric value');
-            } else if (colType === 'BOOLEAN') {
-              if (typeof value === 'string') {
-                const lowerVal = value.trim().toLowerCase();
-                value = lowerVal === 'true' ? true : (lowerVal === 'false' ? false : null);
-              }
-              if (typeof value !== 'boolean') throw new Error('Invalid boolean value');
-            } else if (colType === 'TIMESTAMP WITH TIME ZONE') {
-              value = new Date(value);
-              if (isNaN(value.getTime())) throw new Error('Invalid date/timestamp value');
-            } else { // TEXT
-              value = String(value);
-              // For standard LIKE/ILIKE, wildcards must be explicit in input
-              // For '=', it will be an exact match
-            }
-
-            // Standard operator handling
-            queryFragment = `"${sanitizedColName}" ${operator} $${paramIndex++}`;
-            queryParams.push(value); // Push the coerced value
+      // Basic operator mapping (can be expanded)
+      // Note: Supabase client uses method names like eq, neq, gt, gte, lt, lte, like, ilike, is, in, contains, containedBy etc.
+      try {
+          let filterValue = rawValue;
+          // Type coercion (similar to before, adjust if needed)
+          if (colType === 'NUMERIC' && typeof filterValue !== 'number') filterValue = parseFloat(filterValue);
+          if (colType === 'BOOLEAN' && typeof filterValue !== 'boolean') {
+              if (typeof filterValue === 'string') {
+                  const lower = filterValue.trim().toLowerCase();
+                  filterValue = lower === 'true' ? true : (lower === 'false' ? false : null);
+              } else filterValue = null;
           }
-        } catch (error) {
-           logger.warn(`[Match] Error processing criterion for attribute "${attribute}" (Value: "${rawValue}", Operator: "${operator}", Type: ${colType}): ${error.message}. Skipping criterion.`);
-           return; // Skip this criterion on error
-        }
-      }
+          if (colType === 'TIMESTAMP WITH TIME ZONE' && !(filterValue instanceof Date)) filterValue = new Date(filterValue);
+          if (colType === 'TEXT' && typeof filterValue !== 'string') filterValue = String(filterValue);
 
-      // Add the fragment to the WHERE clause
-      if (queryFragment) {
-        whereClause += ` AND (${queryFragment})`; // Wrap in parentheses for safety
+          // Apply filter based on operator
+          switch (operator) {
+              case '=': case 'EQ': query = query.eq(sanitizedColName, filterValue); break;
+              case '!=': case 'NEQ': query = query.neq(sanitizedColName, filterValue); break;
+              case '>': case 'GT': query = query.gt(sanitizedColName, filterValue); break;
+              case '>=': case 'GTE': query = query.gte(sanitizedColName, filterValue); break;
+              case '<': case 'LT': query = query.lt(sanitizedColName, filterValue); break;
+              case '<=': case 'LTE': query = query.lte(sanitizedColName, filterValue); break;
+              case 'LIKE': query = query.like(sanitizedColName, filterValue); break; // Requires explicit wildcards in value
+              case 'ILIKE': query = query.ilike(sanitizedColName, filterValue); break; // Requires explicit wildcards in value
+              case 'IS NULL': query = query.is(sanitizedColName, null); break;
+              case 'IS NOT NULL': query = query.not(sanitizedColName, 'is', null); break;
+              case 'IN':
+                  if (Array.isArray(filterValue) && filterValue.length > 0) {
+                      query = query.in(sanitizedColName, filterValue);
+                  } else {
+                     logger.warn(`[Match] Invalid or empty array for IN operator on ${attribute}. Skipping filter.`);
+                  }
+                  break;
+              // Add NOT LIKE, NOT ILIKE, NOT IN if needed
+              default:
+                  logger.warn(`[Match] Unsupported operator "${operator}" for attribute "${attribute}". Skipping filter.`);
+          }
+      } catch (error) {
+          logger.warn(`[Match] Error processing criterion for attribute "${attribute}" (Value: "${rawValue}", Operator: "${operator}", Type: ${colType}): ${error.message}. Skipping filter.`);
       }
     });
 
-    // 4.1 Build ORDER BY clause
-    let orderByClause = 'ORDER BY "id" ASC'; // Default sort for consistent pagination
+    // Apply sorting
+    let isValidSortBy = false;
     if (sortBy && originalToSanitizedMap.hasOwnProperty(sortBy)) {
         const sanitizedSortBy = originalToSanitizedMap[sortBy];
-        // Ensure the sanitized column name is valid before using it
         if (validDbColumns.hasOwnProperty(sanitizedSortBy)) {
-             // Use the validated upperSortDirection
-            orderByClause = `ORDER BY "${sanitizedSortBy}" ${upperSortDirection}`;
-            logger.info(`[Match] Applying sorting: ${orderByClause}`);
+            query = query.order(sanitizedSortBy, { ascending: upperSortDirection === 'ASC' });
+            isValidSortBy = true;
+            logger.info(`[Match] Applying sorting: ORDER BY ${sanitizedSortBy} ${upperSortDirection}`);
         } else {
-            logger.warn(`[Match] Invalid sortBy column specified: ${sortBy}. Defaulting to ID sort.`);
+             logger.warn(`[Match] Invalid sortBy column specified: ${sortBy}. Defaulting to ID sort.`);
         }
     } else if (sortBy) {
          logger.warn(`[Match] sortBy column "${sortBy}" not found in dataset metadata. Defaulting to ID sort.`);
     }
+    // Default sort if no valid sortBy provided
+    if (!isValidSortBy) {
+        query = query.order('id', { ascending: true }); // Default sort by primary key
+    }
 
-    // 4.2 Build LIMIT and OFFSET clauses
-    const limitClause = `LIMIT $${paramIndex++}`;
-    queryParams.push(pageSizeNum);
-    const offsetClause = `OFFSET $${paramIndex++}`;
+
+    // Apply pagination
     const offset = (pageNum - 1) * pageSizeNum;
-    queryParams.push(offset);
+    query = query.range(offset, offset + pageSizeNum - 1);
 
-    // 4.3 Construct the main SELECT query with filtering, sorting, and pagination
-    const selectSql = `SELECT * FROM "${dbTableName}" ${whereClause} ${orderByClause} ${limitClause} ${offsetClause};`;
-    logger.info(`[Match] Executing SQL for ${dbTableName}`); // Don't log full SQL by default
-    logger.debug(`[Match] SQL: ${selectSql}`);
-    logger.debug('[Match] Query Params:', queryParams);
+    // Execute the query
+    logger.info(`[Match] Executing Supabase query for ${dbTableName}`);
+    const { data: filteredProfiles, error: dbError, count: totalItems } = await query;
 
-    // 4.4 Construct and execute the COUNT query (using the same WHERE clause but different params)
-    const countParams = queryParams.slice(0, paramIndex - 3); // Exclude LIMIT and OFFSET params
-    const countSql = `SELECT COUNT(*) AS total_count FROM "${dbTableName}" ${whereClause};`;
-    logger.info(`[Match] Executing Count SQL for ${dbTableName}`); // Don't log full SQL by default
-    logger.debug(`[Match] Count SQL: ${countSql}`);
-    logger.debug('[Match] Count Query Params:', countParams);
+    if (dbError) {
+        throw new Error(`Database error fetching match data: ${dbError.message}`);
+    }
 
-    // Execute both queries
-    const [dbResult, countResult] = await Promise.all([
-        query(selectSql, queryParams),
-        query(countSql, countParams)
-    ]);
+    // totalItems comes from the { count: 'exact' } option
+    const totalPages = totalItems ? Math.ceil(totalItems / pageSizeNum) : 0;
 
-    const filteredProfiles = dbResult.rows;
-    const totalItems = parseInt(countResult.rows[0].total_count, 10);
-    const totalPages = Math.ceil(totalItems / pageSizeNum);
+    logger.info(`[Match] Found ${filteredProfiles ? filteredProfiles.length : 0} profiles on page ${pageNum} (Total matching: ${totalItems || 0}).`);
 
-    logger.info(`[Match] Found ${filteredProfiles.length} profiles on page ${pageNum} (Total matching: ${totalItems}).`);
-
-    // Return empty if DB query yields nothing for the current page
-    // The total count might still be > 0
-    // if (filteredProfiles.length === 0) {
-    //     // Send pagination info even if current page is empty
-    //     return res.status(200).json({
-    //         matches: [],
-    //         pagination: {
-    //             totalItems: totalItems,
-    //             totalPages: totalPages,
-    //             currentPage: pageNum,
-    //             pageSize: pageSizeNum
-    //         }
-    //      });
-    // }
-    // Let the scoring proceed even if the current page is empty,
-    // the final response structure handles the empty matches array.
 
     // 5. Instantiate Matching Engine and Set Weights
     const engine = new MatchingEngine();
@@ -710,13 +691,7 @@ router.post('/match', optionalAuthMiddleware, matchValidationRules, validateRequ
     }
 
     // 6. Calculate Scores using the Map
-    // No longer need to reduce searchCriteria, pass the full array to the engine
-    // const searchCriteriaObject = searchCriteria.reduce((obj, item) => {
-    //     obj[item.attribute] = item.value;
-    //     return obj;
-    // }, {});
-
-    const results = filteredProfiles.map(profile => {
+    const results = (filteredProfiles || []).map(profile => {
       // The 'profile' object here has keys matching the sanitized DB column names
       const matchPercentage = engine.calculateMatchScore(
         criteria, // Pass the full criteria array (with operators, without weights)
@@ -735,13 +710,13 @@ router.post('/match', optionalAuthMiddleware, matchValidationRules, validateRequ
     const responseData = {
       matches: results.sort((a, b) => b.matchPercentage - a.matchPercentage), // Keep sorting by score for display
       pagination: {
-        totalItems: totalItems,
+        totalItems: totalItems || 0,
         totalPages: totalPages,
         currentPage: pageNum,
         pageSize: pageSizeNum
       }
     };
-    logger.info(`[Match] Sending ${responseData.matches.length} results for page ${pageNum}/${totalPages} (Total items: ${totalItems}).`);
+    logger.info(`[Match] Sending ${responseData.matches.length} results for page ${pageNum}/${totalPages} (Total items: ${totalItems || 0}).`);
     res.status(200).json(responseData);
 
   } catch (error) {
@@ -776,45 +751,22 @@ router.get('/datasets/:filename', authMiddleware, getDatasetValidationRules, val
 
     logger.info(`[Get Dataset] User ${userId} requesting dataset: ${safeRequestedFilename}`);
 
-    const userUploadDir = path.join(BASE_UPLOAD_DIR, `user_${userId}`);
-    const filePath = path.join(userUploadDir, safeRequestedFilename);
+    // --- Filesystem logic removed ---
+    // const userUploadDir = path.join(BASE_UPLOAD_DIR, `user_${userId}`);
+    // const filePath = path.join(userUploadDir, safeRequestedFilename);
+    // try {
+    //   await fs.access(filePath);
+    //   logger.info(`[Get Dataset] File found at: ${filePath}`);
+    // } catch (accessError) {
+    //   logger.warn(`[Get Dataset] File not found or inaccessible for user ${userId}: ${filePath}`);
+    //   return res.status(404).json({ error: 'Dataset file not found.' });
+    // }
+    // const fileBuffer = await fs.readFile(filePath);
+    // logger.info(`[Get Dataset] File read successfully: ${safeRequestedFilename}`);
+    // --- End Filesystem logic removed ---
 
-    // Check if file exists
-    try {
-      await fs.access(filePath); // Check accessibility
-      logger.info(`[Get Dataset] File found at: ${filePath}`);
-    } catch (accessError) {
-      logger.warn(`[Get Dataset] File not found or inaccessible for user ${userId}: ${filePath}`);
-      return res.status(404).json({ error: 'Dataset file not found.' });
-    }
-
-    // Read the file content
-    const fileBuffer = await fs.readFile(filePath);
-    logger.info(`[Get Dataset] File read successfully: ${safeRequestedFilename}`);
-
-    // Parse the file content (similar logic to /import)
-    let parsedData = [];
-    if (safeRequestedFilename.endsWith('.csv')) {
-      logger.info(`[Get Dataset] Parsing retrieved CSV: ${safeRequestedFilename}`);
-      await new Promise((resolve, reject) => {
-        require('stream').Readable.from(fileBuffer)
-          .pipe(csv())
-          .on('data', (row) => parsedData.push(row))
-          .on('end', resolve)
-          .on('error', reject);
-      });
-    } else if (safeRequestedFilename.endsWith('.xlsx') || safeRequestedFilename.endsWith('.xls')) {
-      logger.info(`[Get Dataset] Parsing retrieved Excel: ${safeRequestedFilename}`);
-      const workbook = xlsx.read(fileBuffer);
-      const sheetName = workbook.SheetNames[0];
-      parsedData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
-    } else {
-      // Should not happen if saved correctly, but good practice
-      throw new Error('Unsupported file type encountered during retrieval.');
-    }
-
-    logger.info(`[Get Dataset] Successfully parsed retrieved file ${safeRequestedFilename}. Records: ${parsedData.length}`);
-    res.status(200).json({ data: parsedData, fileName: safeRequestedFilename });
+    // Return error as this endpoint is deprecated and relies on removed filesystem logic
+    return res.status(410).json({ error: 'This endpoint is deprecated. Use dataset ID based endpoints.' }); // 410 Gone
 
   } catch (error) {
     logger.error("--- Error retrieving dataset content ---", { error });
@@ -822,7 +774,7 @@ router.get('/datasets/:filename', authMiddleware, getDatasetValidationRules, val
   }
 });
 
-// --- Value Suggestions Endpoint ---
+// --- Value Suggestions Endpoint --- (Refactored for Supabase)
 // Define validation rules
 const suggestValuesValidationRules = [
   queryValidator('datasetId', 'datasetId is required').notEmpty(), // Add .isInt() if applicable
@@ -833,6 +785,10 @@ const suggestValuesValidationRules = [
 router.get('/suggest/values', optionalAuthMiddleware, suggestValuesValidationRules, validateRequest, async (req, res) => { // Use optional auth
   logger.info('--- /api/suggest/values request received ---');
   try {
+    // Check if Supabase client is available
+    if (!supabase) {
+        throw new Error('Supabase client is not initialized. Cannot process suggestions request.');
+    }
     // User ID might be null if request is anonymous
     const userId = req.user?.id || null;
     logger.info(`[Suggest] Requesting User ID: ${userId === null ? 'Anonymous' : userId}`);
@@ -850,6 +806,13 @@ router.get('/suggest/values', optionalAuthMiddleware, suggestValuesValidationRul
       return res.status(404).json({ error: 'Dataset metadata not found.' });
     }
 
+    // Authorization Check
+    const ownerId = metadata.owner_id;
+    if (ownerId !== userId) {
+        logger.warn(`[Suggest] Authorization failed: User ${userId} attempted to access dataset ${datasetId} owned by user ${ownerId}.`);
+        return res.status(403).json({ error: 'Access denied to this dataset.' });
+    }
+
     const { db_table_name: dbTableName, columns_metadata: columnsMetadata } = metadata;
 
     // Find the sanitized name for the requested attribute
@@ -858,31 +821,48 @@ router.get('/suggest/values', optionalAuthMiddleware, suggestValuesValidationRul
       return res.status(400).json({ error: `Attribute "${attributeName}" not found in this dataset.` });
     }
     const sanitizedColName = attributeMeta.sanitizedName;
-    const colType = attributeMeta.type; // Get type for potential casting
+    // const colType = attributeMeta.type; // Get type for potential casting - not strictly needed for ILIKE on TEXT cast
 
-    // 2. Query for distinct values matching the searchTerm
-    // Ensure column name is quoted to handle special characters/keywords
-    // Cast to TEXT for consistent ILIKE comparison, especially for numeric/date types
-    const suggestSql = `
-      SELECT DISTINCT "${sanitizedColName}"
-      FROM "${dbTableName}"
-      WHERE "${sanitizedColName}"::TEXT ILIKE $1
-      LIMIT 10;
-    `;
-    const queryParams = [`%${searchTerm}%`]; // Add wildcards for ILIKE
+    // 2. Query for distinct values matching the searchTerm using Supabase
+    // Cast to TEXT for consistent ILIKE comparison
+    // Note: Supabase doesn't have a direct "distinct" modifier in the JS client easily combined with select.
+    // Using RPC to call a function that performs the distinct query is often cleaner.
+    // Alternative: Fetch more rows and filter distinct in backend (less efficient).
+    // Let's use RPC assuming a helper function `get_distinct_values(table_name TEXT, column_name TEXT, search_term TEXT)` exists.
 
-    logger.info(`[Suggest] Executing SQL for ${dbTableName}`); // Don't log full SQL by default
-    logger.debug(`[Suggest] SQL: ${suggestSql}`);
-    logger.debug('[Suggest] Params:', queryParams);
+    logger.info(`[Suggest] Querying distinct values for ${sanitizedColName} in ${dbTableName} via RPC.`);
+    const { data: suggestedValues, error: rpcError } = await supabase.rpc('get_distinct_values', {
+        p_table_name: dbTableName,
+        p_column_name: sanitizedColName,
+        p_search_term: searchTerm // The function should handle adding wildcards and LIMIT
+    });
 
-    const suggestionsResult = await query(suggestSql, queryParams);
+    // TODO: Create the following PostgreSQL function in your Supabase SQL editor:
+    /*
+    CREATE OR REPLACE FUNCTION get_distinct_values(p_table_name TEXT, p_column_name TEXT, p_search_term TEXT)
+    RETURNS SETOF TEXT -- Or the actual column type if known and consistent
+    LANGUAGE plpgsql
+    AS $$
+    BEGIN
+        RETURN QUERY EXECUTE format(
+            'SELECT DISTINCT %I::TEXT
+             FROM %I
+             WHERE %I::TEXT ILIKE $1
+             LIMIT 10',
+             p_column_name, p_table_name, p_column_name
+        ) USING '%' || p_search_term || '%';
+    END;
+    $$;
+    */
 
-    // Extract the values
-    const suggestedValues = suggestionsResult.rows.map(row => row[sanitizedColName]);
-    logger.info('[Suggest] Found values:', { count: suggestedValues.length });
+    if (rpcError) {
+        throw new Error(`Database error fetching suggestions: ${rpcError.message}`);
+    }
+
+    logger.info('[Suggest] Found values via RPC:', { count: suggestedValues ? suggestedValues.length : 0 });
     logger.debug('[Suggest] Values:', suggestedValues); // Log actual values only at debug level
 
-    res.status(200).json({ suggestions: suggestedValues });
+    res.status(200).json({ suggestions: suggestedValues || [] }); // Return empty array if null
 
   } catch (error) {
     logger.error("--- Value suggestion error ---", { error });
@@ -890,7 +870,7 @@ router.get('/suggest/values', optionalAuthMiddleware, suggestValuesValidationRul
   }
 });
 
-// --- Dataset Statistics Endpoint ---
+// --- Dataset Statistics Endpoint --- (Refactored for Supabase)
 // Define validation rules
 const datasetIdValidationRule = [
   param('datasetId', 'Dataset ID must be a positive integer').isInt({ min: 1 })
@@ -899,6 +879,10 @@ const datasetIdValidationRule = [
 router.get('/datasets/:datasetId/stats', optionalAuthMiddleware, datasetIdValidationRule, validateRequest, async (req, res) => { // Use optional auth
   logger.info('--- /api/datasets/:datasetId/stats request received ---');
   try {
+    // Check if Supabase client is available
+    if (!supabase) {
+        throw new Error('Supabase client is not initialized. Cannot process stats request.');
+    }
     // User ID might be null if request is anonymous
     const userId = req.user?.id || null;
     logger.info(`[Stats] Requesting User ID: ${userId === null ? 'Anonymous' : userId}`);
@@ -916,173 +900,52 @@ router.get('/datasets/:datasetId/stats', optionalAuthMiddleware, datasetIdValida
       return res.status(404).json({ error: 'Dataset metadata not found.' });
     }
 
+    // Authorization Check
+    const ownerId = metadata.owner_id;
+    if (ownerId !== userId) {
+        logger.warn(`[Stats] Authorization failed: User ${userId} attempted to access dataset ${datasetId} owned by user ${ownerId}.`);
+        return res.status(403).json({ error: 'Access denied to this dataset.' });
+    }
+
     const { db_table_name: dbTableName, columns_metadata: columnsMetadata } = metadata;
     logger.info(`[Stats] Found metadata for table: ${dbTableName}`);
 
-    // 2. Calculate Statistics
-    const stats = {
-      totalRows: 0,
-      numericStats: {}, // For min, max, avg, stddev of numeric cols
-      categoricalStats: {}, // For top values of text cols
-      columnDetails: {}, // Added: To store type and null count for ALL columns
-    };
+    // 2. Calculate Statistics using Supabase RPC
+    // It's much more efficient to calculate stats in the database using a single function call
+    // than making multiple queries from the backend for each column.
 
-    // Get total row count
-    const countSql = `SELECT COUNT(*) AS total FROM "${dbTableName}";`;
-    const countResult = await query(countSql);
-    stats.totalRows = parseInt(countResult.rows[0].total, 10);
-    logger.info(`[Stats] Total rows: ${stats.totalRows}`);
+    logger.info(`[Stats] Calculating statistics for table ${dbTableName} via RPC.`);
+    const { data: stats, error: rpcError } = await supabase.rpc('calculate_dataset_stats', {
+        p_table_name: dbTableName,
+        p_columns_metadata: columnsMetadata // Pass metadata to the function
+    });
 
-    // Calculate stats for each relevant column
-    for (const colMeta of columnsMetadata) {
-      const sanitizedColName = colMeta.sanitizedName;
-      const originalColName = colMeta.originalName;
-      const colType = colMeta.type;
-      let nullCount = 0; // Initialize null count for the column
+    // TODO: Create the following (potentially complex) PostgreSQL function 'calculate_dataset_stats'
+    // in your Supabase SQL editor. This function needs to:
+    // - Accept table name and column metadata (JSONB) as input.
+    // - Dynamically build and execute queries to calculate:
+    //   - Total row count.
+    //   - For each column: null count.
+    //   - For NUMERIC columns: min, max, avg, stddev, p25, median, p75, histogram data.
+    //   - For TEXT columns: top N frequent values.
+    //   - Potentially stats for BOOLEAN, DATE types.
+    // - Return a JSON object containing all the calculated statistics, structured similarly
+    //   to the 'stats' object previously built in the Node.js code.
+    // - Handle potential errors during dynamic SQL execution gracefully.
 
-      try {
-        // --- Calculate Null Count (for ALL types) ---
-        const nullCountSql = `
-            SELECT COUNT(*) AS null_count
-            FROM "${dbTableName}"
-            WHERE "${sanitizedColName}" IS NULL;
-        `;
-        const nullCountResult = await query(nullCountSql);
-        nullCount = parseInt(nullCountResult.rows[0].null_count, 10) || 0;
-        // Store type and null count immediately
-        stats.columnDetails[originalColName] = { type: colType, nullCount: nullCount };
-
-        // --- Calculate Type-Specific Stats ---
-        if (colType === 'NUMERIC') {
-          const numericSql = `
-            SELECT
-              MIN("${sanitizedColName}") AS min,
-              MAX("${sanitizedColName}") AS max,
-              AVG("${sanitizedColName}") AS avg,
-              STDDEV("${sanitizedColName}") AS stddev
-            FROM "${dbTableName}";
-          `;
-          logger.debug(`[Stats] Querying numeric stats for: ${sanitizedColName}`);
-          const numericResult = await query(numericSql);
-          if (numericResult.rows.length > 0) {
-               const row = numericResult.rows[0];
-               // Ensure avg and stddev are numbers, handle potential null if table is empty/all nulls
-               const avg = row.avg !== null ? parseFloat(row.avg) : null;
-               const stddev = row.stddev !== null ? parseFloat(row.stddev) : null;
-               stats.numericStats[originalColName] = {
-                   min: row.min !== null ? parseFloat(row.min) : null,
-                   max: row.max !== null ? parseFloat(row.max) : null,
-                   average: avg !== null && !isNaN(avg) ? avg : null,
-                   standardDeviation: stddev !== null && !isNaN(stddev) ? stddev : null,
-                   // nullCount is stored in columnDetails
-                };
-
-                // --- Calculate Percentiles (Median, P25, P75) ---
-                const percentileSql = `
-                    SELECT
-                        percentile_cont(0.25) WITHIN GROUP (ORDER BY "${sanitizedColName}") AS p25,
-                        percentile_cont(0.5) WITHIN GROUP (ORDER BY "${sanitizedColName}") AS median,
-                        percentile_cont(0.75) WITHIN GROUP (ORDER BY "${sanitizedColName}") AS p75
-                    FROM "${dbTableName}"
-                    WHERE "${sanitizedColName}" IS NOT NULL;
-                `;
-                logger.debug(`[Stats] Querying percentiles for: ${sanitizedColName}`);
-                const percentileResult = await query(percentileSql);
-                if (percentileResult.rows.length > 0) {
-                    const pRow = percentileResult.rows[0];
-                    stats.numericStats[originalColName].p25 = pRow.p25 !== null ? parseFloat(pRow.p25) : null;
-                    stats.numericStats[originalColName].median = pRow.median !== null ? parseFloat(pRow.median) : null;
-                    stats.numericStats[originalColName].p75 = pRow.p75 !== null ? parseFloat(pRow.p75) : null;
-                }
-                // --- End Percentile Calculation ---
-
-
-                // --- Calculate Histogram Data ---
-                const minVal = stats.numericStats[originalColName].min;
-               const maxVal = stats.numericStats[originalColName].max;
-               let histogramData = [];
-
-               if (minVal !== null && maxVal !== null && typeof minVal === 'number' && typeof maxVal === 'number') {
-                   const numBuckets = 10; // Define the number of buckets for the histogram
-
-                   if (maxVal > minVal) {
-                       const bucketWidth = (maxVal - minVal) / numBuckets;
-                       const histogramSql = `
-                           SELECT
-                               width_bucket("${sanitizedColName}", $1, $2, $3) AS bucket,
-                               COUNT(*) AS count
-                           FROM "${dbTableName}"
-                           WHERE "${sanitizedColName}" IS NOT NULL
-                           GROUP BY bucket
-                           ORDER BY bucket;
-                       `;
-                       // Note: width_bucket bounds are (min, max]. Values = max go into num_buckets. Values < min go into 0.
-                       // We add a small epsilon to maxVal for the upper bound to include maxVal in the last bucket.
-                       const epsilon = (maxVal - minVal) * 0.00001; // Small value to ensure max is included
-                       const histogramResult = await query(histogramSql, [minVal, maxVal + epsilon, numBuckets]);
-
-                       histogramData = histogramResult.rows.map(row => {
-                           const bucketNum = parseInt(row.bucket, 10);
-                           const count = parseInt(row.count, 10);
-                           // Calculate bounds based on bucket number
-                           const lowerBound = minVal + (bucketNum - 1) * bucketWidth;
-                           const upperBound = minVal + bucketNum * bucketWidth;
-                           return {
-                               bucket: bucketNum,
-                               count: count,
-                               lower_bound: lowerBound,
-                               // Ensure the last bucket's upper bound is exactly maxVal
-                               upper_bound: bucketNum === numBuckets ? maxVal : upperBound
-                           };
-                       }).filter(b => b.bucket >= 1 && b.bucket <= numBuckets); // Filter out potential 0 or numBuckets+1 buckets if any
-
-                   } else if (minVal === maxVal) {
-                       // If min and max are the same, create a single bucket
-                       const singleValueCountSql = `SELECT COUNT(*) AS count FROM "${dbTableName}" WHERE "${sanitizedColName}" = $1;`;
-                       const singleValueResult = await query(singleValueCountSql, [minVal]);
-                       histogramData = [{
-                           bucket: 1,
-                           count: parseInt(singleValueResult.rows[0].count, 10),
-                           lower_bound: minVal,
-                           upper_bound: maxVal
-                       }];
-                   }
-               }
-               stats.numericStats[originalColName].histogram = histogramData;
-               logger.debug(`[Stats] Calculated histogram for ${sanitizedColName}: ${histogramData.length} buckets`);
-               // --- End Histogram Calculation ---
-          }
-        } else if (colType === 'TEXT') {
-          // Get top 5 most frequent values for text columns
-          const categoricalSql = `
-            SELECT "${sanitizedColName}", COUNT(*) AS count
-            FROM "${dbTableName}"
-            WHERE "${sanitizedColName}" IS NOT NULL AND "${sanitizedColName}"::text <> '' -- Exclude nulls and empty strings
-            GROUP BY "${sanitizedColName}"
-            ORDER BY count DESC
-            LIMIT 5;
-          `;
-          logger.debug(`[Stats] Querying categorical stats for: ${sanitizedColName}`);
-          const categoricalResult = await query(categoricalSql);
-          stats.categoricalStats[originalColName] = categoricalResult.rows.map(row => ({
-            value: row[sanitizedColName],
-            count: parseInt(row.count, 10),
-          }));
-        }
-        // Add more stats for BOOLEAN, TIMESTAMP etc. if needed (e.g., true/false counts for boolean)
-
-      } catch (columnStatError) {
-        // Log error for specific column but continue with others
-        logger.error(`[Stats] Error calculating stats for column "${sanitizedColName}"`, { error: columnStatError });
-        // Ensure columnDetails entry still exists even if stats calculation failed
-        if (!stats.columnDetails[originalColName]) {
-            stats.columnDetails[originalColName] = { type: colType, nullCount: nullCount }; // Use potentially calculated nullCount
-        }
-      }
+    if (rpcError) {
+        throw new Error(`Database error calculating statistics via RPC: ${rpcError.message}`);
     }
 
-    logger.info('[Stats] Statistics calculation complete.');
-    res.status(200).json(stats);
+    if (!stats) {
+        // This might happen if the RPC function returns null or an error occurred silently
+        logger.warn(`[Stats] RPC call 'calculate_dataset_stats' returned no data for table ${dbTableName}.`);
+        return res.status(500).json({ error: 'Failed to calculate dataset statistics (RPC returned null).' });
+    }
+
+
+    logger.info('[Stats] Statistics calculation complete via RPC.');
+    res.status(200).json(stats); // Return the stats object calculated by the DB function
 
   } catch (error) {
     logger.error("--- Dataset statistics error ---", { error });
@@ -1090,21 +953,21 @@ router.get('/datasets/:datasetId/stats', optionalAuthMiddleware, datasetIdValida
   }
 });
 
-// --- Get Dataset Metadata Endpoint ---
+// --- Get Dataset Metadata Endpoint --- (Refactored for Supabase)
 // Use the same validation rule as /stats
 router.get('/datasets/:datasetId/metadata', authMiddleware, datasetIdValidationRule, validateRequest, async (req, res) => {
   logger.info('--- /api/datasets/:datasetId/metadata request received ---');
   try {
+    // Check if Supabase client is available
+    if (!supabase) {
+        throw new Error('Supabase client is not initialized. Cannot process metadata request.');
+    }
     const userId = req.user?.id; // Auth middleware ensures this exists
-    // No need for !userId check due to authMiddleware
 
     const { datasetId } = req.params;
-    // Validate datasetId is a number
+    // Validation ensures datasetId is an integer string, parse it
     const numericDatasetId = parseInt(datasetId, 10);
-    if (isNaN(numericDatasetId)) {
-        logger.error(`[Metadata] Invalid dataset ID format received: ${datasetId}`); // Should be caught by validation now
-        return res.status(400).json({ error: 'Invalid dataset ID format.' });
-    }
+
     logger.info(`[Metadata] User ${userId} requesting metadata for dataset ID: ${numericDatasetId}`);
 
     // Fetch dataset metadata using cache helper (adjusting for user check)
@@ -1116,16 +979,26 @@ router.get('/datasets/:datasetId/metadata', authMiddleware, datasetIdValidationR
       return res.status(404).json({ error: 'Dataset metadata not found or access denied.' });
     }
 
-    const { db_table_name: dbTableName, columns_metadata: columnsMetadata } = metadata; // Use cached metadata
     // We need the original filename, which isn't in the cached object currently.
-    // Let's re-query just for that if needed, or ideally add it to the cached object.
-    // For now, let's re-query just for the identifier.
-    const identifierResult = await query('SELECT dataset_identifier FROM dataset_metadata WHERE id = $1', [numericDatasetId]);
-    const originalFileName = identifierResult.rows.length > 0 ? identifierResult.rows[0].dataset_identifier : 'unknown';
+    // Fetch it directly.
+    const { data: metaRecord, error: metaError } = await supabase
+        .from('dataset_metadata')
+        .select('dataset_identifier')
+        .eq('id', numericDatasetId)
+        .single();
+
+    if (metaError || !metaRecord) {
+        logger.error(`[Metadata] Failed to fetch dataset_identifier for ID ${numericDatasetId}`, { error: metaError });
+        // Proceed without originalFileName or return error? Let's proceed.
+    }
+
+    const originalFileName = metaRecord ? metaRecord.dataset_identifier : 'unknown';
     logger.info(`[Metadata] Found metadata for ID ${numericDatasetId}: FileName: ${originalFileName}`);
 
     // Ensure columnsMetadata is parsed if stored as JSON string (it should be JSONB now, but good practice)
-    const parsedColumnsMetadata = typeof columnsMetadata === 'string' ? JSON.parse(columnsMetadata) : columnsMetadata;
+    const parsedColumnsMetadata = typeof metadata.columns_metadata === 'string'
+        ? JSON.parse(metadata.columns_metadata)
+        : metadata.columns_metadata;
 
     res.status(200).json({
         originalFileName,
